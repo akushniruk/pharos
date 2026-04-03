@@ -473,10 +473,6 @@ fn resolve_session_summary(
     events: &[LegacyHookEvent],
     agents: &[AgentSnapshot],
 ) -> Option<String> {
-    if let Some(summary) = latest_assistant_summary(events) {
-        return Some(summary);
-    }
-
     let active_workers: Vec<_> = agents
         .iter()
         .filter(|agent| agent.agent_id.is_some() && agent.is_active)
@@ -495,6 +491,10 @@ fn resolve_session_summary(
         .collect();
     if !recent_workers.is_empty() {
         return Some(recent_workers.join(" · "));
+    }
+
+    if let Some(summary) = latest_useful_event_summary(events) {
+        return Some(summary);
     }
 
     let refs: Vec<_> = events.iter().collect();
@@ -539,13 +539,39 @@ fn summarize_agent(agent: &AgentSnapshot) -> Option<String> {
     }
 }
 
-fn latest_assistant_summary(events: &[LegacyHookEvent]) -> Option<String> {
+fn latest_useful_event_summary(events: &[LegacyHookEvent]) -> Option<String> {
     events
         .iter()
         .rev()
-        .find(|event| event.hook_event_type == "AssistantResponse")
-        .and_then(|event| payload_string(&event.payload, "text"))
-        .map(|text| format!("Responded: {}", truncate(&text, 96)))
+        .find_map(|event| match event.hook_event_type.as_str() {
+            "AssistantResponse" => payload_string(&event.payload, "text")
+                .map(|text| format!("Responded: {}", truncate(&text, 96))),
+            "PostToolUse" | "PostToolUseFailure" => {
+                let tool_name = payload_string(&event.payload, "tool_name")
+                    .unwrap_or_else(|| "tool".to_string());
+                let preview = payload_string(&event.payload, "content")
+                    .and_then(|content| content_preview(&content));
+                match (event.hook_event_type.as_str(), preview) {
+                    ("PostToolUse", Some(content)) => {
+                        if tool_name == "exec_command" {
+                            Some(format!("Command completed: {}", truncate(&content, 96)))
+                        } else {
+                            Some(format!("{tool_name} completed: {}", truncate(&content, 96)))
+                        }
+                    }
+                    ("PostToolUseFailure", Some(content)) => {
+                        Some(format!("{tool_name} failed: {}", truncate(&content, 96)))
+                    }
+                    ("PostToolUse", None) => Some(format!("{tool_name} completed")),
+                    ("PostToolUseFailure", None) => Some(format!("{tool_name} failed")),
+                    _ => None,
+                }
+            }
+            "UserPromptSubmit" => payload_string(&event.payload, "prompt")
+                .or_else(|| payload_string(&event.payload, "message"))
+                .map(|prompt| format!("Prompted: {}", truncate(&prompt, 96))),
+            _ => None,
+        })
 }
 
 fn active_runtime_summary(events: &[LegacyHookEvent]) -> Option<String> {

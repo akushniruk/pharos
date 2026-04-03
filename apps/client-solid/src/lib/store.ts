@@ -310,10 +310,56 @@ function resolveSessionSummary(evts: HookEvent[], agents: AgentInfo[]): string |
     return recentWorkers.join(' · ');
   }
 
+  const latestUseful = latestUsefulEventSummary(evts);
+  if (latestUseful) return latestUseful;
+
   const assignment = resolveAssignment(evts);
   if (assignment) return assignment;
 
   return resolveCurrentAction(evts);
+}
+
+function latestUsefulEventSummary(evts: HookEvent[]): string | undefined {
+  const latest = [...evts]
+    .sort((left, right) => (right.timestamp || 0) - (left.timestamp || 0))
+    .find((event) => ['AssistantResponse', 'PostToolUse', 'PostToolUseFailure', 'UserPromptSubmit'].includes(event.hook_event_type));
+
+  if (!latest) return undefined;
+
+  if (latest.hook_event_type === 'AssistantResponse') {
+    const text = latest.payload?.text;
+    return typeof text === 'string' && text.trim()
+      ? `Responded: ${truncate(text.trim(), 96)}`
+      : undefined;
+  }
+
+  if (latest.hook_event_type === 'UserPromptSubmit') {
+    const prompt = latest.payload?.prompt || latest.payload?.message;
+    return typeof prompt === 'string' && prompt.trim()
+      ? `Prompted: ${truncate(prompt.trim(), 96)}`
+      : undefined;
+  }
+
+  const toolName = typeof latest.payload?.tool_name === 'string'
+    ? latest.payload.tool_name
+    : 'tool';
+  const content = typeof latest.payload?.content === 'string'
+    ? latest.payload.content.split('\n').map((line: string) => line.trim()).find(Boolean)
+    : undefined;
+
+  if (latest.hook_event_type === 'PostToolUse') {
+    if (content) {
+      return toolName === 'exec_command'
+        ? `Command completed: ${truncate(content, 96)}`
+        : `${toolName} completed: ${truncate(content, 96)}`;
+    }
+    return `${toolName} completed`;
+  }
+
+  if (content) {
+    return `${toolName} failed: ${truncate(content, 96)}`;
+  }
+  return `${toolName} failed`;
 }
 
 function resolveProjectSummary(
