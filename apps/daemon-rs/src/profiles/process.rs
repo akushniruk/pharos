@@ -108,7 +108,15 @@ fn classify_process_details(
     runtime_matchers: &[RuntimeMatcherConfig],
 ) -> Option<ProcessClassification> {
     let name = normalize(&snapshot.name);
+    let name_basename = basename(&snapshot.name);
     let exe = snapshot.exe.as_deref().map(normalize).unwrap_or_default();
+    let exe_basename = snapshot
+        .exe
+        .as_deref()
+        .and_then(|path| std::path::Path::new(path).file_name())
+        .and_then(|value| value.to_str())
+        .map(normalize)
+        .unwrap_or_default();
     let cmdline = normalize(&snapshot.cmd.join(" "));
 
     if contains_any(&[&name, &exe, &cmdline], &["claude"]) {
@@ -145,7 +153,11 @@ fn classify_process_details(
                 .map(|path| path.display().to_string())
                 .unwrap_or_else(|| snapshot.name.clone()),
         });
-    } else if is_generic_agent_like(&name, &exe, &cmdline) {
+    } else if is_generic_agent_like(
+        &name_basename,
+        &exe_basename,
+        snapshot.exe.as_deref(),
+    ) {
         RuntimeSource::GenericAgentCli
     } else {
         return None;
@@ -163,18 +175,46 @@ fn classify_process_details(
     })
 }
 
-fn is_generic_agent_like(name: &str, exe: &str, cmdline: &str) -> bool {
+fn is_generic_agent_like(name_basename: &str, exe_basename: &str, exe_path: Option<&str>) -> bool {
+    if let Some(exe_path) = exe_path {
+        if is_system_or_app_bundle_path(exe_path) {
+            return false;
+        }
+    }
+
+    let blocked = [
+        "ssh-agent",
+        "assistantd",
+        "knowledge-agent",
+        "talagentd",
+        "imagent",
+        "usereventagent",
+        "corelocationagent",
+        "airplayuiagent",
+        "wif iagent",
+        "contextstoreagent",
+        "textinputmenuagent",
+        "diagnostics_agent",
+        "assessmentagent",
+        "findmylocateagent",
+        "managedappdistributionagent",
+        "usagetrackingagent",
+        "figma_agent",
+    ];
+    if contains_any(&[name_basename, exe_basename], &blocked) {
+        return false;
+    }
+
     contains_any(
-        &[name, exe, cmdline],
+        &[name_basename, exe_basename],
         &[
             "copilot",
             "cursor-agent",
-            "cursor agent",
-            "assistant",
-            "agent",
             "goose",
             "qwen",
             "llm",
+            "agent",
+            "assistant",
         ],
     )
 }
@@ -187,4 +227,19 @@ fn contains_any(haystacks: &[&str], needles: &[&str]) -> bool {
 
 fn normalize(value: &str) -> String {
     format!(" {} ", value.to_ascii_lowercase())
+}
+
+fn basename(value: &str) -> String {
+    std::path::Path::new(value)
+        .file_name()
+        .and_then(|part| part.to_str())
+        .map(normalize)
+        .unwrap_or_else(|| normalize(value))
+}
+
+fn is_system_or_app_bundle_path(path: &str) -> bool {
+    path.starts_with("/System/")
+        || path.starts_with("/usr/libexec/")
+        || path.starts_with("/Applications/")
+        || path.starts_with("/Library/")
 }

@@ -39,6 +39,20 @@ fn classifies_agent_like_unknown_process_as_generic() {
 }
 
 #[test]
+fn ignores_system_agent_processes_from_generic_heuristics() {
+    let snapshot = ProcessSnapshot {
+        pid: 7331,
+        name: "assistantd".to_string(),
+        exe: Some("/System/Library/PrivateFrameworks/AssistantServices.framework/Versions/A/Support/assistantd".to_string()),
+        cwd: None,
+        cmd: vec!["/System/Library/PrivateFrameworks/AssistantServices.framework/Versions/A/Support/assistantd".to_string()],
+        started_at_ms: 1_711_234_567_000,
+    };
+
+    assert_eq!(classify_process(&snapshot, &[]), None);
+}
+
+#[test]
 fn ignores_claude_processes_because_native_profile_handles_them() {
     let snapshot = snapshot("claude", &["claude", "chat"]);
 

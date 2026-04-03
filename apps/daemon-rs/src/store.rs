@@ -384,7 +384,7 @@ fn payload_string(payload: &serde_json::Value, key: &str) -> Option<String> {
 pub fn legacy_event_from_envelope(event: &EventEnvelope) -> Result<LegacyHookEvent, StoreError> {
     let display_name = display_name_candidate_for_event(event);
     Ok(LegacyHookEvent {
-        source_app: event.session.workspace_id.clone(),
+        source_app: project_label_for_event(event),
         session_id: event.session.session_id.clone(),
         hook_event_type: hook_event_type_for_kind(&event.event_kind).to_string(),
         payload: event.payload.clone(),
@@ -395,6 +395,52 @@ pub fn legacy_event_from_envelope(event: &EventEnvelope) -> Result<LegacyHookEve
         display_name: Some(display_name.value),
         agent_name: payload_string(&event.payload, "agent_name"),
     })
+}
+
+fn project_label_for_event(event: &EventEnvelope) -> String {
+    if is_project_like_name(&event.session.workspace_id) {
+        return event.session.workspace_id.clone();
+    }
+
+    if let Some(cwd) = payload_string(&event.payload, "cwd") {
+        if let Some(workspace_name) = workspace_name_from_cwd(&cwd) {
+            if is_project_like_name(&workspace_name) {
+                return workspace_name;
+            }
+        }
+    }
+
+    runtime_source_label(&event.runtime_source).to_string()
+}
+
+fn is_project_like_name(value: &str) -> bool {
+    let normalized = value.trim().to_ascii_lowercase();
+    !normalized.is_empty()
+        && !matches!(
+            normalized.as_str(),
+            "unknown"
+                | "macos"
+                | "resources"
+                | "data"
+                | "libexec"
+                | "sbin"
+                | "bin"
+                | "system"
+                | "contents"
+        )
+}
+
+fn runtime_source_label(runtime_source: &crate::model::RuntimeSource) -> &'static str {
+    match runtime_source {
+        crate::model::RuntimeSource::ClaudeCode => "Claude",
+        crate::model::RuntimeSource::CodexCli => "Codex",
+        crate::model::RuntimeSource::GeminiCli => "Gemini",
+        crate::model::RuntimeSource::PiCli => "Pi",
+        crate::model::RuntimeSource::OpenCode => "OpenCode",
+        crate::model::RuntimeSource::Aider => "Aider",
+        crate::model::RuntimeSource::GenericAgentCli => "Agent CLI",
+        crate::model::RuntimeSource::CustomCli => "Custom CLI",
+    }
 }
 
 fn hook_event_type_for_kind(event_kind: &EventKind) -> &'static str {

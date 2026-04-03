@@ -98,3 +98,32 @@ fn registry_and_legacy_events_use_subagent_description_for_names() {
     );
     assert_eq!(legacy_events[0].agent_name.as_deref(), Some("Explore"));
 }
+
+#[test]
+fn legacy_events_fallback_to_runtime_label_when_workspace_is_not_project_like() {
+    let store = Store::open_in_memory().expect("store");
+
+    store
+        .insert_event(&EventEnvelope {
+            runtime_source: RuntimeSource::GeminiCli,
+            acquisition_mode: AcquisitionMode::Observed,
+            event_kind: EventKind::SessionStarted,
+            session: SessionRef {
+                host_id: "local".to_string(),
+                workspace_id: "MacOS".to_string(),
+                session_id: "sess-gemini".to_string(),
+            },
+            agent_id: None,
+            occurred_at_ms: 100,
+            capabilities: observed_capabilities(),
+            title: "session started".to_string(),
+            payload: json!({
+                "cwd": "/Applications/SomeApp.app/Contents/MacOS",
+                "entrypoint": "gemini"
+            }),
+        })
+        .expect("insert session start");
+
+    let legacy_events = store.list_legacy_events().expect("legacy events");
+    assert_eq!(legacy_events[0].source_app, "Gemini");
+}
