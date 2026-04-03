@@ -353,7 +353,7 @@ function ProjectsHome() {
       <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:20px;padding:16px 18px;border:1px solid var(--border);border-radius:12px;background:var(--bg-card);">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
           <p style="font-size:14px;font-weight:600;color:var(--text-primary);">
-            No project selected
+            Nothing selected yet
           </p>
           <span style="font-size:11px;color:var(--text-dim);font-family:var(--font-mono);">
             {streamStateText()}
@@ -361,6 +361,9 @@ function ProjectsHome() {
         </div>
         <p style="font-size:13px;color:var(--text-secondary);line-height:1.5;">
           {streamStateDetail()}
+        </p>
+        <p style="font-size:12px;color:var(--text-dim);line-height:1.5;">
+          Select a project from the left sidebar to populate the timeline, event stream, and agent graph.
         </p>
       </div>
 
