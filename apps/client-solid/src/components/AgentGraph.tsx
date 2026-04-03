@@ -31,46 +31,50 @@ export default function AgentGraph() {
 
   const layout = createMemo(() => {
     const agents = visibleAgents();
-    if (agents.length === 0) return { nodes: [] as { agent: AgentInfo; x: number; y: number }[], edges: [] as { x1: number; y1: number; x2: number; y2: number }[], width: 400, height: 200 };
-
-    const root = agents.find(a => a.agentId === null) ?? agents[0];
-    const children = agents.filter(a => a.agentId !== null && a.agentId !== root.agentId);
-
-    // Layout in rows
-    const rows: AgentInfo[][] = [];
-    for (let i = 0; i < children.length; i += MAX_PER_ROW) {
-      rows.push(children.slice(i, i + MAX_PER_ROW));
+    if (agents.length === 0) {
+      return {
+        nodes: [] as { agent: AgentInfo; x: number; y: number }[],
+        edges: [] as { x1: number; y1: number; x2: number; y2: number }[],
+        width: 400,
+        height: 200,
+      };
     }
 
-    const maxRowWidth = Math.max(1, ...rows.map(r => r.length)) * (NODE_W + H_GAP) - H_GAP;
-    const totalW = Math.max(NODE_W, maxRowWidth) + 60;
-    const totalH = 40 + NODE_H + (rows.length > 0 ? rows.length * (NODE_H + V_GAP) : 0) + 40;
+    const roots = buildGraphRoots(agents);
+    const levels = buildLevels(roots);
+    const maxRowCount = Math.max(1, ...levels.map((level) => level.length));
+    const totalW = maxRowCount * (NODE_W + H_GAP) - H_GAP + 60;
+    const totalH = 40 + levels.length * (NODE_H + V_GAP) + 40;
 
+    const positions = new Map<string, { x: number; y: number }>();
     const nodes: { agent: AgentInfo; x: number; y: number }[] = [];
     const edges: { x1: number; y1: number; x2: number; y2: number }[] = [];
 
-    // Root
-    const rootX = (totalW - NODE_W) / 2;
-    const rootY = 30;
-    nodes.push({ agent: root, x: rootX, y: rootY });
+    levels.forEach((level, levelIndex) => {
+      const y = 30 + levelIndex * (NODE_H + V_GAP);
+      const rowWidth = level.length * (NODE_W + H_GAP) - H_GAP;
+      const startX = (totalW - rowWidth) / 2;
 
-    // Children
-    rows.forEach((row, rowIdx) => {
-      const rowW = row.length * (NODE_W + H_GAP) - H_GAP;
-      const startX = (totalW - rowW) / 2;
-      const y = 30 + (rowIdx + 1) * (NODE_H + V_GAP);
-
-      row.forEach((child, colIdx) => {
-        const x = startX + colIdx * (NODE_W + H_GAP);
-        nodes.push({ agent: child, x, y });
-        edges.push({
-          x1: rootX + NODE_W / 2,
-          y1: rootY + NODE_H,
-          x2: x + NODE_W / 2,
-          y2: y,
-        });
+      level.forEach((agent, index) => {
+        const x = startX + index * (NODE_W + H_GAP);
+        const key = agent.agentId || '__main__';
+        positions.set(key, { x, y });
+        nodes.push({ agent, x, y });
       });
     });
+
+    for (const agent of agents) {
+      if (!agent.parentId) continue;
+      const parent = positions.get(agent.parentId === 'main' ? '__main__' : agent.parentId);
+      const child = positions.get(agent.agentId || '__main__');
+      if (!parent || !child) continue;
+      edges.push({
+        x1: parent.x + NODE_W / 2,
+        y1: parent.y + NODE_H,
+        x2: child.x + NODE_W / 2,
+        y2: child.y,
+      });
+    }
 
     return { nodes, edges, width: totalW, height: totalH };
   });
@@ -185,8 +189,11 @@ export default function AgentGraph() {
             const dotColor = isActive ? 'var(--green)' : node.agent.eventCount > 0 ? 'var(--yellow)' : 'var(--text-dim)';
             const statusText = isActive ? 'Online' : node.agent.eventCount > 0 ? 'Idle' : 'Done';
             const name = node.agent.displayName.length > 22 ? node.agent.displayName.slice(0, 21) + '…' : node.agent.displayName;
-            const model = node.agent.modelName?.replace('claude-', '') || '';
-            const modelTrunc = model.length > 24 ? model.slice(0, 23) + '…' : model;
+            const meta = node.agent.currentAction
+              || node.agent.assignment
+              || node.agent.modelName?.replace('claude-', '')
+              || '';
+            const metaTrunc = meta.length > 28 ? meta.slice(0, 27) + '…' : meta;
 
             return (
               <g
@@ -235,8 +242,8 @@ export default function AgentGraph() {
                   x={node.x + 12} y={node.y + 48}
                   font-size="10"
                   fill="var(--text-dim)"
-                  font-family="var(--font-mono)"
-                >{modelTrunc}</text>
+                  font-family={node.agent.modelName && !node.agent.currentAction && !node.agent.assignment ? 'var(--font-mono)' : 'var(--font-sans)'}
+                >{metaTrunc}</text>
               </g>
             );
           }}
@@ -244,4 +251,49 @@ export default function AgentGraph() {
       </svg>
     </div>
   );
+}
+
+type GraphNode = AgentInfo & { children: GraphNode[] };
+
+function buildGraphRoots(agents: AgentInfo[]): GraphNode[] {
+  const nodes = new Map<string, GraphNode>();
+  for (const agent of agents) {
+    const key = agent.agentId || '__main__';
+    nodes.set(key, { ...agent, children: [] });
+  }
+
+  const roots: GraphNode[] = [];
+  for (const agent of nodes.values()) {
+    const parentKey = agent.parentId === 'main' ? '__main__' : agent.parentId;
+    if (parentKey && parentKey !== (agent.agentId || '__main__') && nodes.has(parentKey)) {
+      nodes.get(parentKey)!.children.push(agent);
+    } else {
+      roots.push(agent);
+    }
+  }
+
+  roots.sort(sortAgents);
+  for (const node of nodes.values()) {
+    node.children.sort(sortAgents);
+  }
+  return roots;
+}
+
+function buildLevels(roots: GraphNode[]): AgentInfo[][] {
+  const levels: AgentInfo[][] = [];
+  let current: GraphNode[] = roots;
+
+  while (current.length > 0) {
+    levels.push(current);
+    current = current.flatMap((node) => node.children);
+  }
+
+  return levels;
+}
+
+function sortAgents(left: AgentInfo, right: AgentInfo): number {
+  if (left.isActive !== right.isActive) {
+    return left.isActive ? -1 : 1;
+  }
+  return right.eventCount - left.eventCount;
 }
