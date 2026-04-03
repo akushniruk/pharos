@@ -124,23 +124,23 @@ fn classify_process_details(
         return None;
     }
 
-    // Skip system paths and IDE extension processes
+    // Skip system paths
     if let Some(exe) = &snapshot.exe {
         if exe.starts_with("/System/")
             || exe.starts_with("/usr/libexec/")
             || exe.starts_with("/Library/")
-            || exe.contains("/Applications/")
-            || exe.contains(".vscode/extensions/")
-            || exe.contains(".cursor/extensions/")
         {
             return None;
         }
-    }
-
-    // Skip background server processes (not interactive agent sessions)
-    let cmdline = snapshot.cmd.join(" ").to_ascii_lowercase();
-    if cmdline.contains("app-server") || cmdline.contains("--daemon") || cmdline.contains("language-server") {
-        return None;
+        // Skip IDE extension helper processes (not interactive agents)
+        if (exe.contains(".vscode/extensions/") || exe.contains(".cursor/extensions/"))
+            && snapshot.cmd.iter().any(|arg| {
+                let a = arg.to_ascii_lowercase();
+                a.contains("app-server") || a.contains("language-server")
+            })
+        {
+            return None;
+        }
     }
 
     // Match by EXACT binary name (no substring matching)

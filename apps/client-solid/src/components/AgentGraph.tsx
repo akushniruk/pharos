@@ -14,9 +14,20 @@ export default function AgentGraph() {
   const [pan, setPan] = createSignal({ x: 0, y: 0 });
   const [dragging, setDragging] = createSignal(false);
   const [dragStart, setDragStart] = createSignal({ x: 0, y: 0 });
+  const [showActiveOnly, setShowActiveOnly] = createSignal(false);
+
+  const visibleAgents = createMemo(() => {
+    const agents = filteredAgents();
+    if (!showActiveOnly()) return agents;
+    // Always show root + active agents
+    return agents.filter(a => a.agentId === null || a.isActive || a.eventCount > 0);
+  });
+
+  const activeCount = createMemo(() => filteredAgents().filter(a => a.isActive).length);
+  const totalCount = createMemo(() => filteredAgents().length);
 
   const layout = createMemo(() => {
-    const agents = filteredAgents();
+    const agents = visibleAgents();
     if (agents.length === 0) return { nodes: [] as { agent: AgentInfo; x: number; y: number }[], edges: [] as { x1: number; y1: number; x2: number; y2: number }[], width: 400, height: 200 };
 
     const root = agents.find(a => a.agentId === null) ?? agents[0];
@@ -101,7 +112,25 @@ export default function AgentGraph() {
       onMouseUp={onMouseUp}
       onMouseLeave={onMouseUp}
     >
-      {/* Zoom controls */}
+      {/* Top-left: filter controls */}
+      <div style="position:absolute;top:12px;left:12px;display:flex;gap:4px;z-index:10;">
+        <button
+          onClick={() => setShowActiveOnly(false)}
+          class="graph-zoom-btn"
+          style={`font-size:10px;width:auto;padding:0 10px;${!showActiveOnly() ? 'background:var(--bg-elevated);color:var(--text-primary);border-color:var(--accent);' : ''}`}
+        >
+          All ({totalCount()})
+        </button>
+        <button
+          onClick={() => setShowActiveOnly(true)}
+          class="graph-zoom-btn"
+          style={`font-size:10px;width:auto;padding:0 10px;${showActiveOnly() ? 'background:var(--green-dim);color:var(--green);border-color:var(--green);' : ''}`}
+        >
+          Active ({activeCount()})
+        </button>
+      </div>
+
+      {/* Bottom-right: zoom controls */}
       <div style="position:absolute;bottom:12px;right:12px;display:flex;gap:4px;z-index:10;">
         <button onClick={() => setZoom(z => Math.min(2.5, z + 0.2))} class="graph-zoom-btn">+</button>
         <button onClick={() => setZoom(1)} class="graph-zoom-btn" style="font-size:10px;">Fit</button>

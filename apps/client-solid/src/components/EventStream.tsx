@@ -14,12 +14,22 @@ const EVENT_TYPES = [
 ];
 
 export default function EventStream() {
+  const SIMPLE_HIDDEN = new Set(['SessionStart', 'SessionEnd', 'SessionTitleChanged']);
   const [detailed, setDetailed] = createSignal(false);
   const [stick, setStick] = createSignal(true);
   const [showFilters, setShowFilters] = createSignal(false);
-  const [hiddenTypes, setHiddenTypes] = createSignal<Set<string>>(
-    new Set(['SessionStart', 'SessionEnd', 'SessionTitleChanged'])
-  );
+  const [hiddenTypes, setHiddenTypes] = createSignal<Set<string>>(new Set(SIMPLE_HIDDEN));
+
+  const switchToDetailed = () => {
+    setDetailed(true);
+    // Show all types in detailed mode
+    setHiddenTypes(new Set());
+  };
+  const switchToSimple = () => {
+    setDetailed(false);
+    // Re-hide lifecycle in simple mode
+    setHiddenTypes(new Set(SIMPLE_HIDDEN));
+  };
   let containerRef: HTMLDivElement | undefined;
 
   const toggleType = (type: string) => {
@@ -78,12 +88,12 @@ export default function EventStream() {
     <div style="display:flex;flex-direction:column;flex:1;overflow:hidden;">
       {/* Toolbar */}
       <div style="display:flex;align-items:center;gap:8px;padding:8px 16px;border-bottom:1px solid var(--border);flex-shrink:0;">
-        <button style={tabStyle(!detailed())} onClick={() => setDetailed(false)}>
+        <button style={tabStyle(!detailed())} onClick={switchToSimple}>
           <span style="display:flex;align-items:center;gap:6px;">
             <Icon path={queueList} style="width:12px;height:12px;" /> Simple
           </span>
         </button>
-        <button style={tabStyle(detailed())} onClick={() => setDetailed(true)}>
+        <button style={tabStyle(detailed())} onClick={switchToDetailed}>
           <span style="display:flex;align-items:center;gap:6px;">
             <Icon path={bars_3BottomLeft} style="width:12px;height:12px;" /> Detailed
           </span>
