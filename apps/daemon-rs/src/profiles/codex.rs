@@ -641,6 +641,10 @@ fn extract_quoted_value(body: &str, marker: &str) -> Option<String> {
 }
 
 fn parse_live_log_event(body: &str) -> Option<CodexSessionEvent> {
+    if let Some(event) = parse_exec_command_failure(body) {
+        return Some(event);
+    }
+
     if let Some(prompt) = parse_submission_user_prompt(body) {
         return Some(CodexSessionEvent::UserPrompt { text: prompt });
     }
@@ -669,6 +673,99 @@ fn parse_live_log_event(body: &str) -> Option<CodexSessionEvent> {
         tool_use_id,
         input,
     })
+}
+
+fn parse_exec_command_failure(body: &str) -> Option<CodexSessionEvent> {
+    let marker = "error=exec_command failed for `";
+    let start = body.find(marker)? + marker.len();
+    let rest = body.get(start..)?;
+    let command_end = rest.find('`')?;
+    let command = rest.get(..command_end)?.trim();
+    if command.is_empty() {
+        return None;
+    }
+
+    let stderr = extract_stream_output_text(body, "stderr")
+        .or_else(|| extract_stream_output_text(body, "aggregated_output"));
+    let content = stderr.unwrap_or_else(|| format!("exec_command failed: {command}"));
+
+    Some(CodexSessionEvent::ToolResult {
+        tool_use_id: extract_turn_id(body).unwrap_or_else(|| format!("log-{}", stable_hash(body))),
+        tool_name: Some("exec_command".to_string()),
+        is_error: true,
+        content,
+    })
+}
+
+fn extract_stream_output_text(body: &str, stream_name: &str) -> Option<String> {
+    let direct_marker = format!("{stream_name}: StreamOutput {{ text: \"");
+    if let Some(value) = extract_quoted_value(body, &direct_marker) {
+        return Some(normalize_stream_output_text(&value));
+    }
+
+    let escaped_marker = format!(r#"{stream_name}: StreamOutput {{ text: \"#);
+    extract_escaped_quoted_value(body, &escaped_marker).map(|value| normalize_stream_output_text(&value))
+}
+
+fn extract_escaped_quoted_value(body: &str, marker: &str) -> Option<String> {
+    let start = body.find(marker)? + marker.len();
+    let rest = body.get(start..)?;
+    let mut value = String::new();
+    let mut chars = rest.chars().peekable();
+
+    while let Some(ch) = chars.next() {
+        if ch == '\\' {
+            match chars.peek().copied() {
+                Some('"') => {
+                    chars.next();
+                    break;
+                }
+                Some('n') => {
+                    chars.next();
+                    value.push('\n');
+                    continue;
+                }
+                Some('r') => {
+                    chars.next();
+                    value.push('\r');
+                    continue;
+                }
+                Some('t') => {
+                    chars.next();
+                    value.push('\t');
+                    continue;
+                }
+                Some('\\') => {
+                    chars.next();
+                    value.push('\\');
+                    continue;
+                }
+                Some(other) => {
+                    chars.next();
+                    value.push(other);
+                    continue;
+                }
+                None => break,
+            }
+        }
+
+        value.push(ch);
+    }
+
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
+fn normalize_stream_output_text(value: &str) -> String {
+    value
+        .trim_matches('"')
+        .replace("\\n", "\n")
+        .replace("\\r", "\r")
+        .replace("\\t", "\t")
 }
 
 fn parse_spawn_agent_event(input: &Value, tool_use_id: &str) -> CodexSessionEvent {

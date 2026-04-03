@@ -309,6 +309,55 @@ fn codex_live_log_body_parses_spawn_agent_as_subagent_start() {
 }
 
 #[test]
+fn codex_live_log_body_parses_exec_command_failure() {
+    let temp_dir = tempdir().expect("tempdir");
+    let profile = CodexProfile::new(temp_dir.path().to_path_buf());
+    let db_path = temp_dir.path().join("logs_1.sqlite");
+    let connection = rusqlite::Connection::open(db_path).expect("open sqlite");
+    connection
+        .execute_batch(
+            "CREATE TABLE logs (
+                id INTEGER PRIMARY KEY,
+                ts INTEGER NOT NULL,
+                level TEXT,
+                target TEXT,
+                feedback_log_body TEXT,
+                thread_id TEXT
+            );",
+        )
+        .expect("create logs");
+    connection
+        .execute(
+            "INSERT INTO logs (id, ts, level, target, feedback_log_body, thread_id)
+             VALUES (?1, ?2, 'ERROR', 'codex_core::exec', ?3, ?4)",
+            rusqlite::params![
+                4_i64,
+                1_775_231_800_i64,
+                "error=exec_command failed for `/bin/zsh -lc 'ps aux | rg codex'`: CreateProcess { message: \"Codex(Sandbox(Denied { output: ExecToolCallOutput { exit_code: 127, stdout: StreamOutput { text: \\\"\\\", truncated_after_lines: None }, stderr: StreamOutput { text: \\\"zsh:1: operation not permitted: ps\\\\n\\\", truncated_after_lines: None }, aggregated_output: StreamOutput { text: \\\"zsh:1: operation not permitted: ps\\\\n\\\", truncated_after_lines: None } }))\" }",
+                "thread-4",
+            ],
+        )
+        .expect("insert log");
+
+    let events = profile.read_live_events("thread-4", 0);
+    assert_eq!(events.len(), 1);
+    match &events[0].event {
+        CodexSessionEvent::ToolResult {
+            tool_use_id,
+            tool_name,
+            is_error,
+            content,
+        } => {
+            assert!(tool_use_id.starts_with("log-"));
+            assert_eq!(tool_name.as_deref(), Some("exec_command"));
+            assert!(*is_error);
+            assert_eq!(content, "zsh:1: operation not permitted: ps\n");
+        }
+        other => panic!("expected tool result, got {other:?}"),
+    }
+}
+
+#[test]
 fn codex_enrichment_assigns_distinct_live_threads_to_distinct_projects() {
     let mut sessions = vec![
         DetectedSession {
