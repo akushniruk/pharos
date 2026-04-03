@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::{LazyLock, Mutex};
+use std::time::SystemTime;
 
 use serde::Deserialize;
 use serde_json::Value;
@@ -42,6 +44,22 @@ pub struct CodexProfile {
     codex_home: PathBuf,
 }
 
+#[derive(Debug, Clone)]
+struct CachedCodexDiscovery {
+    fingerprint: CodexDiscoveryFingerprint,
+    sessions: Vec<NativeCodexSession>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct CodexDiscoveryFingerprint {
+    index_modified_ms: u128,
+    sessions_modified_ms: u128,
+    session_file_count: usize,
+}
+
+static DISCOVERY_CACHE: LazyLock<Mutex<HashMap<PathBuf, CachedCodexDiscovery>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
 impl CodexProfile {
     #[must_use]
     pub fn new(codex_home: PathBuf) -> Self {
@@ -50,6 +68,15 @@ impl CodexProfile {
 
     #[must_use]
     pub fn discover_native_sessions(&self) -> Vec<NativeCodexSession> {
+        let fingerprint = self.discovery_fingerprint();
+        if let Ok(cache) = DISCOVERY_CACHE.lock() {
+            if let Some(cached) = cache.get(&self.codex_home) {
+                if cached.fingerprint == fingerprint {
+                    return cached.sessions.clone();
+                }
+            }
+        }
+
         let mut sessions_by_id = HashMap::<String, NativeCodexSession>::new();
 
         let index_path = self.codex_home.join("session_index.jsonl");
@@ -112,7 +139,42 @@ impl CodexProfile {
 
         let mut sessions: Vec<_> = sessions_by_id.into_values().collect();
         sessions.sort_by(|left, right| right.updated_at_ms.cmp(&left.updated_at_ms));
+
+        if let Ok(mut cache) = DISCOVERY_CACHE.lock() {
+            cache.insert(
+                self.codex_home.clone(),
+                CachedCodexDiscovery {
+                    fingerprint,
+                    sessions: sessions.clone(),
+                },
+            );
+        }
+
         sessions
+    }
+
+    fn discovery_fingerprint(&self) -> CodexDiscoveryFingerprint {
+        let index_modified_ms = modified_ms(self.codex_home.join("session_index.jsonl"));
+        let sessions_dir = self.codex_home.join("sessions");
+        let mut sessions_modified_ms = modified_ms(&sessions_dir);
+        let mut session_file_count = 0_usize;
+
+        if let Ok(entries) = std::fs::read_dir(&sessions_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().and_then(|value| value.to_str()) != Some("json") {
+                    continue;
+                }
+                session_file_count += 1;
+                sessions_modified_ms = sessions_modified_ms.max(modified_ms(path));
+            }
+        }
+
+        CodexDiscoveryFingerprint {
+            index_modified_ms,
+            sessions_modified_ms,
+            session_file_count,
+        }
     }
 }
 
@@ -229,4 +291,12 @@ fn trimmed_preview(value: &str) -> String {
 fn parse_rfc3339_ms(value: &str) -> Option<i64> {
     let timestamp = time::OffsetDateTime::parse(value, &time::format_description::well_known::Rfc3339).ok()?;
     i64::try_from(timestamp.unix_timestamp_nanos() / 1_000_000).ok()
+}
+
+fn modified_ms(path: impl AsRef<std::path::Path>) -> u128 {
+    std::fs::metadata(path)
+        .and_then(|metadata| metadata.modified())
+        .ok()
+        .and_then(|modified| modified.duration_since(SystemTime::UNIX_EPOCH).ok())
+        .map_or(0, |duration| duration.as_millis())
 }

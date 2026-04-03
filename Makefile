@@ -43,8 +43,16 @@ up: ## Start daemon + client in background and write pid files
 		cd $(PROJECT_ROOT)/apps/daemon-rs && $(CARGO) build > /dev/null && \
 		nohup env PHAROS_DAEMON_PORT=$(SERVER_PORT) PHAROS_DAEMON_DB_PATH=$(DAEMON_DB_PATH) "$(DAEMON_BIN)" serve \
 			> "$(LOG_DIR)/daemon.log" 2>&1 & \
-		echo $$! > "$(DAEMON_PID_FILE)"; \
-		echo "Started daemon on http://127.0.0.1:$(SERVER_PORT) (pid $$(cat "$(DAEMON_PID_FILE)"))"; \
+		daemon_pid="$$!"; \
+		echo "$$daemon_pid" > "$(DAEMON_PID_FILE)"; \
+		sleep 1; \
+		daemon_port_pid="$$(lsof -tiTCP:$(SERVER_PORT) -sTCP:LISTEN 2>/dev/null | head -n 1)"; \
+		if [ -n "$$daemon_port_pid" ]; then \
+			echo "$$daemon_port_pid" > "$(DAEMON_PID_FILE)"; \
+			echo "Started daemon on http://127.0.0.1:$(SERVER_PORT) (pid $$daemon_port_pid)"; \
+		else \
+			echo "Started daemon on http://127.0.0.1:$(SERVER_PORT) (pid $$daemon_pid)"; \
+		fi; \
 	fi
 	@client_port_pid="$$(lsof -tiTCP:$(CLIENT_PORT) -sTCP:LISTEN 2>/dev/null | head -n 1)"; \
 	if [ -n "$$client_port_pid" ]; then \
