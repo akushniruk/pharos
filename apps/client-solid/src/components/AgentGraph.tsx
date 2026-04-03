@@ -1,12 +1,13 @@
 import { For, createMemo, createSignal, onMount } from 'solid-js';
-import { filteredAgents, filteredEvents, selectAgent, selectedAgent } from '../lib/store';
-import type { AgentInfo } from '../lib/types';
+import { filteredAgents, selectAgent, selectedAgent, selectedProjectSnapshot, selectedSessionSnapshot } from '../lib/store';
+import type { AgentInfo, SessionInfo } from '../lib/types';
 
-const NODE_W = 200;
-const NODE_H = 64;
-const H_GAP = 24;
-const V_GAP = 80;
-const MAX_PER_ROW = 5;
+const NODE_W = 180;
+const NODE_H = 76;
+const H_GAP = 16;
+const V_GAP = 20;
+const LANE_HEADER_W = 238;
+const LANE_ROW_H = 126;
 
 export default function AgentGraph() {
   let containerRef: HTMLDivElement | undefined;
@@ -16,70 +17,83 @@ export default function AgentGraph() {
   const [dragStart, setDragStart] = createSignal({ x: 0, y: 0 });
   const [filter, setFilter] = createSignal<'active' | 'idle' | 'all'>('active');
 
-  const visibleAgents = createMemo(() => {
-    const agents = filteredAgents();
-    const f = filter();
-    if (f === 'all') return agents;
-    if (f === 'active') return agents.filter(a => a.agentId === null || a.isActive);
-    // idle = not active but has events
-    return agents.filter(a => a.agentId === null || (!a.isActive && a.eventCount > 0));
+  const visibleSessions = createMemo(() => {
+    const project = selectedProjectSnapshot();
+    if (!project) return [];
+
+    const focusedSession = selectedSessionSnapshot();
+    const sessions = focusedSession
+      ? project.sessions.filter((session) => session.sessionId === focusedSession.sessionId)
+      : project.sessions;
+
+    return sessions
+      .map((session) => ({
+        ...session,
+        agents: filterAgents(session.agents, filter()),
+      }))
+      .filter((session) => session.agents.length > 0 || session.isActive);
   });
 
-  const activeCount = createMemo(() => filteredAgents().filter(a => a.isActive).length);
-  const idleCount = createMemo(() => filteredAgents().filter(a => !a.isActive && a.eventCount > 0).length);
+  const activeCount = createMemo(() => filteredAgents().filter((agent) => agent.isActive).length);
+  const idleCount = createMemo(() => filteredAgents().filter((agent) => !agent.isActive && agent.eventCount > 0).length);
   const totalCount = createMemo(() => filteredAgents().length);
 
   const layout = createMemo(() => {
-    const agents = visibleAgents();
-    if (agents.length === 0) {
+    const sessions = visibleSessions();
+    if (sessions.length === 0) {
       return {
-        nodes: [] as { agent: AgentInfo; x: number; y: number }[],
-        edges: [] as { x1: number; y1: number; x2: number; y2: number }[],
-        width: 400,
-        height: 200,
+        nodes: [] as Array<{ agent: AgentInfo; session: SessionInfo; x: number; y: number }>,
+        edges: [] as Array<{ x1: number; y1: number; x2: number; y2: number }>,
+        lanes: [] as Array<{ session: SessionInfo; y: number }>,
+        width: 520,
+        height: 220,
       };
     }
 
-    const roots = buildGraphRoots(agents);
-    const levels = buildLevels(roots);
-    const maxRowCount = Math.max(1, ...levels.map((level) => level.length));
-    const totalW = maxRowCount * (NODE_W + H_GAP) - H_GAP + 60;
-    const totalH = 40 + levels.length * (NODE_H + V_GAP) + 40;
+    const maxAgents = Math.max(1, ...sessions.map((session) => Math.max(1, session.agents.length)));
+    const width = LANE_HEADER_W + maxAgents * (NODE_W + H_GAP) - H_GAP + 48;
+    const height = 28 + sessions.length * (LANE_ROW_H + V_GAP) + 24;
 
     const positions = new Map<string, { x: number; y: number }>();
-    const nodes: { agent: AgentInfo; x: number; y: number }[] = [];
-    const edges: { x1: number; y1: number; x2: number; y2: number }[] = [];
+    const nodes: Array<{ agent: AgentInfo; session: SessionInfo; x: number; y: number }> = [];
+    const edges: Array<{ x1: number; y1: number; x2: number; y2: number }> = [];
+    const lanes: Array<{ session: SessionInfo; y: number }> = [];
 
-    levels.forEach((level, levelIndex) => {
-      const y = 30 + levelIndex * (NODE_H + V_GAP);
-      const rowWidth = level.length * (NODE_W + H_GAP) - H_GAP;
-      const startX = (totalW - rowWidth) / 2;
+    sessions.forEach((session, laneIndex) => {
+      const y = 24 + laneIndex * (LANE_ROW_H + V_GAP);
+      const nodeY = y + 38;
+      lanes.push({ session, y });
 
-      level.forEach((agent, index) => {
-        const x = startX + index * (NODE_W + H_GAP);
-        const key = agent.agentId || '__main__';
-        positions.set(key, { x, y });
-        nodes.push({ agent, x, y });
+      session.agents.forEach((agent, agentIndex) => {
+        const x = LANE_HEADER_W + 20 + agentIndex * (NODE_W + H_GAP);
+        const key = `${session.sessionId}:${agent.agentId || '__main__'}`;
+        positions.set(key, { x, y: nodeY });
+        nodes.push({ agent, session, x, y: nodeY });
       });
     });
 
-    for (const agent of agents) {
-      if (!agent.parentId) continue;
-      const parent = positions.get(agent.parentId === 'main' ? '__main__' : agent.parentId);
-      const child = positions.get(agent.agentId || '__main__');
-      if (!parent || !child) continue;
-      edges.push({
-        x1: parent.x + NODE_W / 2,
-        y1: parent.y + NODE_H,
-        x2: child.x + NODE_W / 2,
-        y2: child.y,
-      });
-    }
+    sessions.forEach((session) => {
+      for (const agent of session.agents) {
+        if (!agent.parentId) continue;
 
-    return { nodes, edges, width: totalW, height: totalH };
+        const parentKey = `${session.sessionId}:${agent.parentId === 'main' ? '__main__' : agent.parentId}`;
+        const childKey = `${session.sessionId}:${agent.agentId || '__main__'}`;
+        const parent = positions.get(parentKey);
+        const child = positions.get(childKey);
+
+        if (!parent || !child) continue;
+        edges.push({
+          x1: parent.x + NODE_W / 2,
+          y1: parent.y + NODE_H,
+          x2: child.x + NODE_W / 2,
+          y2: child.y,
+        });
+      }
+    });
+
+    return { nodes, edges, lanes, width, height };
   });
 
-  // Center on mount
   onMount(() => {
     if (containerRef) {
       const cw = containerRef.clientWidth;
@@ -90,36 +104,35 @@ export default function AgentGraph() {
     }
   });
 
-  // Zoom with mouse wheel
   const onWheel = (e: WheelEvent) => {
     e.preventDefault();
     const delta = e.deltaY > 0 ? -0.08 : 0.08;
-    setZoom(z => Math.max(0.3, Math.min(2.5, z + delta)));
+    setZoom((value) => Math.max(0.3, Math.min(2.5, value + delta)));
   };
 
-  // Pan with mouse drag
   const onMouseDown = (e: MouseEvent) => {
     if (e.button !== 0) return;
     setDragging(true);
     setDragStart({ x: e.clientX - pan().x, y: e.clientY - pan().y });
   };
+
   const onMouseMove = (e: MouseEvent) => {
     if (!dragging()) return;
     setPan({ x: e.clientX - dragStart().x, y: e.clientY - dragStart().y });
   };
+
   const onMouseUp = () => setDragging(false);
 
   return (
     <div
       ref={containerRef}
-      style="flex:1;overflow:hidden;position:relative;cursor:grab;user-select:none;"
+      style="flex:1;overflow:hidden;position:relative;cursor:grab;user-select:none;background:linear-gradient(180deg,rgba(255,255,255,0.015),transparent);"
       onWheel={onWheel}
       onMouseDown={onMouseDown}
       onMouseMove={onMouseMove}
       onMouseUp={onMouseUp}
       onMouseLeave={onMouseUp}
     >
-      {/* Top-left: filter controls */}
       <div style="position:absolute;top:12px;left:12px;display:flex;gap:4px;z-index:10;">
         <button
           onClick={() => setFilter('active')}
@@ -144,11 +157,10 @@ export default function AgentGraph() {
         </button>
       </div>
 
-      {/* Bottom-right: zoom controls */}
       <div style="position:absolute;bottom:12px;right:12px;display:flex;gap:4px;z-index:10;">
-        <button onClick={() => setZoom(z => Math.min(2.5, z + 0.2))} class="graph-zoom-btn">+</button>
+        <button onClick={() => setZoom((value) => Math.min(2.5, value + 0.2))} class="graph-zoom-btn">+</button>
         <button onClick={() => setZoom(1)} class="graph-zoom-btn" style="font-size:10px;">Fit</button>
-        <button onClick={() => setZoom(z => Math.max(0.3, z - 0.2))} class="graph-zoom-btn">−</button>
+        <button onClick={() => setZoom((value) => Math.max(0.3, value - 0.2))} class="graph-zoom-btn">−</button>
       </div>
 
       <svg
@@ -157,7 +169,116 @@ export default function AgentGraph() {
         viewBox={`0 0 ${layout().width} ${layout().height}`}
         style={`transform:translate(${pan().x}px,${pan().y}px);`}
       >
-        {/* Edges */}
+        <For each={layout().lanes}>
+          {(lane) => {
+            const isSelectedLane = () => selectedSessionSnapshot()?.sessionId === lane.session.sessionId;
+            const isActiveLane = lane.session.isActive;
+            const laneWidth = layout().width - 24;
+            const headerFill = isSelectedLane() ? 'var(--bg-elevated)' : 'var(--bg-card)';
+            const headerStroke = isSelectedLane() ? 'var(--accent)' : 'var(--border)';
+            const laneSummary = lane.session.currentAction
+              || lane.session.summary
+              || `${lane.session.activeAgentCount}/${lane.session.agents.length} agents`;
+            const laneRuntime = lane.session.runtimeLabel || 'Runtime unavailable';
+
+            return (
+              <g>
+                <rect
+                  x="12"
+                  y={lane.y - 4}
+                  width={laneWidth}
+                  height={LANE_ROW_H}
+                  rx="12"
+                  fill="var(--bg-primary)"
+                  stroke="var(--border)"
+                />
+                <rect
+                  x="18"
+                  y={lane.y}
+                  width={LANE_HEADER_W - 12}
+                  height={LANE_ROW_H - 8}
+                  rx="10"
+                  fill={headerFill}
+                  stroke={headerStroke}
+                  stroke-width={isSelectedLane() ? 2 : 1}
+                />
+                <rect
+                  x="18"
+                  y={lane.y}
+                  width="3"
+                  height={LANE_ROW_H - 8}
+                  rx="1.5"
+                  fill={isActiveLane ? 'var(--green)' : 'var(--border-hover)'}
+                />
+                <circle
+                  cx="36"
+                  cy={lane.y + 20}
+                  r="4"
+                  fill={isActiveLane ? 'var(--green)' : lane.session.eventCount > 0 ? 'var(--yellow)' : 'var(--text-dim)'}
+                />
+                <text
+                  x="46"
+                  y={lane.y + 23}
+                  font-size="12"
+                  font-weight="600"
+                  fill="var(--text-primary)"
+                  font-family="var(--font-sans)"
+                >
+                  {truncate(lane.session.label, 24)}
+                </text>
+                <text
+                  x="26"
+                  y={lane.y + 45}
+                  font-size="10"
+                  fill="var(--text-secondary)"
+                  font-family="var(--font-sans)"
+                >
+                  {truncate(`${laneRuntime} · ${laneSummary}`, 44)}
+                </text>
+                <text
+                  x="26"
+                  y={lane.y + 63}
+                  font-size="10"
+                  fill="var(--text-dim)"
+                  font-family="var(--font-sans)"
+                >
+                  {timeLabel(lane.session.lastEventAt)} · {lane.session.eventCount} events
+                </text>
+                <rect
+                  x="26"
+                  y={lane.y + LANE_ROW_H - 30}
+                  width="66"
+                  height="16"
+                  rx="8"
+                  fill={isActiveLane ? 'var(--green-dim)' : 'var(--bg-elevated)'}
+                />
+                <text
+                  x="59"
+                  y={lane.y + LANE_ROW_H - 18}
+                  textAnchor="middle"
+                  font-size="9"
+                  font-weight="600"
+                  fill={isActiveLane ? 'var(--green)' : 'var(--text-dim)'}
+                  font-family="var(--font-sans)"
+                >
+                  {isActiveLane ? 'Active' : 'Idle'}
+                </text>
+                {!lane.session.agents.length && (
+                  <text
+                    x={LANE_HEADER_W + 40}
+                    y={lane.y + 66}
+                    font-size="11"
+                    fill="var(--text-dim)"
+                    font-family="var(--font-sans)"
+                  >
+                    No agents match the current filter
+                  </text>
+                )}
+              </g>
+            );
+          }}
+        </For>
+
         <For each={layout().edges}>
           {(edge) => {
             const midY = (edge.y1 + edge.y2) / 2;
@@ -173,77 +294,89 @@ export default function AgentGraph() {
           }}
         </For>
 
-        {/* Nodes */}
         <For each={layout().nodes}>
           {(node) => {
             const id = node.agent.agentId || '__main__';
             const isSelected = () => selectedAgent() === id;
             const isActive = node.agent.isActive;
-
-            const strokeColor = () => {
-              if (isSelected()) return 'var(--accent)';
-              if (isActive) return 'var(--green)';
-              return 'var(--border)';
-            };
-
-            const dotColor = isActive ? 'var(--green)' : node.agent.eventCount > 0 ? 'var(--yellow)' : 'var(--text-dim)';
+            const runtimeText = node.agent.runtimeLabel || node.session.runtimeLabel || 'Runtime unavailable';
             const statusText = isActive ? 'Online' : node.agent.eventCount > 0 ? 'Idle' : 'Done';
-            const name = node.agent.displayName.length > 22 ? node.agent.displayName.slice(0, 21) + '…' : node.agent.displayName;
-            const meta = node.agent.currentAction
+            const actionText = node.agent.currentAction
               || node.agent.assignment
-              || node.agent.modelName?.replace('claude-', '')
-              || '';
-            const metaTrunc = meta.length > 28 ? meta.slice(0, 27) + '…' : meta;
+              || node.agent.modelName
+              || 'Waiting for next action';
 
             return (
               <g
                 style="cursor:pointer;"
-                onClick={(e) => { e.stopPropagation(); selectAgent(id); }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  selectAgent(id);
+                }}
               >
-                {/* Card background */}
                 <rect
-                  x={node.x} y={node.y}
-                  width={NODE_W} height={NODE_H}
-                  rx="8" ry="8"
+                  x={node.x}
+                  y={node.y}
+                  width={NODE_W}
+                  height={NODE_H}
+                  rx="10"
                   fill="var(--bg-card)"
-                  stroke={strokeColor()}
+                  stroke={isSelected() ? 'var(--accent)' : isActive ? 'var(--green)' : 'var(--border)'}
                   stroke-width={isSelected() ? 2 : 1}
                 />
-                {/* Active left border */}
                 {isActive && (
                   <rect
-                    x={node.x} y={node.y + 4}
-                    width="3" height={NODE_H - 8}
+                    x={node.x}
+                    y={node.y + 4}
+                    width="3"
+                    height={NODE_H - 8}
                     rx="1.5"
                     fill="var(--green)"
                   />
                 )}
-                {/* Status dot */}
                 <circle
-                  cx={node.x + NODE_W - 14} cy={node.y + 14}
-                  r="4" fill={dotColor}
+                  cx={node.x + NODE_W - 14}
+                  cy={node.y + 14}
+                  r="4"
+                  fill={isActive ? 'var(--green)' : node.agent.eventCount > 0 ? 'var(--yellow)' : 'var(--text-dim)'}
                 />
-                {/* Agent name */}
                 <text
-                  x={node.x + 12} y={node.y + 18}
-                  font-size="12" font-weight="600"
+                  x={node.x + 12}
+                  y={node.y + 18}
+                  font-size="12"
+                  font-weight="600"
                   fill="var(--text-primary)"
                   font-family="var(--font-sans)"
-                >{name}</text>
-                {/* Status */}
+                >
+                  {truncate(node.agent.displayName, 20)}
+                </text>
                 <text
-                  x={node.x + 12} y={node.y + 33}
+                  x={node.x + 12}
+                  y={node.y + 34}
                   font-size="10"
-                  fill={isActive ? 'var(--green)' : 'var(--text-tertiary)'}
+                  fill={isActive ? 'var(--green)' : 'var(--text-secondary)'}
                   font-family="var(--font-sans)"
-                >{statusText} · {node.agent.eventCount} events</text>
-                {/* Model */}
+                >
+                  {statusText} · {node.agent.eventCount} events
+                </text>
                 <text
-                  x={node.x + 12} y={node.y + 48}
+                  x={node.x + 12}
+                  y={node.y + 49}
                   font-size="10"
                   fill="var(--text-dim)"
-                  font-family={node.agent.modelName && !node.agent.currentAction && !node.agent.assignment ? 'var(--font-mono)' : 'var(--font-sans)'}
-                >{metaTrunc}</text>
+                  font-family="var(--font-sans)"
+                >
+                  {truncate(runtimeText, 24)}
+                </text>
+                <text
+                  x={node.x + 12}
+                  y={node.y + 64}
+                  font-size="10"
+                  fill="var(--text-dim)"
+                  font-family="var(--font-sans)"
+                >
+                  {truncate(actionText, 26)}
+                </text>
               </g>
             );
           }}
@@ -253,47 +386,23 @@ export default function AgentGraph() {
   );
 }
 
-type GraphNode = AgentInfo & { children: GraphNode[] };
-
-function buildGraphRoots(agents: AgentInfo[]): GraphNode[] {
-  const nodes = new Map<string, GraphNode>();
-  for (const agent of agents) {
-    const key = agent.agentId || '__main__';
-    nodes.set(key, { ...agent, children: [] });
+function filterAgents(agents: AgentInfo[], mode: 'active' | 'idle' | 'all'): AgentInfo[] {
+  if (mode === 'all') return agents;
+  if (mode === 'active') {
+    return agents.filter((agent) => agent.agentId === null || agent.isActive);
   }
-
-  const roots: GraphNode[] = [];
-  for (const agent of nodes.values()) {
-    const parentKey = agent.parentId === 'main' ? '__main__' : agent.parentId;
-    if (parentKey && parentKey !== (agent.agentId || '__main__') && nodes.has(parentKey)) {
-      nodes.get(parentKey)!.children.push(agent);
-    } else {
-      roots.push(agent);
-    }
-  }
-
-  roots.sort(sortAgents);
-  for (const node of nodes.values()) {
-    node.children.sort(sortAgents);
-  }
-  return roots;
+  return agents.filter((agent) => agent.agentId === null || (!agent.isActive && agent.eventCount > 0));
 }
 
-function buildLevels(roots: GraphNode[]): AgentInfo[][] {
-  const levels: AgentInfo[][] = [];
-  let current: GraphNode[] = roots;
-
-  while (current.length > 0) {
-    levels.push(current);
-    current = current.flatMap((node) => node.children);
-  }
-
-  return levels;
+function timeLabel(ms: number): string {
+  const diff = Date.now() - ms;
+  if (diff < 10_000) return 'just now';
+  if (diff < 60_000) return `${Math.floor(diff / 1000)}s ago`;
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
+  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
+  return `${Math.floor(diff / 86_400_000)}d ago`;
 }
 
-function sortAgents(left: AgentInfo, right: AgentInfo): number {
-  if (left.isActive !== right.isActive) {
-    return left.isActive ? -1 : 1;
-  }
-  return right.eventCount - left.eventCount;
+function truncate(text: string, max: number): string {
+  return text.length > max ? `${text.slice(0, max - 1)}…` : text;
 }

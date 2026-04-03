@@ -1,14 +1,25 @@
-import { Show, For, onMount, createSignal } from 'solid-js';
+import { Show, For, onMount, createSignal, createMemo } from 'solid-js';
 import { Icon } from 'solid-heroicons';
 import { listBullet, share, folder, bolt, cpuChip } from 'solid-heroicons/solid';
-import { selectedProject, selectedAgent, projects, selectProject, filteredEvents } from './lib/store';
+import {
+  selectedProject,
+  selectedProjectSnapshot,
+  selectedSession,
+  selectedAgent,
+  projects,
+  selectProject,
+  selectSession,
+  filteredEvents,
+} from './lib/store';
 import { connected, connectWs } from './lib/ws';
 import { initTheme } from './lib/theme';
+import { timeAgo } from './lib/time';
 import Header from './components/Header';
 import Sidebar from './components/Sidebar';
 import EventStream from './components/EventStream';
 import AgentGraph from './components/AgentGraph';
 import AgentDetail from './components/AgentDetail';
+import type { Project } from './lib/types';
 
 type ViewMode = 'logs' | 'graph';
 
@@ -45,6 +56,8 @@ export default function App() {
         {/* Zone 3 + 4: Main content */}
         <div class="app-main">
           <Show when={selectedProject()} fallback={<ProjectsHome />}>
+            <ProjectTimeline />
+
             {/* Toolbar: project breadcrumb + view mode toggle */}
             <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 16px;border-bottom:1px solid var(--border);flex-shrink:0;">
               <button
@@ -68,14 +81,17 @@ export default function App() {
             </div>
 
             {/* Content area */}
-            <Show when={viewMode() === 'logs'} fallback={
-              <div style="display:flex;flex:1;overflow:hidden;">
-                <AgentGraph />
-                <Show when={selectedAgent()}>
-                  <AgentDetail />
-                </Show>
-              </div>
-            }>
+            <Show
+              when={viewMode() === 'logs'}
+              fallback={
+                <div style="display:flex;flex:1;overflow:hidden;">
+                  <AgentGraph />
+                  <Show when={selectedAgent()}>
+                    <AgentDetail />
+                  </Show>
+                </div>
+              }
+            >
               <EventStream />
             </Show>
           </Show>
@@ -97,7 +113,109 @@ export default function App() {
   );
 }
 
-import type { Project } from './lib/types';
+function ProjectTimeline() {
+  const project = createMemo(() => selectedProjectSnapshot());
+  const sessions = createMemo(() => project()?.sessions ?? []);
+
+  return (
+    <Show when={project()}>
+      {(currentProject) => (
+        <div
+          style="display:flex;gap:12px;align-items:stretch;padding:10px 16px;border-bottom:1px solid var(--border);background:linear-gradient(180deg,rgba(255,255,255,0.02),transparent);flex-shrink:0;"
+        >
+          <div style="min-width:180px;max-width:240px;display:flex;flex-direction:column;justify-content:space-between;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--bg-card);">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <Icon path={folder} style="width:14px;height:14px;color:var(--text-secondary);" />
+              <span style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);">
+                Project timeline
+              </span>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:4px;min-width:0;">
+              <span style="font-size:13px;font-weight:600;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                {currentProject().name}
+              </span>
+              <span style="font-size:11px;color:var(--text-dim);line-height:1.45;">
+                {currentProject().summary
+                  ?? `${currentProject().activeSessionCount} active · ${currentProject().sessions.length} sessions`}
+              </span>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;">
+              <For each={currentProject().runtimeLabels.slice(0, 3)}>
+                {(runtime) => (
+                  <span
+                    style="font-size:10px;padding:2px 8px;border-radius:9999px;border:1px solid var(--border);background:var(--bg-elevated);color:var(--text-secondary);"
+                  >
+                    {runtime}
+                  </span>
+                )}
+              </For>
+            </div>
+          </div>
+
+          <div style="flex:1;overflow-x:auto;padding-bottom:2px;">
+            <div style="display:flex;gap:8px;min-width:max-content;">
+              <For each={sessions()}>
+                {(session) => {
+                  const isSelected = () => selectedSession() === session.sessionId;
+                  const title = () => session.label || session.sessionId;
+                  const primaryContext = () =>
+                    session.currentAction
+                    || session.summary
+                    || `${session.activeAgentCount}/${session.agents.length} agents`;
+                  const secondaryContext = () =>
+                    session.runtimeLabel
+                    ? `${session.runtimeLabel} runtime · ${timeAgo(session.lastEventAt)}`
+                    : `${timeAgo(session.lastEventAt)} · ${session.eventCount} events`;
+
+                  return (
+                    <button
+                      onClick={() => selectSession(session.sessionId)}
+                      style={[
+                        'min-width:210px;max-width:260px;text-align:left;display:flex;flex-direction:column;gap:7px;padding:10px 12px;border-radius:10px;border:1px solid var(--border);cursor:pointer;',
+                        'background:var(--bg-card);transition:background 0.15s,border-color 0.15s,transform 0.15s;',
+                        isSelected()
+                          ? 'border-color:var(--accent);background:var(--bg-elevated);transform:translateY(-1px);'
+                          : '',
+                      ].join('')}
+                      onMouseEnter={(e) => {
+                        if (!isSelected()) (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg-card-hover)';
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!isSelected()) (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg-card)';
+                      }}
+                    >
+                      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:0;">
+                        <span style="font-size:12px;font-weight:600;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                          {title()}
+                        </span>
+                        <span
+                          style={[
+                            'font-size:9px;font-weight:600;padding:1px 6px;border-radius:9999px;flex-shrink:0;',
+                            session.isActive
+                              ? 'background:var(--green-dim);color:var(--green);'
+                              : 'background:var(--bg-elevated);color:var(--text-dim);',
+                          ].join('')}
+                        >
+                          {session.isActive ? 'Active' : 'Idle'}
+                        </span>
+                      </div>
+                      <span style="font-size:11px;color:var(--text-secondary);line-height:1.35;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                        {primaryContext()}
+                      </span>
+                      <span style="font-size:10px;color:var(--text-dim);line-height:1.35;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                        {secondaryContext()} · {session.sessionId.slice(0, 8)}
+                      </span>
+                    </button>
+                  );
+                }}
+              </For>
+            </div>
+          </div>
+        </div>
+      )}
+    </Show>
+  );
+}
 
 /** Deduplicate agent badges by displayName, keeping the most active */
 function uniqueAgentBadges(p: Project): { name: string; isActive: boolean }[] {
