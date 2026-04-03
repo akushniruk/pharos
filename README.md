@@ -13,16 +13,25 @@ Pharos scans `~/.claude/sessions/` for active sessions, tails JSONL transcripts,
 ## Quick Start
 
 ```bash
-# Terminal 1 — start the daemon
-make daemon
-
-# Terminal 2 — start the dashboard
-make client
+# Start daemon + dashboard
+make up
 
 # Open http://localhost:5173
 ```
 
 That's it. Start Claude in any folder — Pharos detects it automatically.
+
+Stop everything:
+
+```bash
+make down
+```
+
+Reset the local daemon database:
+
+```bash
+make db-reset
+```
 
 ## Desktop App
 
@@ -54,7 +63,7 @@ Single binary — daemon + dashboard in one window.
 | Layer | Technology |
 |-------|-----------|
 | Daemon | Rust (axum, tokio, rusqlite) |
-| Dashboard | Vue 3 + Vite |
+| Dashboard | SolidJS + Vite |
 | Desktop | Tauri v2 |
 | Storage | SQLite |
 | Protocol | REST API + WebSocket streaming |
@@ -63,8 +72,11 @@ Single binary — daemon + dashboard in one window.
 
 ```bash
 make help       # show all targets
+make up         # start daemon + dashboard in background
+make down       # stop background daemon + dashboard
 make daemon     # start daemon (port 4000)
 make client     # start dashboard (port 5173)
+make db-reset   # delete local daemon database
 make test       # run daemon tests
 make clippy     # run lints
 make health     # check if daemon + client are up
