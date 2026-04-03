@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io::{BufRead, BufReader, Seek, SeekFrom};
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -77,6 +77,7 @@ pub async fn run_scanner(
                 .iter()
                 .map(|s| s.session_id.clone())
                 .collect();
+            let active_sessions = active_session_ids(&live_state);
 
             // Detect new sessions
             for session in current_sessions {
@@ -100,8 +101,9 @@ pub async fn run_scanner(
                                 payload: json!({ "title": title }),
                             };
 
-                            let _ = store.insert_event(&envelope);
-                            broadcast_envelope(&live_state, &sender, &envelope);
+                            if let Ok(true) = store.insert_event(&envelope) {
+                                broadcast_envelope(&live_state, &sender, &envelope);
+                            }
                         }
                     }
                     existing.session = session;
@@ -133,20 +135,35 @@ pub async fn run_scanner(
                     }),
                 };
 
-                let _ = store.insert_event(&envelope);
-                broadcast_envelope(&live_state, &sender, &envelope);
+                if !active_sessions.contains(&session_id)
+                    && matches!(store.insert_event(&envelope), Ok(true))
+                {
+                    broadcast_envelope(&live_state, &sender, &envelope);
+                }
 
                 tracked.insert(
-                    session_id,
+                    session_id.clone(),
                     TrackedSession {
                         session,
                         missed_discovery_cycles: 0,
-                        file_offset: 0,
-                        codex_item_offset: 0,
-                        codex_log_offset: 0,
+                        file_offset: load_u64_offset(
+                            &store,
+                            &transcript_offset_key(&workspace_id, &session_id),
+                        ),
+                        codex_item_offset: load_usize_offset(
+                            &store,
+                            &codex_history_offset_key(&workspace_id, &session_id),
+                        ),
+                        codex_log_offset: load_i64_offset(
+                            &store,
+                            &codex_log_offset_key(&workspace_id, &session_id),
+                        ),
                         codex_next_poll_at_ms: 0,
                         recent_codex_signatures: Vec::new(),
-                        gemini_log_offset: 0,
+                        gemini_log_offset: load_usize_offset(
+                            &store,
+                            &gemini_log_offset_key(&workspace_id, &session_id),
+                        ),
                         recent_gemini_signatures: Vec::new(),
                         known_subagents: Vec::new(),
                         tool_name_map: HashMap::new(),
@@ -191,8 +208,9 @@ pub async fn run_scanner(
                         payload: json!({}),
                     };
 
-                    let _ = store.insert_event(&envelope);
-                    broadcast_envelope(&live_state, &sender, &envelope);
+                    if let Ok(true) = store.insert_event(&envelope) {
+                        broadcast_envelope(&live_state, &sender, &envelope);
+                    }
                 }
             }
 
@@ -490,11 +508,16 @@ fn tail_codex_activity(
                 }
                 let envelope =
                     codex_event_to_envelope(event, &workspace_id, &ts.session.session_id, now_ms);
-                let _ = store.insert_event(&envelope);
-                broadcast_envelope(live_state, sender, &envelope);
+                if let Ok(true) = store.insert_event(&envelope) {
+                    broadcast_envelope(live_state, sender, &envelope);
+                }
             }
 
             ts.codex_item_offset = events.len();
+            let _ = store.save_scanner_offset(
+                &codex_history_offset_key(&workspace_id, &ts.session.session_id),
+                i64::try_from(ts.codex_item_offset).unwrap_or(i64::MAX),
+            );
         }
     }
 
@@ -517,11 +540,16 @@ fn tail_codex_activity(
             &ts.session.session_id,
             live_event.occurred_at_ms,
         );
-        let _ = store.insert_event(&envelope);
-        broadcast_envelope(live_state, sender, &envelope);
+        if let Ok(true) = store.insert_event(&envelope) {
+            broadcast_envelope(live_state, sender, &envelope);
+        }
     }
     if let Some(last) = events.last() {
         ts.codex_log_offset = last.row_id;
+        let _ = store.save_scanner_offset(
+            &codex_log_offset_key(&workspace_id, &ts.session.session_id),
+            ts.codex_log_offset,
+        );
     }
     ts.codex_next_poll_at_ms = if events.is_empty() {
         now_ms.saturating_add(2_000)
@@ -560,12 +588,17 @@ fn tail_gemini_activity(
                 now_ms
             },
         );
-        let _ = store.insert_event(&envelope);
-        broadcast_envelope(live_state, sender, &envelope);
+        if let Ok(true) = store.insert_event(&envelope) {
+            broadcast_envelope(live_state, sender, &envelope);
+        }
     }
 
     if let Some(last) = events.last() {
         ts.gemini_log_offset = last.row_id;
+        let _ = store.save_scanner_offset(
+            &gemini_log_offset_key(&workspace_id, &ts.session.session_id),
+            i64::try_from(ts.gemini_log_offset).unwrap_or(i64::MAX),
+        );
     }
 }
 
@@ -733,8 +766,9 @@ fn tail_transcript(
                         None,
                         event_time,
                     );
-                    let _ = store.insert_event(&envelope);
-                    broadcast_envelope(live_state, sender, &envelope);
+                    if let Ok(true) = store.insert_event(&envelope) {
+                        broadcast_envelope(live_state, sender, &envelope);
+                    }
                 }
             }
         }
@@ -742,6 +776,10 @@ fn tail_transcript(
 
     if let Ok(pos) = reader.stream_position() {
         ts.file_offset = pos;
+        let _ = store.save_scanner_offset(
+            &transcript_offset_key(&workspace_id, &ts.session.session_id),
+            i64::try_from(pos).unwrap_or(i64::MAX),
+        );
     }
 }
 
@@ -762,6 +800,7 @@ fn scan_subagents(
 
     let workspace_id = workspace_id_from_cwd(&ts.session.cwd);
     let now_ms = now_millis();
+    let active_subagents = active_subagent_ids(live_state, &ts.session.session_id);
 
     // Discover new subagents from .meta.json files
     for entry in entries.flatten() {
@@ -819,15 +858,25 @@ fn scan_subagents(
             }),
         };
 
-        let _ = store.insert_event(&envelope);
-        broadcast_envelope(live_state, sender, &envelope);
+        if !active_subagents.contains(&subagent_id)
+            && matches!(store.insert_event(&envelope), Ok(true))
+        {
+            broadcast_envelope(live_state, sender, &envelope);
+        }
 
         // Track subagent for JSONL tailing
         let jsonl_path = subagents_dir.join(format!("{subagent_id}.jsonl"));
         ts.known_subagents.push(TrackedSubagent {
-            agent_id: subagent_id,
+            agent_id: subagent_id.clone(),
             jsonl_path,
-            file_offset: 0,
+            file_offset: load_u64_offset(
+                store,
+                &subagent_offset_key(
+                    &workspace_id,
+                    &ts.session.session_id,
+                    &format!("{subagent_id}.jsonl"),
+                ),
+            ),
             tool_name_map: HashMap::new(),
         });
     }
@@ -887,8 +936,9 @@ fn scan_subagents(
                             Some(&subagent.agent_id),
                             event_time,
                         );
-                        let _ = store.insert_event(&envelope);
-                        broadcast_envelope(live_state, sender, &envelope);
+                        if let Ok(true) = store.insert_event(&envelope) {
+                            broadcast_envelope(live_state, sender, &envelope);
+                        }
                     }
                 }
             }
@@ -896,6 +946,14 @@ fn scan_subagents(
 
         if let Ok(pos) = reader.stream_position() {
             subagent.file_offset = pos;
+            let _ = store.save_scanner_offset(
+                &subagent_offset_key(
+                    &workspace_id,
+                    &ts.session.session_id,
+                    &format!("{}.jsonl", subagent.agent_id),
+                ),
+                i64::try_from(pos).unwrap_or(i64::MAX),
+            );
         }
     }
 }
@@ -932,6 +990,59 @@ fn broadcast_envelope(
         message_type: "agent_registry",
         payload: registry_payload,
     });
+}
+
+fn active_session_ids(live_state: &LiveState) -> HashSet<String> {
+    live_state
+        .list_sessions()
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|session| session.is_active)
+        .map(|session| session.session_id)
+        .collect()
+}
+
+fn active_subagent_ids(live_state: &LiveState, session_id: &str) -> HashSet<String> {
+    live_state
+        .list_agent_registry()
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|entry| entry.session_id == session_id)
+        .filter(|entry| entry.lifecycle_status == "active")
+        .filter_map(|entry| entry.agent_id)
+        .collect()
+}
+
+fn load_i64_offset(store: &Store, cursor_key: &str) -> i64 {
+    store.load_scanner_offset(cursor_key).unwrap_or(0)
+}
+
+fn load_u64_offset(store: &Store, cursor_key: &str) -> u64 {
+    u64::try_from(load_i64_offset(store, cursor_key)).unwrap_or(0)
+}
+
+fn load_usize_offset(store: &Store, cursor_key: &str) -> usize {
+    usize::try_from(load_i64_offset(store, cursor_key)).unwrap_or(0)
+}
+
+fn transcript_offset_key(workspace_id: &str, session_id: &str) -> String {
+    format!("transcript:{workspace_id}:{session_id}")
+}
+
+fn codex_history_offset_key(workspace_id: &str, session_id: &str) -> String {
+    format!("codex_history:{workspace_id}:{session_id}")
+}
+
+fn codex_log_offset_key(workspace_id: &str, session_id: &str) -> String {
+    format!("codex_log:{workspace_id}:{session_id}")
+}
+
+fn gemini_log_offset_key(workspace_id: &str, session_id: &str) -> String {
+    format!("gemini_log:{workspace_id}:{session_id}")
+}
+
+fn subagent_offset_key(workspace_id: &str, session_id: &str, file_name: &str) -> String {
+    format!("subagent:{workspace_id}:{session_id}:{file_name}")
 }
 
 fn workspace_id_from_cwd(cwd: &str) -> String {

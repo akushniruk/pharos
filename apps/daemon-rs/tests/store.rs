@@ -127,7 +127,10 @@ fn legacy_events_fallback_to_runtime_label_when_workspace_is_not_project_like() 
     let legacy_events = store.list_legacy_events().expect("legacy events");
     assert_eq!(legacy_events[0].source_app, "unknown");
     assert_eq!(
-        legacy_events[0].payload.get("runtime_label").and_then(serde_json::Value::as_str),
+        legacy_events[0]
+            .payload
+            .get("runtime_label")
+            .and_then(serde_json::Value::as_str),
         Some("Gemini")
     );
 }
@@ -160,7 +163,54 @@ fn legacy_events_prefix_project_labels_with_runtime_name() {
     let legacy_events = store.list_legacy_events().expect("legacy events");
     assert_eq!(legacy_events[0].source_app, "pharos");
     assert_eq!(
-        legacy_events[0].payload.get("runtime_label").and_then(serde_json::Value::as_str),
+        legacy_events[0]
+            .payload
+            .get("runtime_label")
+            .and_then(serde_json::Value::as_str),
         Some("Codex")
+    );
+}
+
+#[test]
+fn store_dedupes_identical_events() {
+    let store = Store::open_in_memory().expect("store");
+    let duplicate = event(
+        EventKind::ToolCallStarted,
+        100,
+        Some("agent-1"),
+        json!({
+            "tool_name": "exec_command",
+            "tool_use_id": "tool-1",
+            "tool_input": {"cmd":"pwd"}
+        }),
+    );
+
+    assert!(store.insert_event(&duplicate).expect("first insert"));
+    assert!(!store.insert_event(&duplicate).expect("deduped insert"));
+
+    let events = store.list_events().expect("events");
+    assert_eq!(events.len(), 1);
+}
+
+#[test]
+fn store_round_trips_scanner_offsets() {
+    let store = Store::open_in_memory().expect("store");
+
+    assert_eq!(
+        store
+            .load_scanner_offset("transcript:demo-project:sess-1234")
+            .expect("default offset"),
+        0
+    );
+
+    store
+        .save_scanner_offset("transcript:demo-project:sess-1234", 512)
+        .expect("save offset");
+
+    assert_eq!(
+        store
+            .load_scanner_offset("transcript:demo-project:sess-1234")
+            .expect("stored offset"),
+        512
     );
 }

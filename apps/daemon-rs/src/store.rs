@@ -1,6 +1,8 @@
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use std::sync::{Arc, Mutex};
 
-use rusqlite::{params, Connection};
+use rusqlite::{Connection, OptionalExtension, params};
 use thiserror::Error;
 
 use std::collections::BTreeSet;
@@ -45,7 +47,12 @@ impl Store {
                 session_id TEXT NOT NULL,
                 event_kind TEXT NOT NULL,
                 occurred_at_ms INTEGER NOT NULL,
+                event_fingerprint TEXT NOT NULL UNIQUE,
                 json TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS scanner_offsets (
+                cursor_key TEXT PRIMARY KEY,
+                offset_value INTEGER NOT NULL
             );",
         )?;
 
@@ -54,31 +61,58 @@ impl Store {
         })
     }
 
-    pub fn insert_event(&self, event: &EventEnvelope) -> Result<(), StoreError> {
+    pub fn insert_event(&self, event: &EventEnvelope) -> Result<bool, StoreError> {
         let runtime_source = serde_json::to_string(&event.runtime_source)?;
         let event_kind = serde_json::to_string(&event.event_kind)?;
         let json = serde_json::to_string(event)?;
+        let event_fingerprint = event_fingerprint(&json);
         let connection = self.connection.lock().map_err(|_| StoreError::Poisoned)?;
 
-        connection.execute(
-            "INSERT INTO events (
+        let inserted = connection.execute(
+            "INSERT OR IGNORE INTO events (
                 runtime_source,
                 workspace_id,
                 session_id,
                 event_kind,
                 occurred_at_ms,
+                event_fingerprint,
                 json
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             params![
                 runtime_source,
                 event.session.workspace_id,
                 event.session.session_id,
                 event_kind,
                 event.occurred_at_ms,
+                event_fingerprint,
                 json
             ],
         )?;
 
+        Ok(inserted > 0)
+    }
+
+    pub fn load_scanner_offset(&self, cursor_key: &str) -> Result<i64, StoreError> {
+        let connection = self.connection.lock().map_err(|_| StoreError::Poisoned)?;
+        let offset = connection
+            .query_row(
+                "SELECT offset_value FROM scanner_offsets WHERE cursor_key = ?1",
+                [cursor_key],
+                |row| row.get::<_, i64>(0),
+            )
+            .optional()?
+            .unwrap_or(0);
+        Ok(offset)
+    }
+
+    pub fn save_scanner_offset(&self, cursor_key: &str, offset_value: i64) -> Result<(), StoreError> {
+        let connection = self.connection.lock().map_err(|_| StoreError::Poisoned)?;
+        connection.execute(
+            "INSERT INTO scanner_offsets (cursor_key, offset_value)
+             VALUES (?1, ?2)
+             ON CONFLICT(cursor_key) DO UPDATE SET offset_value = excluded.offset_value",
+            params![cursor_key, offset_value],
+        )?;
         Ok(())
     }
 
@@ -102,27 +136,32 @@ impl Store {
 
         for event in events {
             let agent_id = event.agent_id.clone();
-            let entry_id = build_registry_id(&event.session.workspace_id, &event.session.session_id, agent_id.as_deref());
+            let entry_id = build_registry_id(
+                &event.session.workspace_id,
+                &event.session.session_id,
+                agent_id.as_deref(),
+            );
             let display_name = display_name_candidate_for_event(&event);
 
-            let accumulator = entries
-                .entry(entry_id.clone())
-                .or_insert_with(|| AgentRegistryAccumulator {
-                    id: entry_id.clone(),
-                    source_app: event.session.workspace_id.clone(),
-                    session_id: event.session.session_id.clone(),
-                    agent_id: agent_id.clone(),
-                    display_name: display_name.value.clone(),
-                    display_name_score: display_name.score,
-                    agent_type: payload_string(&event.payload, "agent_type"),
-                    model_name: payload_string(&event.payload, "model"),
-                    parent_id: payload_string(&event.payload, "parent_agent_id"),
-                    team_name: payload_string(&event.payload, "team_name"),
-                    lifecycle_status: resolve_lifecycle_status(&event.event_kind).to_string(),
-                    first_seen_at: event.occurred_at_ms,
-                    last_seen_at: event.occurred_at_ms,
-                    event_count: 0,
-                });
+            let accumulator =
+                entries
+                    .entry(entry_id.clone())
+                    .or_insert_with(|| AgentRegistryAccumulator {
+                        id: entry_id.clone(),
+                        source_app: event.session.workspace_id.clone(),
+                        session_id: event.session.session_id.clone(),
+                        agent_id: agent_id.clone(),
+                        display_name: display_name.value.clone(),
+                        display_name_score: display_name.score,
+                        agent_type: payload_string(&event.payload, "agent_type"),
+                        model_name: payload_string(&event.payload, "model"),
+                        parent_id: payload_string(&event.payload, "parent_agent_id"),
+                        team_name: payload_string(&event.payload, "team_name"),
+                        lifecycle_status: resolve_lifecycle_status(&event.event_kind).to_string(),
+                        first_seen_at: event.occurred_at_ms,
+                        last_seen_at: event.occurred_at_ms,
+                        event_count: 0,
+                    });
 
             accumulator.last_seen_at = accumulator.last_seen_at.max(event.occurred_at_ms);
             accumulator.first_seen_at = accumulator.first_seen_at.min(event.occurred_at_ms);
@@ -198,7 +237,10 @@ impl Store {
         let mut sessions: Vec<SessionSummary> = Vec::new();
 
         for event in events {
-            if let Some(existing) = sessions.iter_mut().find(|entry| entry.session_id == event.session_id) {
+            if let Some(existing) = sessions
+                .iter_mut()
+                .find(|entry| entry.session_id == event.session_id)
+            {
                 existing.last_event_at = existing.last_event_at.max(event.timestamp);
                 existing.event_count += 1;
                 if !existing.agents.contains(&existing.source_app) {
@@ -232,10 +274,18 @@ impl Store {
     }
 }
 
+fn event_fingerprint(json: &str) -> String {
+    let mut hasher = DefaultHasher::new();
+    json.hash(&mut hasher);
+    format!("{:016x}", hasher.finish())
+}
+
 fn build_registry_id(source_app: &str, session_id: &str, agent_id: Option<&str>) -> String {
     let session_prefix: String = session_id.chars().take(8).collect();
     match agent_id {
-        Some(agent_id) if !agent_id.is_empty() => format!("{source_app}:{session_prefix}:{agent_id}"),
+        Some(agent_id) if !agent_id.is_empty() => {
+            format!("{source_app}:{session_prefix}:{agent_id}")
+        }
         _ => format!("{source_app}:{session_prefix}"),
     }
 }
@@ -379,7 +429,10 @@ fn workspace_name_from_cwd(cwd: &str) -> Option<String> {
 }
 
 fn payload_string(payload: &serde_json::Value, key: &str) -> Option<String> {
-    payload.get(key).and_then(serde_json::Value::as_str).map(ToString::to_string)
+    payload
+        .get(key)
+        .and_then(serde_json::Value::as_str)
+        .map(ToString::to_string)
 }
 
 pub fn legacy_event_from_envelope(event: &EventEnvelope) -> Result<LegacyHookEvent, StoreError> {
@@ -392,7 +445,9 @@ pub fn legacy_event_from_envelope(event: &EventEnvelope) -> Result<LegacyHookEve
             .or_insert_with(|| serde_json::Value::String(format!("{:?}", event.runtime_source)));
         object
             .entry("runtime_label".to_string())
-            .or_insert_with(|| serde_json::Value::String(runtime_source_label(&event.runtime_source).to_string()));
+            .or_insert_with(|| {
+                serde_json::Value::String(runtime_source_label(&event.runtime_source).to_string())
+            });
         object
             .entry("project_name".to_string())
             .or_insert_with(|| serde_json::Value::String(source_app.clone()));

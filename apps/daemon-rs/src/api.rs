@@ -1,20 +1,22 @@
 use axum::{
+    Json, Router,
     extract::State,
+    extract::ws::{Message, WebSocket, WebSocketUpgrade},
     http::StatusCode,
     routing::{get, post},
-    extract::ws::{Message, WebSocket, WebSocketUpgrade},
-    Json, Router,
 };
 use serde::Serialize;
 use serde_json::json;
-use tokio::sync::broadcast;
 use std::path::PathBuf;
+use tokio::sync::broadcast;
 use tower_http::cors::{Any, CorsLayer};
 
 use crate::{
     connector::resolve_connector,
-    discovery::{discover_claude_sessions, discovered_session_events, discovered_session_summaries},
-    live_state::{should_broadcast_registry, LiveState},
+    discovery::{
+        discover_claude_sessions, discovered_session_events, discovered_session_summaries,
+    },
+    live_state::{LiveState, should_broadcast_registry},
     model::{
         AgentRegistryEntry, DiscoveredSession, EventEnvelope, FilterOptions, LegacyHookEvent,
         ProjectSnapshot, SessionSummary,
@@ -44,14 +46,23 @@ pub fn build_router_with_options(store: Store, options: AppOptions) -> (Router, 
     let router = Router::new()
         .route("/health", get(health))
         .route("/events", post(create_legacy_hook_event))
-        .route("/api/discovery/claude/sessions", get(list_discovered_claude_sessions))
-        .route("/api/connectors/{connector}/events", post(create_connector_event))
+        .route(
+            "/api/discovery/claude/sessions",
+            get(list_discovered_claude_sessions),
+        )
+        .route(
+            "/api/connectors/{connector}/events",
+            post(create_connector_event),
+        )
         .route("/api/events", post(create_event).get(list_events))
         .route("/api/agents", get(list_agent_registry))
         .route("/api/projects", get(list_projects))
         .route("/api/projects/{name}", get(get_project))
         .route("/api/sessions/{id}/snapshot", get(get_session_snapshot))
-        .route("/api/events/legacy/claude", post(create_legacy_claude_event))
+        .route(
+            "/api/events/legacy/claude",
+            post(create_legacy_claude_event),
+        )
         .route("/events/filter-options", get(get_filter_options))
         .route("/sessions", get(list_sessions))
         .route("/sessions/{id}", get(get_session_events))
@@ -96,11 +107,14 @@ async fn create_event(
     State(state): State<AppState>,
     Json(event): Json<EventEnvelope>,
 ) -> Result<(StatusCode, Json<EventEnvelope>), StatusCode> {
-    state
+    let inserted = state
         .store
         .insert_event(&event)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    broadcast_compat_updates(&state, &event).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    if inserted {
+        broadcast_compat_updates(&state, &event)
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    }
     Ok((StatusCode::CREATED, Json(event)))
 }
 
@@ -176,8 +190,8 @@ async fn list_sessions(
         .list_sessions()
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     if let Some(dir) = &state.claude_sessions_dir {
-        let discovered = discovered_session_summaries(dir)
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        let discovered =
+            discovered_session_summaries(dir).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
         merge_discovered_sessions(&mut sessions, discovered);
     }
     Ok(Json(sessions))
@@ -195,8 +209,8 @@ async fn get_session_events(
         return Ok(Json(events));
     }
     if let Some(dir) = &state.claude_sessions_dir {
-        let discovered_events =
-            discovered_session_events(dir, &session_id).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        let discovered_events = discovered_session_events(dir, &session_id)
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
         return Ok(Json(discovered_events));
     }
     Ok(Json(events))
@@ -221,11 +235,14 @@ async fn create_legacy_claude_event(
     let event = connector
         .normalize_raw_event(&body)
         .map_err(|_| StatusCode::BAD_REQUEST)?;
-    state
+    let inserted = state
         .store
         .insert_event(&event)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    broadcast_compat_updates(&state, &event).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    if inserted {
+        broadcast_compat_updates(&state, &event)
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    }
     Ok((StatusCode::CREATED, Json(event)))
 }
 
@@ -237,11 +254,14 @@ async fn create_legacy_hook_event(
     let envelope = connector
         .normalize_legacy_hook_event(&event)
         .map_err(|_| StatusCode::BAD_REQUEST)?;
-    state
+    let inserted = state
         .store
         .insert_event(&envelope)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    broadcast_compat_updates(&state, &envelope).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    if inserted {
+        broadcast_compat_updates(&state, &envelope)
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    }
     Ok((StatusCode::OK, Json(event)))
 }
 
@@ -254,11 +274,14 @@ async fn create_connector_event(
     let event = connector
         .normalize_raw_event(&body)
         .map_err(|_| StatusCode::BAD_REQUEST)?;
-    state
+    let inserted = state
         .store
         .insert_event(&event)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    broadcast_compat_updates(&state, &event).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    if inserted {
+        broadcast_compat_updates(&state, &event)
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    }
     Ok((StatusCode::CREATED, Json(event)))
 }
 
@@ -281,7 +304,13 @@ async fn stream_events(
     let receiver = state.sender.subscribe();
 
     Ok(ws.on_upgrade(move |socket| {
-        stream_socket(socket, initial_events, initial_registry, initial_projects, receiver)
+        stream_socket(
+            socket,
+            initial_events,
+            initial_registry,
+            initial_projects,
+            receiver,
+        )
     }))
 }
 
@@ -292,7 +321,10 @@ async fn stream_socket(
     initial_projects: Vec<ProjectSnapshot>,
     mut receiver: broadcast::Receiver<OutboundWsMessage>,
 ) {
-    if send_ws_message(&mut socket, "initial", &initial_events).await.is_err() {
+    if send_ws_message(&mut socket, "initial", &initial_events)
+        .await
+        .is_err()
+    {
         return;
     }
     if send_ws_message(&mut socket, "agent_registry", &initial_registry)
@@ -330,7 +362,10 @@ async fn send_ws_message<T: Serialize>(
     data: &T,
 ) -> Result<(), ()> {
     let payload = serde_json::to_string(&WsEnvelope { message_type, data }).map_err(|_| ())?;
-    socket.send(Message::Text(payload.into())).await.map_err(|_| ())
+    socket
+        .send(Message::Text(payload.into()))
+        .await
+        .map_err(|_| ())
 }
 
 async fn send_ws_raw(
@@ -343,10 +378,16 @@ async fn send_ws_raw(
         data: payload,
     })
     .map_err(|_| ())?;
-    socket.send(Message::Text(envelope.into())).await.map_err(|_| ())
+    socket
+        .send(Message::Text(envelope.into()))
+        .await
+        .map_err(|_| ())
 }
 
-fn broadcast_compat_updates(state: &AppState, event: &EventEnvelope) -> Result<(), serde_json::Error> {
+fn broadcast_compat_updates(
+    state: &AppState,
+    event: &EventEnvelope,
+) -> Result<(), serde_json::Error> {
     let compat_event = state
         .live_state
         .record_envelope(event)
@@ -387,7 +428,10 @@ fn broadcast_compat_updates(state: &AppState, event: &EventEnvelope) -> Result<(
 
 fn merge_discovered_sessions(existing: &mut Vec<SessionSummary>, discovered: Vec<SessionSummary>) {
     for session in discovered {
-        if existing.iter().any(|item| item.session_id == session.session_id) {
+        if existing
+            .iter()
+            .any(|item| item.session_id == session.session_id)
+        {
             continue;
         }
         existing.push(session);
