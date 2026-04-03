@@ -266,17 +266,24 @@ export function buildProjectFocusSnapshot(
     : null;
   const agentLabel = agent?.displayName || null;
   const agentSummary = agent ? agent.currentAction || agent.assignment || null : null;
+  const focusSubject = agentLabel || sessionLabel || project.name;
+  const focusAction = agentSummary || session?.currentAction || sessionSummary || projectSummary;
   const scopeLabel = agent
     ? 'Agent focus'
     : session
       ? 'Session focus'
       : 'Project overview';
   const breadcrumb = [project.name, sessionLabel, agentLabel].filter(Boolean).join(' · ');
-  const headline = agentSummary || session?.currentAction || sessionSummary || projectSummary || 'No activity captured yet';
+  const headline = formatNowHeadline(focusSubject, focusAction);
   const subheadline = agent?.assignment
-    || sessionSummary
-    || project.runtimeLabels[0]
-    || 'Project focus';
+    ? formatContextLabel('Assigned work', agent.assignment)
+    : sessionSummary
+      ? formatContextLabel('Session summary', sessionSummary)
+      : projectSummary
+        ? formatContextLabel('Project summary', projectSummary)
+        : project.runtimeLabels[0]
+          ? formatContextLabel('Runtime', project.runtimeLabels[0])
+          : 'Watching recent activity';
 
   return {
     projectName: project.name,
@@ -693,6 +700,17 @@ function latestEventOfType(evts: HookEvent[], type: string): HookEvent | undefin
 
 function truncate(text: string, max: number): string {
   return text.length > max ? `${text.slice(0, max - 1)}…` : text;
+}
+
+function formatNowHeadline(subject: string, action?: string | null): string {
+  const trimmed = action?.trim();
+  if (!trimmed) return `${subject} has no active work yet`;
+  return `${subject} is ${trimmed[0].toLowerCase()}${trimmed.slice(1)}`;
+}
+
+function formatContextLabel(label: string, value?: string | null): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed ? `${label}: ${trimmed}` : undefined;
 }
 
 /** Filtered agents based on selection */

@@ -42,7 +42,7 @@ export default function AgentDetail() {
 
     const parts = [current.projectName, current.session?.label || current.session?.sessionId]
       .filter((part): part is string => Boolean(part));
-    return parts.length > 0 ? parts.join(' · ') : 'Live agent context';
+    return parts.length > 0 ? `Now tracking: ${parts.join(' · ')}` : 'Live agent context';
   };
 
   return (
@@ -80,7 +80,7 @@ export default function AgentDetail() {
 
       <Show when={detail()} fallback={
         <div style="padding:18px 12px;color:var(--text-dim);font-size:12px;line-height:1.5;">
-          The agent selection is present, but the snapshot data is not available yet.
+          The selected agent is present, but its live snapshot is not available yet.
         </div>
       }>
         <div style="padding:12px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:10px;flex-shrink:0;">
@@ -122,13 +122,13 @@ export default function AgentDetail() {
 
           <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;">
             <div style="padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg-card);display:flex;flex-direction:column;gap:4px;">
-              <span style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;">Runtime</span>
+              <span style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;">Runtime in use</span>
               <span style="font-size:11px;color:var(--text-primary);line-height:1.4;">
                 {detail()!.runtimeLabel}
               </span>
             </div>
             <div style="padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg-card);display:flex;flex-direction:column;gap:4px;">
-              <span style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;">Status</span>
+              <span style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;">Current status</span>
               <span style={`font-size:11px;font-weight:600;line-height:1.4;color:${statusColors().text};`}>
                 {detail()!.statusLabel}
               </span>
@@ -136,14 +136,14 @@ export default function AgentDetail() {
           </div>
 
           <div style="padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg-card);display:flex;flex-direction:column;gap:4px;">
-            <span style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;">Assignment</span>
+            <span style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;">What it was asked to do</span>
             <span style="font-size:11px;color:var(--text-primary);line-height:1.45;">
               {detail()!.assignmentLabel}
             </span>
           </div>
 
           <div style="padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg-card);display:flex;flex-direction:column;gap:4px;">
-            <span style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;">Current action</span>
+            <span style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;">What it's doing now</span>
             <span style="font-size:11px;color:var(--text-primary);line-height:1.45;">
               {detail()!.currentActionLabel}
             </span>
@@ -155,7 +155,7 @@ export default function AgentDetail() {
           </div>
 
           <div style="padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg-card);display:flex;flex-direction:column;gap:4px;">
-            <span style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;">Last useful result</span>
+            <span style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;">Most recent useful output</span>
             <span style="font-size:11px;color:var(--text-primary);line-height:1.45;">
               {detail()!.lastUsefulResultLabel}
             </span>
@@ -174,7 +174,7 @@ export default function AgentDetail() {
 
         <div style="padding:8px 12px;flex-shrink:0;">
           <span style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);">
-            Recent activity ({detail()!.recentEvents.length})
+            Activity trail ({detail()!.recentEvents.length})
           </span>
         </div>
 
@@ -206,7 +206,7 @@ export default function AgentDetail() {
           </For>
           <Show when={detail()!.recentEvents.length === 0}>
             <div style="padding:20px 12px;text-align:center;font-size:11px;color:var(--text-dim);">
-              No recent activity
+              No recent activity for this agent
             </div>
           </Show>
         </div>

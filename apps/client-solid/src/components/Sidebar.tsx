@@ -3,7 +3,6 @@ import { Icon } from 'solid-heroicons';
 import {
   chevronLeft,
   chevronRight,
-  commandLine,
   folder,
   folderOpen,
   bolt,
@@ -164,11 +163,11 @@ export default function Sidebar(props: SidebarProps) {
                         {p.name}
                       </span>
                       <span style="font-size:10px;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-                        {primarySummary()}
+                        Now: {primarySummary()}
                       </span>
                       <Show when={secondarySummary()}>
                         <span style="font-size:9px;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-                          {secondarySummary()}
+                          Context: {secondarySummary()}
                         </span>
                       </Show>
                     </div>
@@ -242,17 +241,17 @@ export default function Sidebar(props: SidebarProps) {
                       if (!isSelected()) (e.currentTarget as HTMLDivElement).style.background = 'transparent';
                     }}
                   >
-                    <Icon path={commandLine} style="width:12px;height:12px;color:var(--text-secondary);flex-shrink:0;" />
+                    <Icon path={statusIcon()} style="width:12px;height:12px;color:var(--text-secondary);flex-shrink:0;" />
                     <div style="min-width:0;flex:1;display:flex;flex-direction:column;gap:2px;">
                       <span style="font-size:11px;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
                         {s.label}
                       </span>
                       <span style="font-size:10px;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-                        {primarySummary()}
+                        Now: {primarySummary()}
                       </span>
                       <Show when={secondarySummary()}>
                         <span style="font-size:9px;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-                          {secondarySummary()}
+                          Context: {secondarySummary()}
                         </span>
                       </Show>
                     </div>
