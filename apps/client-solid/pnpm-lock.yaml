@@ -8,9 +8,6 @@ importers:
 
   .:
     dependencies:
-      solid-flow:
-        specifier: 1.0.4
-        version: 1.0.4
       solid-heroicons:
         specifier: 3.2.4
         version: 3.2.4(solid-js@1.9.12)
@@ -570,9 +567,6 @@ packages:
     resolution: {integrity: sha512-OwrZRZAfhHww0WEnKHDY8OM0U/Qs8OTfIDWhUD4BLpNJUfXK4cGmjiagGze086m+mhI+V2nD0gfbHEnJjb9STA==}
     engines: {node: '>=10'}
 
-  solid-flow@1.0.4:
-    resolution: {integrity: sha512-PBCKHleO/nt7OjcRR9pSKH1rgliOimdyJHFcQd5w0V4DT/4lM8C9yEnDy9QLwyhivymkArPhaQA7pkndV8UN8A==}
-
   solid-heroicons@3.2.4:
     resolution: {integrity: sha512-u6BMdFLvkJnvUGYzdFcWp1wvJ4hb9Y1zd3AbZ9D3bUmmiy9jBzNZX+RcqBCI2EKRvdQwAb1UB9bkESfqfhayDg==}
     peerDependencies:
@@ -1130,10 +1124,6 @@ snapshots:
       seroval: 1.5.1
 
   seroval@1.5.1: {}
-
-  solid-flow@1.0.4:
-    dependencies:
-      solid-js: 1.9.12
 
   solid-heroicons@3.2.4(solid-js@1.9.12):
     dependencies:

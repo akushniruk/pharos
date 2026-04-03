@@ -227,3 +227,25 @@ body {
 .event-type--response { background: var(--purple-dim); color: var(--purple); }
 .event-type--spawn { background: var(--yellow-dim); color: var(--yellow); }
 .event-type--lifecycle { background: var(--green-dim); color: var(--green); }
+
+/* ---- Graph zoom controls ---- */
+.graph-zoom-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, border-color 0.15s;
+}
+.graph-zoom-btn:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--border-hover);
+  color: var(--text-primary);
+}
