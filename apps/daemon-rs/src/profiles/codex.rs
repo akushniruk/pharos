@@ -88,6 +88,12 @@ struct CachedCodexDiscovery {
     sessions: Vec<NativeCodexSession>,
 }
 
+#[derive(Debug, Clone)]
+struct CachedCodexHistory {
+    fingerprint: CodexHistoryFingerprint,
+    events: Vec<CodexSessionEvent>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct CodexDiscoveryFingerprint {
     index_modified_ms: u128,
@@ -95,7 +101,15 @@ struct CodexDiscoveryFingerprint {
     session_file_count: usize,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct CodexHistoryFingerprint {
+    modified_ms: u128,
+    file_len: u64,
+}
+
 static DISCOVERY_CACHE: LazyLock<Mutex<HashMap<PathBuf, CachedCodexDiscovery>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+static HISTORY_CACHE: LazyLock<Mutex<HashMap<PathBuf, CachedCodexHistory>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
 impl CodexProfile {
@@ -217,13 +231,34 @@ impl CodexProfile {
         &self,
         history_path: &std::path::Path,
     ) -> Vec<CodexSessionEvent> {
+        let fingerprint = history_fingerprint(history_path);
+        if let Ok(cache) = HISTORY_CACHE.lock() {
+            if let Some(cached) = cache.get(history_path) {
+                if cached.fingerprint == fingerprint {
+                    return cached.events.clone();
+                }
+            }
+        }
+
         let Ok(content) = std::fs::read_to_string(history_path) else {
             return Vec::new();
         };
         let Ok(parsed) = serde_json::from_str::<CodexSessionFile>(&content) else {
             return Vec::new();
         };
-        parse_codex_items(&parsed.items)
+        let events = parse_codex_items(&parsed.items);
+
+        if let Ok(mut cache) = HISTORY_CACHE.lock() {
+            cache.insert(
+                history_path.to_path_buf(),
+                CachedCodexHistory {
+                    fingerprint,
+                    events: events.clone(),
+                },
+            );
+        }
+
+        events
     }
 
     pub fn read_live_events(&self, thread_id: &str, after_row_id: i64) -> Vec<CodexLiveEvent> {
@@ -746,6 +781,28 @@ fn now_millis() -> i64 {
     SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
         .map_or(0, |duration| i64::try_from(duration.as_millis()).unwrap_or(i64::MAX))
+}
+
+fn history_fingerprint(path: &std::path::Path) -> CodexHistoryFingerprint {
+    let metadata = std::fs::metadata(path);
+    let modified_ms = metadata
+        .as_ref()
+        .ok()
+        .and_then(|meta| meta.modified().ok())
+        .and_then(system_time_to_ms)
+        .unwrap_or(0);
+    let file_len = metadata.as_ref().map_or(0, std::fs::Metadata::len);
+
+    CodexHistoryFingerprint {
+        modified_ms,
+        file_len,
+    }
+}
+
+fn system_time_to_ms(time: SystemTime) -> Option<u128> {
+    time.duration_since(SystemTime::UNIX_EPOCH)
+        .ok()
+        .map(|duration| duration.as_millis())
 }
 
 fn workspace_name(path: &str) -> String {

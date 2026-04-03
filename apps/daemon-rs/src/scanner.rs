@@ -33,6 +33,7 @@ struct TrackedSession {
     file_offset: u64,
     codex_item_offset: usize,
     codex_log_offset: i64,
+    codex_next_poll_at_ms: i64,
     known_subagents: Vec<TrackedSubagent>,
     /// Maps tool_use_id → tool_name so ToolResult events can inherit the tool name.
     tool_name_map: HashMap<String, String>,
@@ -123,13 +124,14 @@ pub async fn run_scanner(
                 tracked.insert(
                     session_id,
                     TrackedSession {
-                        session,
-                        file_offset: 0,
-                        codex_item_offset: 0,
-                        codex_log_offset: 0,
-                        known_subagents: Vec::new(),
-                        tool_name_map: HashMap::new(),
-                    },
+                    session,
+                    file_offset: 0,
+                    codex_item_offset: 0,
+                    codex_log_offset: 0,
+                    codex_next_poll_at_ms: 0,
+                    known_subagents: Vec::new(),
+                    tool_name_map: HashMap::new(),
+                },
                 );
             }
 
@@ -214,9 +216,9 @@ fn tail_codex_activity(
     store: &Store,
     sender: &broadcast::Sender<OutboundWsMessage>,
 ) {
+    let now_ms = now_millis();
     let workspace_id = workspace_id_from_cwd(&ts.session.cwd);
     if let Some(history_path) = &ts.session.history_path {
-        let now_ms = now_millis();
         let events = profile.read_session_events(history_path);
         if ts.codex_item_offset < events.len() {
             for event in &events[ts.codex_item_offset..] {
@@ -235,6 +237,10 @@ fn tail_codex_activity(
     }
 
     if ts.session.history_path.is_none() {
+        if now_ms < ts.codex_next_poll_at_ms {
+            return;
+        }
+
         let Some(thread_id) = ts.session.native_session_id.as_deref() else {
             return;
         };
@@ -253,6 +259,11 @@ fn tail_codex_activity(
         if let Some(last) = events.last() {
             ts.codex_log_offset = last.row_id;
         }
+        ts.codex_next_poll_at_ms = if events.is_empty() {
+            now_ms.saturating_add(2_000)
+        } else {
+            now_ms.saturating_add(750)
+        };
     }
 }
 
