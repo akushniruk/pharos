@@ -424,7 +424,7 @@ fn project_label_for_event(event: &EventEnvelope) -> String {
         }
     }
 
-    runtime_source_label(&event.runtime_source).to_string()
+    "unknown".to_string()
 }
 
 fn is_project_like_name(value: &str) -> bool {

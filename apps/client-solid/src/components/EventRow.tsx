@@ -1,6 +1,6 @@
 import { Show, createSignal } from 'solid-js';
 import type { HookEvent } from '../lib/types';
-import { formatTime } from '../lib/time';
+import { formatTime, timeAgo } from '../lib/time';
 import { describeEvent } from '../lib/describe';
 import { getEventTypeLabel, getEventTypeBgColor, getEventTypeTextColor } from '../lib/colors';
 
@@ -29,6 +29,13 @@ function resolveActionSummary(e: HookEvent): string {
   return summary;
 }
 
+function resolveProjectName(e: HookEvent): string {
+  if (typeof e.payload?.project_name === 'string' && e.payload.project_name.trim()) {
+    return e.payload.project_name;
+  }
+  return e.source_app;
+}
+
 export default function EventRow(props: Props) {
   const [expanded, setExpanded] = createSignal(false);
   const e = () => props.event;
@@ -47,38 +54,45 @@ export default function EventRow(props: Props) {
       {/* Always-visible row */}
       <div
         style={[
-          'display:flex;align-items:center;gap:10px;padding:5px 16px;',
+          'display:flex;flex-direction:column;gap:4px;padding:8px 16px;',
           props.detailed ? 'cursor:pointer;' : '',
         ].join('')}
         onMouseEnter={(ev) => { (ev.currentTarget as HTMLElement).style.background = 'var(--bg-card-hover)'; }}
         onMouseLeave={(ev) => { (ev.currentTarget as HTMLElement).style.background = 'transparent'; }}
       >
-        <span style="font-size:10px;font-family:var(--font-mono);color:var(--text-dim);min-width:56px;flex-shrink:0;">
-          {formatTime(e().timestamp)}
-        </span>
-        <span style="font-size:11px;font-weight:500;color:var(--text-secondary);max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:0;">
-          {resolveAgentName(e())}
-        </span>
-        <Show when={resolveRuntimeLabel(e())}>
-          <span style="font-size:9px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;flex-shrink:0;max-width:56px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-            {resolveRuntimeLabel(e())}
+        <div style="display:flex;align-items:center;gap:8px;min-width:0;">
+          <span style="font-size:10px;font-family:var(--font-mono);color:var(--text-dim);min-width:56px;flex-shrink:0;">
+            {formatTime(e().timestamp)}
           </span>
-        </Show>
-        <span style={[
-          'font-size:10px;font-weight:600;text-transform:uppercase;padding:1px 6px;border-radius:3px;flex-shrink:0;',
-          `background:${getEventTypeBgColor(e().hook_event_type)};`,
-          `color:${getEventTypeTextColor(e().hook_event_type)};`,
-        ].join('')}>
-          {getEventTypeLabel(e().hook_event_type)}
-        </span>
-        <Show when={isTool()}>
-          <span style="font-size:11px;color:var(--accent);min-width:40px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-            {e().payload?.tool_name}
+          <span style="font-size:11px;font-weight:600;color:var(--text-primary);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:0;">
+            {resolveAgentName(e())}
           </span>
-        </Show>
-        <span style="font-size:11px;color:var(--text-primary);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-          {resolveActionSummary(e())}
-        </span>
+          <Show when={resolveRuntimeLabel(e())}>
+            <span style="font-size:9px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;flex-shrink:0;max-width:64px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+              {resolveRuntimeLabel(e())}
+            </span>
+          </Show>
+          <span style={[
+            'font-size:10px;font-weight:600;text-transform:uppercase;padding:1px 6px;border-radius:3px;flex-shrink:0;',
+            `background:${getEventTypeBgColor(e().hook_event_type)};`,
+            `color:${getEventTypeTextColor(e().hook_event_type)};`,
+          ].join('')}>
+            {getEventTypeLabel(e().hook_event_type)}
+          </span>
+          <Show when={isTool()}>
+            <span style="font-size:11px;color:var(--accent);min-width:40px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+              {e().payload?.tool_name}
+            </span>
+          </Show>
+        </div>
+        <div style="display:flex;align-items:flex-start;gap:8px;min-width:0;padding-left:64px;">
+          <span style="font-size:11px;color:var(--text-primary);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+            {resolveActionSummary(e())}
+          </span>
+          <span style="font-size:10px;color:var(--text-dim);flex-shrink:0;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+            {[resolveProjectName(e()), timeAgo(e().timestamp)].join(' · ')}
+          </span>
+        </div>
       </div>
 
       {/* Expanded payload section */}

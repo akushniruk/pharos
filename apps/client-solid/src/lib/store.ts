@@ -1,6 +1,7 @@
 import { createSignal, createMemo } from 'solid-js';
 import type { View, Project, SessionInfo, AgentInfo, HookEvent } from './types';
 import { events } from './ws';
+import { describeEvent } from './describe';
 
 /** Navigation state (legacy, kept for compatibility) */
 export const [view, setView] = createSignal<View>({ page: 'projects' });
@@ -92,6 +93,7 @@ export const projects = createMemo((): Project[] => {
           agentId: aid === '__main__' ? null : aid,
           displayName,
           runtimeLabel,
+          currentAction: resolveCurrentAction(aevts),
           agentType: aevts.find((e) => e.payload?.agent_type)?.payload.agent_type,
           modelName: aevts.find((e) => e.model_name || e.payload?.model)?.model_name || aevts.find((e) => e.payload?.model)?.payload.model,
           eventCount: aevts.length,
@@ -105,19 +107,23 @@ export const projects = createMemo((): Project[] => {
         sessionId: sid,
         label: resolveSessionLabel(sevts, name),
         runtimeLabel,
+        currentAction: resolveCurrentAction(sevts),
         eventCount: sevts.length,
         agents: agentsArr.sort((a, b) => b.eventCount - a.eventCount),
+        activeAgentCount: agentsArr.filter((agent) => agent.isActive).length,
         lastEventAt: sLastEvent,
         isActive: now - sLastEvent < ACTIVE_THRESHOLD_MS,
       });
     }
 
+    const activeSessionCount = sessions.filter((session) => session.isActive).length;
     result.push({
       name,
       runtimeLabels: Array.from(runtimeLabels),
       sessions: sessions.sort((a, b) => b.lastEventAt - a.lastEventAt),
       eventCount: data.events.length,
       agentCount: agentIds.size,
+      activeSessionCount,
       lastEventAt,
       isActive: now - lastEventAt < ACTIVE_THRESHOLD_MS,
     });
@@ -178,6 +184,18 @@ function workspaceNameFromCwd(cwd: string): string | null {
 
 function isGenericName(name: string): boolean {
   return name === 'Session' || name === 'Agent';
+}
+
+function resolveCurrentAction(evts: HookEvent[]): string | undefined {
+  const latest = [...evts]
+    .sort((left, right) => (right.timestamp || 0) - (left.timestamp || 0))
+    .find((event) => !['SessionStart', 'SessionEnd'].includes(event.hook_event_type))
+    ?? [...evts].sort((left, right) => (right.timestamp || 0) - (left.timestamp || 0))[0];
+
+  if (!latest) return undefined;
+
+  const summary = describeEvent(latest).trim();
+  return summary || undefined;
 }
 
 /** Filtered agents based on selection */

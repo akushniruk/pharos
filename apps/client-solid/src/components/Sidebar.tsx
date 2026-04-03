@@ -1,8 +1,9 @@
-import { For, Show, createMemo } from 'solid-js';
+import { For, Show, createMemo, createSignal } from 'solid-js';
 import { Icon } from 'solid-heroicons';
 import { chevronLeft, chevronRight, commandLine, folder, folderOpen, bolt, clock } from 'solid-heroicons/solid';
 import { projects, selectedProject, selectedSession, selectProject, selectSession } from '../lib/store';
 import { getAgentColor } from '../lib/colors';
+import { timeAgo } from '../lib/time';
 
 interface SidebarProps {
   collapsed: boolean;
@@ -10,10 +11,13 @@ interface SidebarProps {
 }
 
 export default function Sidebar(props: SidebarProps) {
+  const [activityFilter, setActivityFilter] = createSignal<'all' | 'active'>('all');
+
   const selectedProjectSessions = createMemo(() => {
     const proj = selectedProject();
     if (!proj) return [];
-    return projects().find(p => p.name === proj)?.sessions ?? [];
+    const sessions = projects().find(p => p.name === proj)?.sessions ?? [];
+    return activityFilter() === 'active' ? sessions.filter(s => s.isActive) : sessions;
   });
 
   const selectedProjectAgentTypes = createMemo(() => {
@@ -36,6 +40,20 @@ export default function Sidebar(props: SidebarProps) {
     'letter-spacing:0.08em;color:var(--text-dim);',
   ].join('');
 
+  const filterStyle = (mode: 'all' | 'active') => [
+    'font-size:9px;font-weight:600;padding:2px 8px;border-radius:9999px;border:none;cursor:pointer;',
+    'transition:background 0.15s,color 0.15s;',
+    activityFilter() === mode
+      ? 'background:var(--bg-elevated);color:var(--text-primary);'
+      : 'background:transparent;color:var(--text-dim);',
+  ].join('');
+
+  const visibleProjects = createMemo(() =>
+    activityFilter() === 'active'
+      ? projects().filter(p => p.isActive)
+      : projects(),
+  );
+
   return (
     <Show
       when={!props.collapsed}
@@ -51,7 +69,7 @@ export default function Sidebar(props: SidebarProps) {
           >
             <Icon path={chevronRight} style="width:12px;height:12px;" />
           </button>
-          <For each={projects()}>
+          <For each={visibleProjects()}>
             {(p) => (
               <span
                 title={p.name}
@@ -68,12 +86,22 @@ export default function Sidebar(props: SidebarProps) {
         style="width:220px;flex-shrink:0;background:var(--bg-primary);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;"
       >
         {/* Toggle + Projects header */}
-        <div style="display:flex;align-items:center;justify-content:space-between;padding-right:8px;">
-          <span style={labelStyle}>Projects</span>
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;padding-right:8px;">
+          <div style="display:flex;flex-direction:column;gap:6px;min-width:0;">
+            <span style={labelStyle}>Projects</span>
+            <div style="display:flex;align-items:center;gap:4px;padding:0 12px 8px;">
+              <button style={filterStyle('all')} onClick={() => setActivityFilter('all')}>
+                All
+              </button>
+              <button style={filterStyle('active')} onClick={() => setActivityFilter('active')}>
+                Active
+              </button>
+            </div>
+          </div>
           <button
             onClick={props.onToggle}
             title="Collapse sidebar"
-            style="background:none;border:none;cursor:pointer;color:var(--text-dim);padding:4px;line-height:1;display:flex;align-items:center;justify-content:center;"
+            style="background:none;border:none;cursor:pointer;color:var(--text-dim);padding:4px;line-height:1;display:flex;align-items:center;justify-content:center;margin-top:6px;"
           >
             <Icon path={chevronLeft} style="width:12px;height:12px;" />
           </button>
@@ -81,7 +109,7 @@ export default function Sidebar(props: SidebarProps) {
 
         {/* Project list */}
         <div style="overflow-y:auto;flex:1;">
-          <For each={projects()}>
+          <For each={visibleProjects()}>
             {(p) => {
               const isSelected = () => selectedProject() === p.name;
               return (
@@ -109,16 +137,22 @@ export default function Sidebar(props: SidebarProps) {
                     {/* Active dot */}
                     <span style={`width:6px;height:6px;border-radius:50%;flex-shrink:0;background:${p.isActive ? 'var(--green)' : 'var(--text-dim)'};${p.isActive ? 'box-shadow:0 0 6px var(--green);' : ''}`} />
                     {/* Name */}
-                    <span style="font-size:12px;font-weight:500;color:var(--text-primary);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-                      {p.name}
-                    </span>
-                    <Show when={p.runtimeLabels.length === 1}>
-                      <span style="font-size:9px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;flex-shrink:0;">
-                        {p.runtimeLabels[0]}
+                    <div style="display:flex;flex-direction:column;min-width:0;flex:1;">
+                      <span style="font-size:12px;font-weight:500;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                        {p.name}
                       </span>
+                      <span style="font-size:10px;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                        {p.isActive
+                          ? `${p.activeSessionCount} active · ${p.sessions.length} sessions`
+                          : `${p.sessions.length} sessions · ${timeAgo(p.lastEventAt)}`}
+                      </span>
+                    </div>
+                    <Show when={p.isActive}>
+                      <div style="display:flex;align-items:center;gap:4px;font-size:9px;padding:1px 5px;border-radius:9999px;font-weight:500;flex-shrink:0;background:var(--green-dim);color:var(--green);">
+                        <Icon path={bolt} style="width:10px;height:10px;" />
+                        <span>Active</span>
+                      </div>
                     </Show>
-                    {/* Event count */}
-                    <span style="font-size:10px;color:var(--text-dim);flex-shrink:0;">{p.eventCount}</span>
                   </div>
 
                   {/* Agent type badges (only under selected project) */}
@@ -173,7 +207,9 @@ export default function Sidebar(props: SidebarProps) {
                         {s.label}
                       </span>
                       <span style="font-size:10px;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-                        {s.runtimeLabel ? `${s.runtimeLabel} · ${shortId}` : shortId}
+                        {[s.runtimeLabel, `${s.activeAgentCount}/${s.agents.length} agents`, s.currentAction, shortId]
+                          .filter(Boolean)
+                          .join(' · ')}
                       </span>
                     </div>
                     {/* Active/Idle badge */}

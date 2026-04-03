@@ -35,6 +35,7 @@ export interface Project {
   sessions: SessionInfo[];
   eventCount: number;
   agentCount: number;
+  activeSessionCount: number;
   lastEventAt: number;
   isActive: boolean;
 }
@@ -44,8 +45,10 @@ export interface SessionInfo {
   sessionId: string;
   label: string;
   runtimeLabel?: string;
+  currentAction?: string;
   eventCount: number;
   agents: AgentInfo[];
+  activeAgentCount: number;
   lastEventAt: number;
   isActive: boolean;
 }
@@ -55,6 +58,7 @@ export interface AgentInfo {
   agentId: string | null;
   displayName: string;
   runtimeLabel?: string;
+  currentAction?: string;
   agentType?: string;
   modelName?: string;
   eventCount: number;

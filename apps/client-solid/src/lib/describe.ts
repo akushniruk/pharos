@@ -29,11 +29,14 @@ export function describeEvent(event: HookEvent): string {
     case 'PostToolUseFailure':
       return `${toolName} failed`;
     case 'SessionStart':
-      return 'Session started';
+      return p.title ? `Opened ${truncate(p.title, 80)}` : 'Session started';
     case 'SessionEnd':
       return 'Session ended';
     case 'SubagentStart': {
       const agentType = p.agent_type || event.agent_type || '';
+      if (p.description) {
+        return `${agentType || 'Agent'} · ${truncate(p.description, 80)}`;
+      }
       return agentType ? `Spawned ${agentType}` : 'Spawned agent';
     }
     case 'SubagentStop':

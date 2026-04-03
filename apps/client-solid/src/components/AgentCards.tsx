@@ -102,6 +102,11 @@ export default function AgentCards() {
                       {agent.runtimeLabel}
                     </span>
                   </Show>
+                  <Show when={agent.currentAction}>
+                    <span style="font-size:10px;color:var(--text-secondary);min-height:28px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">
+                      {agent.currentAction}
+                    </span>
+                  </Show>
 
                   {/* Footer: event count + status */}
                   <div style="display:flex;justify-content:space-between;align-items:center;margin-top:2px;">

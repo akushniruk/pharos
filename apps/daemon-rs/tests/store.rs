@@ -125,7 +125,11 @@ fn legacy_events_fallback_to_runtime_label_when_workspace_is_not_project_like() 
         .expect("insert session start");
 
     let legacy_events = store.list_legacy_events().expect("legacy events");
-    assert_eq!(legacy_events[0].source_app, "Gemini");
+    assert_eq!(legacy_events[0].source_app, "unknown");
+    assert_eq!(
+        legacy_events[0].payload.get("runtime_label").and_then(serde_json::Value::as_str),
+        Some("Gemini")
+    );
 }
 
 #[test]

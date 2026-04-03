@@ -4,6 +4,7 @@ import { sun, moon } from 'solid-heroicons/solid';
 import { filteredEvents } from '../lib/store';
 import { createMetrics } from '../lib/metrics';
 import { theme, toggleTheme } from '../lib/theme';
+import PharosMark from './PharosMark';
 
 export default function Header() {
   const metrics = createMetrics(filteredEvents);
@@ -29,9 +30,19 @@ export default function Header() {
   return (
     <header class="app-header">
       {/* Left: Brand */}
-      <span style="font-size:14px;font-weight:600;color:var(--text-primary);flex-shrink:0;">
-        Pharos
-      </span>
+      <div style="display:flex;align-items:center;gap:10px;flex-shrink:0;min-width:0;">
+        <div class="pharos-mark-shell">
+          <PharosMark size={18} class="pharos-mark" />
+        </div>
+        <div style="display:flex;flex-direction:column;gap:1px;min-width:0;">
+          <span style="font-size:13px;font-weight:700;color:var(--text-primary);letter-spacing:0.01em;">
+            Pharos
+          </span>
+          <span style="font-size:9px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.08em;">
+            Agent Monitor
+          </span>
+        </div>
+      </div>
 
       {/* Center: Live metrics strip */}
       <div style="display:flex;align-items:center;gap:0;flex:1;justify-content:center;overflow:hidden;">
