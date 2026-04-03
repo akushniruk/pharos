@@ -12,6 +12,7 @@ LOG_DIR := $(RUN_DIR)/logs
 DAEMON_PID_FILE := $(RUN_DIR)/daemon.pid
 CLIENT_PID_FILE := $(RUN_DIR)/client.pid
 DAEMON_DB_PATH ?= $(PROJECT_ROOT)/apps/daemon-rs/pharos-daemon.db
+DAEMON_BIN := $(PROJECT_ROOT)/apps/daemon-rs/target/debug/pharos-daemon
 
 .PHONY: help dev up down daemon client build test health open db-reset
 
@@ -34,20 +35,24 @@ client: ## Start client dev server (port $(CLIENT_PORT))
 
 up: ## Start daemon + client in background and write pid files
 	@mkdir -p $(RUN_DIR) $(LOG_DIR)
-	@if [ -f "$(DAEMON_PID_FILE)" ] && kill -0 "$$(cat "$(DAEMON_PID_FILE)")" 2>/dev/null; then \
-		echo "Daemon already running (pid $$(cat "$(DAEMON_PID_FILE)"))"; \
+	@daemon_port_pid="$$(lsof -tiTCP:$(SERVER_PORT) -sTCP:LISTEN 2>/dev/null | head -n 1)"; \
+	if [ -n "$$daemon_port_pid" ]; then \
+		echo "Daemon already running on http://127.0.0.1:$(SERVER_PORT) (pid $$daemon_port_pid)"; \
+		echo "$$daemon_port_pid" > "$(DAEMON_PID_FILE)"; \
 	else \
-		cd $(PROJECT_ROOT)/apps/daemon-rs && \
-		nohup env PHAROS_DAEMON_PORT=$(SERVER_PORT) PHAROS_DAEMON_DB_PATH=$(DAEMON_DB_PATH) $(CARGO) run -- serve \
+		cd $(PROJECT_ROOT)/apps/daemon-rs && $(CARGO) build > /dev/null && \
+		nohup env PHAROS_DAEMON_PORT=$(SERVER_PORT) PHAROS_DAEMON_DB_PATH=$(DAEMON_DB_PATH) "$(DAEMON_BIN)" serve \
 			> "$(LOG_DIR)/daemon.log" 2>&1 & \
 		echo $$! > "$(DAEMON_PID_FILE)"; \
 		echo "Started daemon on http://127.0.0.1:$(SERVER_PORT) (pid $$(cat "$(DAEMON_PID_FILE)"))"; \
 	fi
-	@if [ -f "$(CLIENT_PID_FILE)" ] && kill -0 "$$(cat "$(CLIENT_PID_FILE)")" 2>/dev/null; then \
-		echo "Client already running (pid $$(cat "$(CLIENT_PID_FILE)"))"; \
+	@client_port_pid="$$(lsof -tiTCP:$(CLIENT_PORT) -sTCP:LISTEN 2>/dev/null | head -n 1)"; \
+	if [ -n "$$client_port_pid" ]; then \
+		echo "Client already running on http://127.0.0.1:$(CLIENT_PORT) (pid $$client_port_pid)"; \
+		echo "$$client_port_pid" > "$(CLIENT_PID_FILE)"; \
 	else \
 		cd $(PROJECT_ROOT)/apps/client-solid && \
-		nohup env VITE_PORT=$(CLIENT_PORT) pnpm dev \
+		nohup env VITE_PORT=$(CLIENT_PORT) pnpm exec vite --port $(CLIENT_PORT) --strictPort \
 			> "$(LOG_DIR)/client.log" 2>&1 & \
 		echo $$! > "$(CLIENT_PID_FILE)"; \
 		echo "Started client on http://127.0.0.1:$(CLIENT_PORT) (pid $$(cat "$(CLIENT_PID_FILE)"))"; \
@@ -66,6 +71,10 @@ down: ## Stop background daemon + client started by make up/dev
 	else \
 		echo "Client not running"; \
 	fi
+	@client_port_pid="$$(lsof -tiTCP:$(CLIENT_PORT) -sTCP:LISTEN 2>/dev/null | head -n 1)"; \
+	if [ -n "$$client_port_pid" ]; then \
+		kill "$$client_port_pid" 2>/dev/null && echo "Stopped client listener ($$client_port_pid)"; \
+	fi
 	@if [ -f "$(DAEMON_PID_FILE)" ]; then \
 		pid="$$(cat "$(DAEMON_PID_FILE)")"; \
 		if kill -0 "$$pid" 2>/dev/null; then \
@@ -76,6 +85,10 @@ down: ## Stop background daemon + client started by make up/dev
 		rm -f "$(DAEMON_PID_FILE)"; \
 	else \
 		echo "Daemon not running"; \
+	fi
+	@daemon_port_pid="$$(lsof -tiTCP:$(SERVER_PORT) -sTCP:LISTEN 2>/dev/null | head -n 1)"; \
+	if [ -n "$$daemon_port_pid" ]; then \
+		kill "$$daemon_port_pid" 2>/dev/null && echo "Stopped daemon listener ($$daemon_port_pid)"; \
 	fi
 
 build: ## Build client for production
