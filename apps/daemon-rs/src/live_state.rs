@@ -442,7 +442,7 @@ fn resolve_current_action_from_refs(events: &[&LegacyHookEvent]) -> Option<Strin
         .iter()
         .rev()
         .find(|event| !matches!(event.hook_event_type.as_str(), "SessionStart" | "SessionEnd" | "SessionTitleChanged"))
-        .or_else(|| events.last())?;
+        ?;
     if latest.hook_event_type == "SubagentStart" {
         return None;
     }
@@ -787,6 +787,89 @@ fn resolve_lifecycle_status(hook_event_type: &str) -> &'static str {
     match hook_event_type {
         "SessionEnd" | "SubagentStop" => "inactive",
         _ => "active",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::{resolve_session_summary, AgentSnapshot};
+    use crate::model::LegacyHookEvent;
+
+    #[test]
+    fn prefers_assistant_response_for_session_summary() {
+        let events = vec![
+            LegacyHookEvent {
+                source_app: "signal".to_string(),
+                session_id: "sess-1".to_string(),
+                hook_event_type: "SessionStart".to_string(),
+                payload: json!({
+                    "runtime_label": "Codex",
+                    "cwd": "/tmp/signal",
+                }),
+                timestamp: 10,
+                agent_id: None,
+                agent_type: None,
+                model_name: None,
+                display_name: None,
+                agent_name: None,
+            },
+            LegacyHookEvent {
+                source_app: "signal".to_string(),
+                session_id: "sess-1".to_string(),
+                hook_event_type: "AssistantResponse".to_string(),
+                payload: json!({
+                    "text": "Repository is a single-package Vite app with a React frontend.",
+                }),
+                timestamp: 20,
+                agent_id: None,
+                agent_type: None,
+                model_name: Some("codex".to_string()),
+                display_name: None,
+                agent_name: None,
+            },
+        ];
+
+        let summary = resolve_session_summary(&events, &[]);
+        assert_eq!(
+            summary.as_deref(),
+            Some("Responded: Repository is a single-package Vite app with a React frontend.")
+        );
+    }
+
+    #[test]
+    fn falls_back_to_active_runtime_summary_when_no_better_signal_exists() {
+        let events = vec![LegacyHookEvent {
+            source_app: "signal".to_string(),
+            session_id: "sess-1".to_string(),
+            hook_event_type: "SessionStart".to_string(),
+            payload: json!({
+                "runtime_label": "Codex",
+                "cwd": "/Users/test/work/signal",
+            }),
+            timestamp: 10,
+            agent_id: None,
+            agent_type: None,
+            model_name: None,
+            display_name: None,
+            agent_name: None,
+        }];
+
+        let summary = resolve_session_summary(&events, &[AgentSnapshot {
+            agent_id: None,
+            display_name: "signal".to_string(),
+            runtime_label: Some("Codex".to_string()),
+            assignment: None,
+            current_action: None,
+            agent_type: None,
+            model_name: None,
+            event_count: 1,
+            last_event_at: 10,
+            is_active: true,
+            parent_id: None,
+        }]);
+        assert_eq!(summary.as_deref(), Some("Codex active in signal"));
     }
 }
 
