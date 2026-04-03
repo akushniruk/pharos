@@ -127,3 +127,36 @@ fn legacy_events_fallback_to_runtime_label_when_workspace_is_not_project_like() 
     let legacy_events = store.list_legacy_events().expect("legacy events");
     assert_eq!(legacy_events[0].source_app, "Gemini");
 }
+
+#[test]
+fn legacy_events_prefix_project_labels_with_runtime_name() {
+    let store = Store::open_in_memory().expect("store");
+
+    store
+        .insert_event(&EventEnvelope {
+            runtime_source: RuntimeSource::CodexCli,
+            acquisition_mode: AcquisitionMode::Observed,
+            event_kind: EventKind::SessionStarted,
+            session: SessionRef {
+                host_id: "local".to_string(),
+                workspace_id: "pharos".to_string(),
+                session_id: "sess-codex".to_string(),
+            },
+            agent_id: None,
+            occurred_at_ms: 100,
+            capabilities: observed_capabilities(),
+            title: "session started".to_string(),
+            payload: json!({
+                "cwd": "/Users/tester/home_projects/pharos",
+                "entrypoint": "codex"
+            }),
+        })
+        .expect("insert session start");
+
+    let legacy_events = store.list_legacy_events().expect("legacy events");
+    assert_eq!(legacy_events[0].source_app, "pharos");
+    assert_eq!(
+        legacy_events[0].payload.get("runtime_label").and_then(serde_json::Value::as_str),
+        Some("Codex")
+    );
+}

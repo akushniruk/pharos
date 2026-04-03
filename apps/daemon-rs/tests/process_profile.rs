@@ -29,6 +29,13 @@ fn classifies_known_gemini_process() {
 }
 
 #[test]
+fn classifies_known_pi_process_only_on_exact_name() {
+    let snapshot = snapshot("pi", &["pi", "chat"]);
+
+    assert_eq!(classify_process(&snapshot, &[]), Some(RuntimeSource::PiCli));
+}
+
+#[test]
 fn classifies_agent_like_unknown_process_as_generic() {
     let snapshot = snapshot("cursor-agent", &["cursor-agent", "--project", "."]);
 
@@ -46,6 +53,23 @@ fn ignores_system_agent_processes_from_generic_heuristics() {
         exe: Some("/System/Library/PrivateFrameworks/AssistantServices.framework/Versions/A/Support/assistantd".to_string()),
         cwd: None,
         cmd: vec!["/System/Library/PrivateFrameworks/AssistantServices.framework/Versions/A/Support/assistantd".to_string()],
+        started_at_ms: 1_711_234_567_000,
+    };
+
+    assert_eq!(classify_process(&snapshot, &[]), None);
+}
+
+#[test]
+fn ignores_pidinfo_for_pi_detection() {
+    let snapshot = ProcessSnapshot {
+        pid: 9123,
+        name: "pidinfo".to_string(),
+        exe: Some("/Applications/iTerm.app/Contents/XPCServices/pidinfo.xpc/Contents/MacOS/pidinfo".to_string()),
+        cwd: None,
+        cmd: vec![
+            "/Applications/iTerm.app/Contents/XPCServices/pidinfo.xpc/Contents/MacOS/pidinfo"
+                .to_string(),
+        ],
         started_at_ms: 1_711_234_567_000,
     };
 

@@ -97,6 +97,11 @@ export default function AgentCards() {
                       {agent.modelName!.replace('claude-', '')}
                     </span>
                   </Show>
+                  <Show when={agent.runtimeLabel}>
+                    <span style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;">
+                      {agent.runtimeLabel}
+                    </span>
+                  </Show>
 
                   {/* Footer: event count + status */}
                   <div style="display:flex;justify-content:space-between;align-items:center;margin-top:2px;">

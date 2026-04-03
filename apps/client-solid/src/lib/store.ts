@@ -69,9 +69,12 @@ export const projects = createMemo((): Project[] => {
     const lastEventAt = Math.max(...data.events.map((e) => e.timestamp || 0));
     const sessions: SessionInfo[] = [];
     const agentIds = new Set<string>();
+    const runtimeLabels = new Set<string>();
 
     for (const [sid, sevts] of data.sessions) {
       const sLastEvent = Math.max(...sevts.map((e) => e.timestamp || 0));
+      const runtimeLabel = resolveRuntimeLabel(sevts);
+      if (runtimeLabel) runtimeLabels.add(runtimeLabel);
       const agentMap = new Map<string, HookEvent[]>();
 
       for (const e of sevts) {
@@ -88,6 +91,7 @@ export const projects = createMemo((): Project[] => {
         agentsArr.push({
           agentId: aid === '__main__' ? null : aid,
           displayName,
+          runtimeLabel,
           agentType: aevts.find((e) => e.payload?.agent_type)?.payload.agent_type,
           modelName: aevts.find((e) => e.model_name || e.payload?.model)?.model_name || aevts.find((e) => e.payload?.model)?.payload.model,
           eventCount: aevts.length,
@@ -100,6 +104,7 @@ export const projects = createMemo((): Project[] => {
       sessions.push({
         sessionId: sid,
         label: resolveSessionLabel(sevts, name),
+        runtimeLabel,
         eventCount: sevts.length,
         agents: agentsArr.sort((a, b) => b.eventCount - a.eventCount),
         lastEventAt: sLastEvent,
@@ -109,6 +114,7 @@ export const projects = createMemo((): Project[] => {
 
     result.push({
       name,
+      runtimeLabels: Array.from(runtimeLabels),
       sessions: sessions.sort((a, b) => b.lastEventAt - a.lastEventAt),
       eventCount: data.events.length,
       agentCount: agentIds.size,
@@ -141,6 +147,15 @@ function resolveAgentName(evts: HookEvent[], isMain: boolean): string {
   const agentType = evts.find((e) => e.payload?.agent_type)?.payload.agent_type;
   if (agentType && agentType !== 'main') return agentType;
   return isMain ? 'Session' : 'Agent';
+}
+
+function resolveRuntimeLabel(evts: HookEvent[]): string | undefined {
+  for (const e of evts) {
+    if (typeof e.payload?.runtime_label === 'string' && e.payload.runtime_label.trim()) {
+      return e.payload.runtime_label;
+    }
+  }
+  return undefined;
 }
 
 function resolveSessionLabel(evts: HookEvent[], workspaceName: string): string {

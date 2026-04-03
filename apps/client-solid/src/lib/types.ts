@@ -31,6 +31,7 @@ export interface AgentEntry {
 /** Project derived from events */
 export interface Project {
   name: string;
+  runtimeLabels: string[];
   sessions: SessionInfo[];
   eventCount: number;
   agentCount: number;
@@ -42,6 +43,7 @@ export interface Project {
 export interface SessionInfo {
   sessionId: string;
   label: string;
+  runtimeLabel?: string;
   eventCount: number;
   agents: AgentInfo[];
   lastEventAt: number;
@@ -52,6 +54,7 @@ export interface SessionInfo {
 export interface AgentInfo {
   agentId: string | null;
   displayName: string;
+  runtimeLabel?: string;
   agentType?: string;
   modelName?: string;
   eventCount: number;

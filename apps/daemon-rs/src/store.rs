@@ -383,11 +383,25 @@ fn payload_string(payload: &serde_json::Value, key: &str) -> Option<String> {
 
 pub fn legacy_event_from_envelope(event: &EventEnvelope) -> Result<LegacyHookEvent, StoreError> {
     let display_name = display_name_candidate_for_event(event);
+    let source_app = project_label_for_event(event);
+    let mut payload = event.payload.clone();
+    if let Some(object) = payload.as_object_mut() {
+        object
+            .entry("runtime_source".to_string())
+            .or_insert_with(|| serde_json::Value::String(format!("{:?}", event.runtime_source)));
+        object
+            .entry("runtime_label".to_string())
+            .or_insert_with(|| serde_json::Value::String(runtime_source_label(&event.runtime_source).to_string()));
+        object
+            .entry("project_name".to_string())
+            .or_insert_with(|| serde_json::Value::String(source_app.clone()));
+    }
+
     Ok(LegacyHookEvent {
-        source_app: project_label_for_event(event),
+        source_app,
         session_id: event.session.session_id.clone(),
         hook_event_type: hook_event_type_for_kind(&event.event_kind).to_string(),
-        payload: event.payload.clone(),
+        payload,
         timestamp: event.occurred_at_ms,
         agent_id: event.agent_id.clone(),
         agent_type: payload_string(&event.payload, "agent_type"),

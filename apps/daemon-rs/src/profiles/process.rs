@@ -129,7 +129,7 @@ fn classify_process_details(
         RuntimeSource::GeminiCli
     } else if contains_any(&[&name, &exe, &cmdline], &["opencode"]) {
         RuntimeSource::OpenCode
-    } else if contains_any(&[&name, &exe, &cmdline], &["pi-cli", " pi ", "/pi", "\\pi", " pi-", " pi_", "pi"]) {
+    } else if is_exact_process_name(&name_basename, &exe_basename, &["pi", "pi-cli"]) {
         RuntimeSource::PiCli
     } else if contains_any(&[&name, &exe, &cmdline], &["aider"]) {
         RuntimeSource::Aider
@@ -223,6 +223,12 @@ fn contains_any(haystacks: &[&str], needles: &[&str]) -> bool {
     haystacks
         .iter()
         .any(|haystack| needles.iter().any(|needle| haystack.contains(needle)))
+}
+
+fn is_exact_process_name(name_basename: &str, exe_basename: &str, names: &[&str]) -> bool {
+    names.iter().map(|name| normalize(name)).any(|normalized| {
+        name_basename == normalized || exe_basename == normalized
+    })
 }
 
 fn normalize(value: &str) -> String {

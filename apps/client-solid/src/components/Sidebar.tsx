@@ -112,6 +112,11 @@ export default function Sidebar(props: SidebarProps) {
                     <span style="font-size:12px;font-weight:500;color:var(--text-primary);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
                       {p.name}
                     </span>
+                    <Show when={p.runtimeLabels.length === 1}>
+                      <span style="font-size:9px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;flex-shrink:0;">
+                        {p.runtimeLabels[0]}
+                      </span>
+                    </Show>
                     {/* Event count */}
                     <span style="font-size:10px;color:var(--text-dim);flex-shrink:0;">{p.eventCount}</span>
                   </div>
@@ -167,8 +172,8 @@ export default function Sidebar(props: SidebarProps) {
                       <span style="font-size:11px;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
                         {s.label}
                       </span>
-                      <span style="font-size:10px;font-family:var(--font-mono);color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-                        {shortId}
+                      <span style="font-size:10px;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                        {s.runtimeLabel ? `${s.runtimeLabel} · ${shortId}` : shortId}
                       </span>
                     </div>
                     {/* Active/Idle badge */}

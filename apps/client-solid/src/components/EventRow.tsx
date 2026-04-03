@@ -13,6 +13,22 @@ function resolveAgentName(e: HookEvent): string {
   return e.display_name || e.agent_name || e.payload?.agent_name || e.agent_type || e.source_app || 'Agent';
 }
 
+function resolveRuntimeLabel(e: HookEvent): string | undefined {
+  return typeof e.payload?.runtime_label === 'string' ? e.payload.runtime_label : undefined;
+}
+
+function resolveActionSummary(e: HookEvent): string {
+  const summary = describeEvent(e);
+  const runtimeLabel = resolveRuntimeLabel(e);
+  if (runtimeLabel && e.hook_event_type === 'SessionStart') {
+    return `${runtimeLabel} started`;
+  }
+  if (runtimeLabel && e.hook_event_type === 'SessionEnd') {
+    return `${runtimeLabel} ended`;
+  }
+  return summary;
+}
+
 export default function EventRow(props: Props) {
   const [expanded, setExpanded] = createSignal(false);
   const e = () => props.event;
@@ -43,6 +59,11 @@ export default function EventRow(props: Props) {
         <span style="font-size:11px;font-weight:500;color:var(--text-secondary);max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:0;">
           {resolveAgentName(e())}
         </span>
+        <Show when={resolveRuntimeLabel(e())}>
+          <span style="font-size:9px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;flex-shrink:0;max-width:56px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+            {resolveRuntimeLabel(e())}
+          </span>
+        </Show>
         <span style={[
           'font-size:10px;font-weight:600;text-transform:uppercase;padding:1px 6px;border-radius:3px;flex-shrink:0;',
           `background:${getEventTypeBgColor(e().hook_event_type)};`,
@@ -56,7 +77,7 @@ export default function EventRow(props: Props) {
           </span>
         </Show>
         <span style="font-size:11px;color:var(--text-primary);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-          {describeEvent(e())}
+          {resolveActionSummary(e())}
         </span>
       </div>
 

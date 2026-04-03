@@ -70,6 +70,14 @@ export default function AgentDetail() {
               </span>
             </div>
           </Show>
+          <Show when={agent()!.runtimeLabel}>
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <span style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;">Runtime</span>
+              <span style="font-size:11px;color:var(--text-secondary);">
+                {agent()!.runtimeLabel}
+              </span>
+            </div>
+          </Show>
           <div style="display:flex;justify-content:space-between;align-items:center;">
             <span style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;">Events</span>
             <span style="font-size:11px;color:var(--text-secondary);">{agent()!.eventCount}</span>
