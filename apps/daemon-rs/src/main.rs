@@ -1,6 +1,7 @@
 use clap::Parser;
 use pharos_daemon::api::{build_router_with_options, AppOptions};
 use pharos_daemon::config::Config;
+use pharos_daemon::profiles::DiscoveryOptions;
 use pharos_daemon::replay::{replay_file, Cli, Command};
 use pharos_daemon::scanner;
 use pharos_daemon::store::Store;
@@ -14,6 +15,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Command::Serve => {
             let config = Config::from_env()?;
             let store = Store::open(&config.db_path)?;
+            let discovery_options = DiscoveryOptions {
+                claude_home: config.claude_home.clone(),
+                codex_home: config.codex_home.clone(),
+                gemini_home: config.gemini_home.clone(),
+                runtime_matchers: pharos_daemon::profiles::process::load_runtime_matchers(
+                    config.runtime_matchers_path.as_deref(),
+                ),
+            };
             let (app, state) = build_router_with_options(
                 store,
                 AppOptions {
@@ -21,12 +30,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 },
             );
 
-            // Spawn scanner if claude_home is available
-            if let Some(claude_home) = config.claude_home {
+            // Spawn scanner when any runtime observation source is configured.
+            if discovery_options.claude_home.is_some()
+                || discovery_options.codex_home.is_some()
+                || discovery_options.gemini_home.is_some()
+                || !discovery_options.runtime_matchers.is_empty()
+            {
                 let scanner_store = state.store.clone();
                 let scanner_sender = state.sender.clone();
                 tokio::spawn(async move {
-                    scanner::run_scanner(scanner_store, scanner_sender, claude_home).await;
+                    scanner::run_scanner(scanner_store, scanner_sender, discovery_options).await;
                 });
             }
 

@@ -11,6 +11,8 @@ AI Agent (Claude, Codex, ...) → writes native files → Pharos reads them → 
 Pharos uses a mixed observation model:
 
 - Claude: native session files plus JSONL transcript tailing for rich event visibility
+- Codex CLI: process detection plus native session index/session-file enrichment for titles and project-root hints
+- Gemini CLI: process detection plus native `logs.json` enrichment for titles and workspace hints
 - Other agent CLIs: process-based live session detection for supported runtimes and unknown agent-like tools
 
 Today, first-pass process detection covers:
@@ -21,6 +23,7 @@ Today, first-pass process detection covers:
 - Pi / Pi CLI
 - Aider
 - unknown agent-like CLIs detected from process-name heuristics
+- custom runtimes matched from your own runtime matcher config
 
 No hooks to install, no project mutation, no dependencies in your project.
 
@@ -45,6 +48,36 @@ Reset the local daemon database:
 
 ```bash
 make db-reset
+```
+
+## Runtime Configuration
+
+Pharos auto-discovers native runtime homes from your user profile:
+
+- Claude: `~/.claude`
+- Codex: `~/.codex`
+- Gemini: `~/.gemini`
+
+You can override them with:
+
+- `PHAROS_CLAUDE_HOME`
+- `PHAROS_CODEX_HOME`
+- `PHAROS_GEMINI_HOME`
+
+You can also add custom process matchers with a JSON file pointed to by
+`PHAROS_RUNTIME_MATCHERS_PATH`.
+
+Example:
+
+```json
+[
+  {
+    "id": "my-custom-agent",
+    "runtime_source": "custom_cli",
+    "match_any": ["myagent", "my-agent-cli"],
+    "entrypoint": "MyAgent"
+  }
+]
 ```
 
 ## Desktop App

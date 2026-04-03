@@ -2,13 +2,19 @@ use std::collections::BTreeMap;
 use std::env;
 use std::path::PathBuf;
 
+use serde::Deserialize;
 use thiserror::Error;
+
+use crate::model::RuntimeSource;
 
 const HOST_ENV: &str = "PHAROS_DAEMON_HOST";
 const PORT_ENV: &str = "PHAROS_DAEMON_PORT";
 const DB_PATH_ENV: &str = "PHAROS_DAEMON_DB_PATH";
 const CLAUDE_SESSIONS_DIR_ENV: &str = "PHAROS_CLAUDE_SESSIONS_DIR";
 const CLAUDE_HOME_ENV: &str = "PHAROS_CLAUDE_HOME";
+const CODEX_HOME_ENV: &str = "PHAROS_CODEX_HOME";
+const GEMINI_HOME_ENV: &str = "PHAROS_GEMINI_HOME";
+const RUNTIME_MATCHERS_PATH_ENV: &str = "PHAROS_RUNTIME_MATCHERS_PATH";
 const DEFAULT_HOST: &str = "127.0.0.1";
 const DEFAULT_PORT: u16 = 4000;
 const DEFAULT_DB_PATH: &str = "pharos-daemon.db";
@@ -26,6 +32,17 @@ pub struct Config {
     pub db_path: String,
     pub claude_sessions_dir: Option<PathBuf>,
     pub claude_home: Option<PathBuf>,
+    pub codex_home: Option<PathBuf>,
+    pub gemini_home: Option<PathBuf>,
+    pub runtime_matchers_path: Option<PathBuf>,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+pub struct RuntimeMatcherConfig {
+    pub id: String,
+    pub runtime_source: RuntimeSource,
+    pub match_any: Vec<String>,
+    pub entrypoint: Option<String>,
 }
 
 impl Config {
@@ -52,6 +69,18 @@ impl Config {
             .get(CLAUDE_HOME_ENV)
             .map(PathBuf::from)
             .or_else(default_claude_home);
+        let codex_home = env_map
+            .get(CODEX_HOME_ENV)
+            .map(PathBuf::from)
+            .or_else(default_codex_home);
+        let gemini_home = env_map
+            .get(GEMINI_HOME_ENV)
+            .map(PathBuf::from)
+            .or_else(default_gemini_home);
+        let runtime_matchers_path = env_map
+            .get(RUNTIME_MATCHERS_PATH_ENV)
+            .map(PathBuf::from)
+            .or_else(default_runtime_matchers_path);
 
         Ok(Self {
             host,
@@ -59,6 +88,9 @@ impl Config {
             db_path,
             claude_sessions_dir,
             claude_home,
+            codex_home,
+            gemini_home,
+            runtime_matchers_path,
         })
     }
 
@@ -79,6 +111,18 @@ impl Config {
         }
         if let Ok(claude_home) = env::var(CLAUDE_HOME_ENV) {
             env_map.insert(CLAUDE_HOME_ENV.to_string(), claude_home);
+        }
+        if let Ok(codex_home) = env::var(CODEX_HOME_ENV) {
+            env_map.insert(CODEX_HOME_ENV.to_string(), codex_home);
+        }
+        if let Ok(gemini_home) = env::var(GEMINI_HOME_ENV) {
+            env_map.insert(GEMINI_HOME_ENV.to_string(), gemini_home);
+        }
+        if let Ok(runtime_matchers_path) = env::var(RUNTIME_MATCHERS_PATH_ENV) {
+            env_map.insert(
+                RUNTIME_MATCHERS_PATH_ENV.to_string(),
+                runtime_matchers_path,
+            );
         }
 
         Self::from_env_map(env_map)
@@ -118,4 +162,22 @@ fn default_claude_home() -> Option<PathBuf> {
     env::var("HOME")
         .ok()
         .map(|home| PathBuf::from(home).join(".claude"))
+}
+
+fn default_codex_home() -> Option<PathBuf> {
+    env::var("HOME")
+        .ok()
+        .map(|home| PathBuf::from(home).join(".codex"))
+}
+
+fn default_gemini_home() -> Option<PathBuf> {
+    env::var("HOME")
+        .ok()
+        .map(|home| PathBuf::from(home).join(".gemini"))
+}
+
+fn default_runtime_matchers_path() -> Option<PathBuf> {
+    env::var("HOME")
+        .ok()
+        .map(|home| PathBuf::from(home).join(".config").join("pharos").join("runtime-matchers.json"))
 }

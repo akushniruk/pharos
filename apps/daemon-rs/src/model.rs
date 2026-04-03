@@ -11,6 +11,7 @@ pub enum RuntimeSource {
     OpenCode,
     Aider,
     GenericAgentCli,
+    CustomCli,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

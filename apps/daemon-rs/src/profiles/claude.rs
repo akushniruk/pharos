@@ -65,6 +65,7 @@ impl ClaudeProfile {
                 } else {
                     parsed.entrypoint
                 },
+                display_title: None,
                 transcript_path,
                 subagents_dir,
             });

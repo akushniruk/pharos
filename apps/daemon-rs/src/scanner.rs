@@ -12,13 +12,12 @@ use crate::envelope::transcript_event_to_envelope;
 use crate::model::{
     AcquisitionMode, CapabilitySet, EventEnvelope, EventKind, SessionRef,
 };
-use crate::profiles::{claude::ClaudeProfile, discover_all_sessions};
+use crate::profiles::{claude::ClaudeProfile, discover_all_sessions, DiscoveryOptions};
 use crate::store::{legacy_event_from_envelope, Store};
 use crate::tailer::parse_jsonl_line;
 
 struct TrackedSubagent {
     agent_id: String,
-    agent_type: String,
     jsonl_path: PathBuf,
     file_offset: u64,
     tool_name_map: HashMap<String, String>,
@@ -35,16 +34,17 @@ struct TrackedSession {
 pub async fn run_scanner(
     store: Store,
     sender: broadcast::Sender<OutboundWsMessage>,
-    claude_home: PathBuf,
+    discovery_options: DiscoveryOptions,
 ) {
-    let profile = ClaudeProfile::new(claude_home.clone());
+    let claude_home = discovery_options.claude_home.clone();
+    let profile = claude_home.clone().map(ClaudeProfile::new);
     let mut tracked: HashMap<String, TrackedSession> = HashMap::new();
     let mut tick = interval(Duration::from_secs(2));
 
     loop {
         tick.tick().await;
 
-        let current_sessions = discover_all_sessions(Some(claude_home.clone()));
+        let current_sessions = discover_all_sessions(&discovery_options);
         let current_ids: Vec<String> = current_sessions
             .iter()
             .map(|s| s.session_id.clone())
@@ -52,7 +52,30 @@ pub async fn run_scanner(
 
         // Detect new sessions
         for session in current_sessions {
-            if tracked.contains_key(&session.session_id) {
+            if let Some(existing) = tracked.get_mut(&session.session_id) {
+                if session.display_title != existing.session.display_title {
+                    if let Some(title) = session.display_title.clone() {
+                        let envelope = EventEnvelope {
+                            runtime_source: session.runtime_source.clone(),
+                            acquisition_mode: AcquisitionMode::Observed,
+                            event_kind: EventKind::SessionTitleChanged,
+                            session: SessionRef {
+                                host_id: "local".to_string(),
+                                workspace_id: workspace_id_from_cwd(&session.cwd),
+                                session_id: session.session_id.clone(),
+                            },
+                            agent_id: None,
+                            occurred_at_ms: now_millis(),
+                            capabilities: observed_capabilities(),
+                            title: "session title changed".to_string(),
+                            payload: json!({ "title": title }),
+                        };
+
+                        let _ = store.insert_event(&envelope);
+                        broadcast_envelope(&store, &sender, &envelope);
+                    }
+                }
+                existing.session = session;
                 continue;
             }
             let session_id = session.session_id.clone();
@@ -77,6 +100,7 @@ pub async fn run_scanner(
                     "pid": session.pid,
                     "cwd": session.cwd,
                     "entrypoint": session.entrypoint,
+                    "title": session.display_title,
                 }),
             };
 
@@ -132,10 +156,12 @@ pub async fn run_scanner(
         // This handles the case where the session file appears before the JSONL transcript.
         for (_, ts) in &mut tracked {
             if ts.session.transcript_path.is_none() {
-                let new_path = profile.resolve_transcript_path(
-                    &ts.session.cwd,
-                    &ts.session.session_id,
-                );
+                let new_path = profile.as_ref().and_then(|profile| {
+                    profile.resolve_transcript_path(
+                        &ts.session.cwd,
+                        &ts.session.session_id,
+                    )
+                });
                 if new_path.is_some() {
                     ts.session.subagents_dir = new_path.as_ref().and_then(|tp| {
                         tp.parent()
@@ -304,7 +330,6 @@ fn scan_subagents(
         let jsonl_path = subagents_dir.join(format!("{subagent_id}.jsonl"));
         ts.known_subagents.push(TrackedSubagent {
             agent_id: subagent_id,
-            agent_type,
             jsonl_path,
             file_offset: 0,
             tool_name_map: HashMap::new(),

@@ -1,4 +1,5 @@
 use crate::model::RuntimeSource;
+use crate::config::RuntimeMatcherConfig;
 
 use super::DetectedSession;
 
@@ -12,12 +13,14 @@ pub struct ProcessSnapshot {
     pub started_at_ms: i64,
 }
 
-pub struct ProcessProfile;
+pub struct ProcessProfile {
+    runtime_matchers: Vec<RuntimeMatcherConfig>,
+}
 
 impl ProcessProfile {
     #[must_use]
-    pub fn new() -> Self {
-        Self
+    pub fn new(runtime_matchers: Vec<RuntimeMatcherConfig>) -> Self {
+        Self { runtime_matchers }
     }
 
     #[must_use]
@@ -44,15 +47,30 @@ impl ProcessProfile {
                         .saturating_mul(1000),
                 };
 
-                detected_session_from_snapshot(&snapshot)
+                detected_session_from_snapshot(&snapshot, &self.runtime_matchers)
             })
             .collect()
     }
 }
 
 #[must_use]
-pub fn detected_session_from_snapshot(snapshot: &ProcessSnapshot) -> Option<DetectedSession> {
-    let classification = classify_process_details(snapshot)?;
+pub fn load_runtime_matchers(path: Option<&std::path::Path>) -> Vec<RuntimeMatcherConfig> {
+    let Some(path) = path else {
+        return Vec::new();
+    };
+    let Ok(content) = std::fs::read_to_string(path) else {
+        return Vec::new();
+    };
+
+    serde_json::from_str::<Vec<RuntimeMatcherConfig>>(&content).unwrap_or_default()
+}
+
+#[must_use]
+pub fn detected_session_from_snapshot(
+    snapshot: &ProcessSnapshot,
+    runtime_matchers: &[RuntimeMatcherConfig],
+) -> Option<DetectedSession> {
+    let classification = classify_process_details(snapshot, runtime_matchers)?;
     let cwd = snapshot
         .cwd
         .clone()
@@ -65,6 +83,7 @@ pub fn detected_session_from_snapshot(snapshot: &ProcessSnapshot) -> Option<Dete
         cwd,
         started_at_ms: snapshot.started_at_ms,
         entrypoint: classification.entrypoint,
+        display_title: None,
         transcript_path: None,
         subagents_dir: None,
     })
@@ -77,11 +96,17 @@ struct ProcessClassification {
 }
 
 #[must_use]
-pub fn classify_process(snapshot: &ProcessSnapshot) -> Option<RuntimeSource> {
-    classify_process_details(snapshot).map(|details| details.runtime_source)
+pub fn classify_process(
+    snapshot: &ProcessSnapshot,
+    runtime_matchers: &[RuntimeMatcherConfig],
+) -> Option<RuntimeSource> {
+    classify_process_details(snapshot, runtime_matchers).map(|details| details.runtime_source)
 }
 
-fn classify_process_details(snapshot: &ProcessSnapshot) -> Option<ProcessClassification> {
+fn classify_process_details(
+    snapshot: &ProcessSnapshot,
+    runtime_matchers: &[RuntimeMatcherConfig],
+) -> Option<ProcessClassification> {
     let name = normalize(&snapshot.name);
     let exe = snapshot.exe.as_deref().map(normalize).unwrap_or_default();
     let cmdline = normalize(&snapshot.cmd.join(" "));
@@ -100,6 +125,26 @@ fn classify_process_details(snapshot: &ProcessSnapshot) -> Option<ProcessClassif
         RuntimeSource::PiCli
     } else if contains_any(&[&name, &exe, &cmdline], &["aider"]) {
         RuntimeSource::Aider
+    } else if let Some(matcher) = runtime_matchers.iter().find(|matcher| {
+        matcher
+            .match_any
+            .iter()
+            .map(|pattern| normalize(pattern))
+            .any(|pattern| contains_any(&[&name, &exe, &cmdline], &[pattern.as_str()]))
+    }) {
+        return Some(ProcessClassification {
+            runtime_source: matcher.runtime_source.clone(),
+            entrypoint: matcher
+                .entrypoint
+                .clone()
+                .unwrap_or_else(|| snapshot.name.clone()),
+            fallback_cwd: snapshot
+                .exe
+                .as_deref()
+                .and_then(|path| std::path::Path::new(path).parent())
+                .map(|path| path.display().to_string())
+                .unwrap_or_else(|| snapshot.name.clone()),
+        });
     } else if is_generic_agent_like(&name, &exe, &cmdline) {
         RuntimeSource::GenericAgentCli
     } else {

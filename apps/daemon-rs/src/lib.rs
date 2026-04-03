@@ -34,7 +34,17 @@ pub async fn start_server(
         let scanner_store = state.store.clone();
         let scanner_sender = state.sender.clone();
         tokio::spawn(async move {
-            scanner::run_scanner(scanner_store, scanner_sender, claude_home).await;
+            scanner::run_scanner(
+                scanner_store,
+                scanner_sender,
+                profiles::DiscoveryOptions {
+                    claude_home: Some(claude_home),
+                    codex_home: None,
+                    gemini_home: None,
+                    runtime_matchers: Vec::new(),
+                },
+            )
+            .await;
         });
     }
 
