@@ -5,7 +5,10 @@ use std::path::PathBuf;
 use serde::Deserialize;
 use thiserror::Error;
 
+use crate::api::AppOptions;
 use crate::model::RuntimeSource;
+use crate::profiles::process::load_runtime_matchers;
+use crate::profiles::DiscoveryOptions;
 
 const HOST_ENV: &str = "PHAROS_DAEMON_HOST";
 const PORT_ENV: &str = "PHAROS_DAEMON_PORT";
@@ -15,6 +18,9 @@ const CLAUDE_HOME_ENV: &str = "PHAROS_CLAUDE_HOME";
 const CODEX_HOME_ENV: &str = "PHAROS_CODEX_HOME";
 const GEMINI_HOME_ENV: &str = "PHAROS_GEMINI_HOME";
 const RUNTIME_MATCHERS_PATH_ENV: &str = "PHAROS_RUNTIME_MATCHERS_PATH";
+const HOME_ENV: &str = "HOME";
+const APPDATA_ENV: &str = "APPDATA";
+const USERPROFILE_ENV: &str = "USERPROFILE";
 const DEFAULT_HOST: &str = "127.0.0.1";
 const DEFAULT_PORT: u16 = 4000;
 const DEFAULT_DB_PATH: &str = "pharos-daemon.db";
@@ -41,8 +47,23 @@ pub struct Config {
 pub struct RuntimeMatcherConfig {
     pub id: String,
     pub runtime_source: RuntimeSource,
+    #[serde(default)]
     pub match_any: Vec<String>,
+    #[serde(default)]
+    pub match_exe_any: Vec<String>,
+    #[serde(default)]
+    pub match_exe_contains: Vec<String>,
+    #[serde(default)]
+    pub match_argv_any: Vec<String>,
+    #[serde(default)]
+    pub match_argv_contains: Vec<String>,
+    #[serde(default)]
+    pub match_cwd_any: Vec<String>,
+    #[serde(default)]
+    pub match_cwd_contains: Vec<String>,
     pub entrypoint: Option<String>,
+    #[serde(default)]
+    pub display_title: Option<String>,
 }
 
 impl Config {
@@ -64,23 +85,23 @@ impl Config {
         let claude_sessions_dir = env_map
             .get(CLAUDE_SESSIONS_DIR_ENV)
             .map(PathBuf::from)
-            .or_else(default_claude_sessions_dir);
+            .or_else(|| default_claude_sessions_dir(&env_map));
         let claude_home = env_map
             .get(CLAUDE_HOME_ENV)
             .map(PathBuf::from)
-            .or_else(default_claude_home);
+            .or_else(|| default_claude_home(&env_map));
         let codex_home = env_map
             .get(CODEX_HOME_ENV)
             .map(PathBuf::from)
-            .or_else(default_codex_home);
+            .or_else(|| default_codex_home(&env_map));
         let gemini_home = env_map
             .get(GEMINI_HOME_ENV)
             .map(PathBuf::from)
-            .or_else(default_gemini_home);
+            .or_else(|| default_gemini_home(&env_map));
         let runtime_matchers_path = env_map
             .get(RUNTIME_MATCHERS_PATH_ENV)
             .map(PathBuf::from)
-            .or_else(default_runtime_matchers_path);
+            .or_else(|| default_runtime_matchers_path(&env_map));
 
         Ok(Self {
             host,
@@ -119,65 +140,91 @@ impl Config {
             env_map.insert(GEMINI_HOME_ENV.to_string(), gemini_home);
         }
         if let Ok(runtime_matchers_path) = env::var(RUNTIME_MATCHERS_PATH_ENV) {
-            env_map.insert(
-                RUNTIME_MATCHERS_PATH_ENV.to_string(),
-                runtime_matchers_path,
-            );
+            env_map.insert(RUNTIME_MATCHERS_PATH_ENV.to_string(), runtime_matchers_path);
+        }
+        if let Ok(home) = env::var(HOME_ENV) {
+            env_map.insert(HOME_ENV.to_string(), home);
+        }
+        if let Ok(appdata) = env::var(APPDATA_ENV) {
+            env_map.insert(APPDATA_ENV.to_string(), appdata);
+        }
+        if let Ok(profile) = env::var(USERPROFILE_ENV) {
+            env_map.insert(USERPROFILE_ENV.to_string(), profile);
         }
 
         Self::from_env_map(env_map)
     }
+
+    #[must_use]
+    pub fn app_options(&self) -> AppOptions {
+        AppOptions {
+            claude_sessions_dir: self.claude_sessions_dir.clone(),
+        }
+    }
+
+    #[must_use]
+    pub fn discovery_options(&self) -> DiscoveryOptions {
+        DiscoveryOptions {
+            claude_home: self.claude_home.clone(),
+            codex_home: self.codex_home.clone(),
+            gemini_home: self.gemini_home.clone(),
+            runtime_matchers: load_runtime_matchers(self.runtime_matchers_path.as_deref()),
+        }
+    }
 }
 
-fn default_claude_sessions_dir() -> Option<PathBuf> {
-    default_claude_home().map(|home| home.join("data").join("sessions"))
+fn default_claude_sessions_dir(env_map: &BTreeMap<String, String>) -> Option<PathBuf> {
+    default_claude_home(env_map).map(|home| home.join("data").join("sessions"))
 }
 
 /// Resolve Claude's home directory cross-platform.
 /// - macOS/Linux: `$HOME/.claude`
 /// - Windows: `%APPDATA%\claude` or `%USERPROFILE%\.claude`
-fn default_claude_home() -> Option<PathBuf> {
+fn default_claude_home(env_map: &BTreeMap<String, String>) -> Option<PathBuf> {
     // Try HOME first (macOS, Linux)
-    if let Ok(home) = env::var("HOME") {
+    if let Some(home) = env_map.get(HOME_ENV) {
         let path = PathBuf::from(home).join(".claude");
         if path.exists() {
             return Some(path);
         }
     }
     // Try APPDATA (Windows)
-    if let Ok(appdata) = env::var("APPDATA") {
+    if let Some(appdata) = env_map.get(APPDATA_ENV) {
         let path = PathBuf::from(appdata).join("claude");
         if path.exists() {
             return Some(path);
         }
     }
     // Try USERPROFILE (Windows fallback)
-    if let Ok(profile) = env::var("USERPROFILE") {
+    if let Some(profile) = env_map.get(USERPROFILE_ENV) {
         let path = PathBuf::from(profile).join(".claude");
         if path.exists() {
             return Some(path);
         }
     }
     // Fallback: try HOME even if dir doesn't exist yet
-    env::var("HOME")
-        .ok()
+    env_map
+        .get(HOME_ENV)
         .map(|home| PathBuf::from(home).join(".claude"))
 }
 
-fn default_codex_home() -> Option<PathBuf> {
-    env::var("HOME")
-        .ok()
+fn default_codex_home(env_map: &BTreeMap<String, String>) -> Option<PathBuf> {
+    env_map
+        .get(HOME_ENV)
         .map(|home| PathBuf::from(home).join(".codex"))
 }
 
-fn default_gemini_home() -> Option<PathBuf> {
-    env::var("HOME")
-        .ok()
+fn default_gemini_home(env_map: &BTreeMap<String, String>) -> Option<PathBuf> {
+    env_map
+        .get(HOME_ENV)
         .map(|home| PathBuf::from(home).join(".gemini"))
 }
 
-fn default_runtime_matchers_path() -> Option<PathBuf> {
-    env::var("HOME")
-        .ok()
-        .map(|home| PathBuf::from(home).join(".config").join("pharos").join("runtime-matchers.json"))
+fn default_runtime_matchers_path(env_map: &BTreeMap<String, String>) -> Option<PathBuf> {
+    env_map.get(HOME_ENV).map(|home| {
+        PathBuf::from(home)
+            .join(".config")
+            .join("pharos")
+            .join("runtime-matchers.json")
+    })
 }
