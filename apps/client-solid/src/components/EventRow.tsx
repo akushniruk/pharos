@@ -17,7 +17,11 @@ function resolveAgentName(e: HookEvent): string {
 }
 
 function resolveRuntimeDisplay(e: HookEvent): string | undefined {
-  return formatRuntimeLabel(resolveRuntimeLabel(e));
+  return formatRuntimeLabel(
+    e.payload?.runtime_label ||
+      e.payload?.runtime_source ||
+      e.source_app,
+  );
 }
 
 function resolveProjectName(e: HookEvent): string {
