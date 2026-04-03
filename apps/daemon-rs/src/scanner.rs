@@ -31,6 +31,7 @@ struct TrackedSubagent {
 
 struct TrackedSession {
     session: crate::profiles::DetectedSession,
+    missed_discovery_cycles: u8,
     file_offset: u64,
     codex_item_offset: usize,
     codex_log_offset: i64,
@@ -38,6 +39,12 @@ struct TrackedSession {
     known_subagents: Vec<TrackedSubagent>,
     /// Maps tool_use_id → tool_name so ToolResult events can inherit the tool name.
     tool_name_map: HashMap<String, String>,
+}
+
+const SESSION_REMOVAL_GRACE_CYCLES: u8 = 3;
+
+fn should_remove_after_missed_discovery(missed_cycles: u8) -> bool {
+    missed_cycles >= SESSION_REMOVAL_GRACE_CYCLES
 }
 
 pub async fn run_scanner(
@@ -69,6 +76,7 @@ pub async fn run_scanner(
             // Detect new sessions
             for session in current_sessions {
                 if let Some(existing) = tracked.get_mut(&session.session_id) {
+                    existing.missed_discovery_cycles = 0;
                     if session.display_title != existing.session.display_title {
                         if let Some(title) = session.display_title.clone() {
                             let envelope = EventEnvelope {
@@ -126,22 +134,32 @@ pub async fn run_scanner(
                 tracked.insert(
                     session_id,
                     TrackedSession {
-                    session,
-                    file_offset: 0,
-                    codex_item_offset: 0,
-                    codex_log_offset: 0,
-                    codex_next_poll_at_ms: 0,
-                    known_subagents: Vec::new(),
-                    tool_name_map: HashMap::new(),
-                },
+                        session,
+                        missed_discovery_cycles: 0,
+                        file_offset: 0,
+                        codex_item_offset: 0,
+                        codex_log_offset: 0,
+                        codex_next_poll_at_ms: 0,
+                        known_subagents: Vec::new(),
+                        tool_name_map: HashMap::new(),
+                    },
                 );
             }
 
-            // Detect removed sessions
+            // Detect removed sessions with a short grace window so
+            // process-backed runtimes do not flap on transient discovery misses.
+            for (session_id, tracked_session) in &mut tracked {
+                if !current_ids.contains(session_id) {
+                    tracked_session.missed_discovery_cycles =
+                        tracked_session.missed_discovery_cycles.saturating_add(1);
+                }
+            }
             let removed_ids: Vec<String> = tracked
-                .keys()
-                .filter(|id| !current_ids.contains(id))
-                .cloned()
+                .iter()
+                .filter_map(|(id, session)| {
+                    should_remove_after_missed_discovery(session.missed_discovery_cycles)
+                        .then(|| id.clone())
+                })
                 .collect();
 
             for session_id in removed_ids {
@@ -209,6 +227,20 @@ pub async fn run_scanner(
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::should_remove_after_missed_discovery;
+
+    #[test]
+    fn discovery_grace_window_requires_three_misses() {
+        assert!(!should_remove_after_missed_discovery(0));
+        assert!(!should_remove_after_missed_discovery(1));
+        assert!(!should_remove_after_missed_discovery(2));
+        assert!(should_remove_after_missed_discovery(3));
+        assert!(should_remove_after_missed_discovery(4));
     }
 }
 
