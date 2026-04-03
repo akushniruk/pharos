@@ -36,6 +36,7 @@ struct TrackedSession {
     codex_item_offset: usize,
     codex_log_offset: i64,
     codex_next_poll_at_ms: i64,
+    recent_codex_signatures: Vec<String>,
     known_subagents: Vec<TrackedSubagent>,
     /// Maps tool_use_id → tool_name so ToolResult events can inherit the tool name.
     tool_name_map: HashMap<String, String>,
@@ -140,6 +141,7 @@ pub async fn run_scanner(
                         codex_item_offset: 0,
                         codex_log_offset: 0,
                         codex_next_poll_at_ms: 0,
+                        recent_codex_signatures: Vec::new(),
                         known_subagents: Vec::new(),
                         tool_name_map: HashMap::new(),
                     },
@@ -232,7 +234,17 @@ pub async fn run_scanner(
 
 #[cfg(test)]
 mod tests {
-    use super::should_remove_after_missed_discovery;
+    use std::collections::HashMap;
+
+    use crate::model::RuntimeSource;
+    use crate::profiles::{codex::CodexSessionEvent, DetectedSession};
+
+    use super::{
+        codex_signature,
+        remember_codex_signature,
+        should_remove_after_missed_discovery,
+        TrackedSession,
+    };
 
     #[test]
     fn discovery_grace_window_requires_three_misses() {
@@ -241,6 +253,43 @@ mod tests {
         assert!(!should_remove_after_missed_discovery(2));
         assert!(should_remove_after_missed_discovery(3));
         assert!(should_remove_after_missed_discovery(4));
+    }
+
+    #[test]
+    fn codex_signatures_dedupe_identical_live_events() {
+        let mut tracked = TrackedSession {
+            session: DetectedSession {
+                runtime_source: RuntimeSource::CodexCli,
+                session_id: "proc-1".to_string(),
+                native_session_id: Some("thread-1".to_string()),
+                pid: Some(1),
+                cwd: "/tmp/project".to_string(),
+                started_at_ms: 0,
+                entrypoint: "codex".to_string(),
+                display_title: None,
+                history_path: None,
+                transcript_path: None,
+                subagents_dir: None,
+            },
+            missed_discovery_cycles: 0,
+            file_offset: 0,
+            codex_item_offset: 0,
+            codex_log_offset: 0,
+            codex_next_poll_at_ms: 0,
+            recent_codex_signatures: Vec::new(),
+            known_subagents: Vec::new(),
+            tool_name_map: HashMap::new(),
+        };
+
+        let event = CodexSessionEvent::ToolUse {
+            tool_name: "exec_command".to_string(),
+            tool_use_id: "turn-1".to_string(),
+            input: serde_json::json!({"cmd":"pwd"}),
+        };
+
+        assert!(remember_codex_signature(&mut tracked, &event));
+        assert!(!remember_codex_signature(&mut tracked, &event));
+        assert_eq!(codex_signature(&event), "tool_use:turn-1:exec_command:{\"cmd\":\"pwd\"}");
     }
 }
 
@@ -282,6 +331,9 @@ fn tail_codex_activity(
 
         let events = profile.read_live_events(thread_id, ts.codex_log_offset);
         for live_event in &events {
+            if !remember_codex_signature(ts, &live_event.event) {
+                continue;
+            }
             let envelope = codex_event_to_envelope(
                 &live_event.event,
                 &workspace_id,
@@ -299,6 +351,61 @@ fn tail_codex_activity(
         } else {
             now_ms.saturating_add(750)
         };
+    }
+}
+
+const MAX_CODEX_SIGNATURES: usize = 256;
+
+fn remember_codex_signature(
+    session: &mut TrackedSession,
+    event: &crate::profiles::codex::CodexSessionEvent,
+) -> bool {
+    let signature = codex_signature(event);
+    if session.recent_codex_signatures.contains(&signature) {
+        return false;
+    }
+    session.recent_codex_signatures.push(signature);
+    if session.recent_codex_signatures.len() > MAX_CODEX_SIGNATURES {
+        session.recent_codex_signatures.remove(0);
+    }
+    true
+}
+
+fn codex_signature(event: &crate::profiles::codex::CodexSessionEvent) -> String {
+    match event {
+        crate::profiles::codex::CodexSessionEvent::UserPrompt { text } => {
+            format!("prompt:{text}")
+        }
+        crate::profiles::codex::CodexSessionEvent::AssistantText { text } => {
+            format!("assistant:{text}")
+        }
+        crate::profiles::codex::CodexSessionEvent::SubagentStart {
+            agent_type,
+            display_name,
+            description,
+            model,
+            reasoning_effort,
+            agent_id,
+        } => format!(
+            "subagent:{agent_id}:{agent_type}:{display_name}:{}:{}:{}",
+            description.clone().unwrap_or_default(),
+            model.clone().unwrap_or_default(),
+            reasoning_effort.clone().unwrap_or_default()
+        ),
+        crate::profiles::codex::CodexSessionEvent::ToolUse {
+            tool_name,
+            tool_use_id,
+            input,
+        } => format!("tool_use:{tool_use_id}:{tool_name}:{input}"),
+        crate::profiles::codex::CodexSessionEvent::ToolResult {
+            tool_use_id,
+            tool_name,
+            is_error,
+            content,
+        } => format!(
+            "tool_result:{tool_use_id}:{}:{is_error}:{content}",
+            tool_name.clone().unwrap_or_default()
+        ),
     }
 }
 
