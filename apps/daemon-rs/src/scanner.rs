@@ -291,6 +291,43 @@ mod tests {
         assert!(!remember_codex_signature(&mut tracked, &event));
         assert_eq!(codex_signature(&event), "tool_use:turn-1:exec_command:{\"cmd\":\"pwd\"}");
     }
+
+    #[test]
+    fn codex_signatures_dedupe_history_and_live_sources_together() {
+        let mut tracked = TrackedSession {
+            session: DetectedSession {
+                runtime_source: RuntimeSource::CodexCli,
+                session_id: "proc-1".to_string(),
+                native_session_id: Some("thread-1".to_string()),
+                pid: Some(1),
+                cwd: "/tmp/project".to_string(),
+                started_at_ms: 0,
+                entrypoint: "codex".to_string(),
+                display_title: None,
+                history_path: None,
+                transcript_path: None,
+                subagents_dir: None,
+            },
+            missed_discovery_cycles: 0,
+            file_offset: 0,
+            codex_item_offset: 0,
+            codex_log_offset: 0,
+            codex_next_poll_at_ms: 0,
+            recent_codex_signatures: Vec::new(),
+            known_subagents: Vec::new(),
+            tool_name_map: HashMap::new(),
+        };
+
+        let history_event = CodexSessionEvent::AssistantText {
+            text: "Repository is a single-package Vite app.".to_string(),
+        };
+        let live_event = CodexSessionEvent::AssistantText {
+            text: "Repository is a single-package Vite app.".to_string(),
+        };
+
+        assert!(remember_codex_signature(&mut tracked, &history_event));
+        assert!(!remember_codex_signature(&mut tracked, &live_event));
+    }
 }
 
 fn tail_codex_activity(
@@ -302,10 +339,14 @@ fn tail_codex_activity(
 ) {
     let now_ms = now_millis();
     let workspace_id = workspace_id_from_cwd(&ts.session.cwd);
+
     if let Some(history_path) = &ts.session.history_path {
         let events = profile.read_session_events(history_path);
         if ts.codex_item_offset < events.len() {
             for event in &events[ts.codex_item_offset..] {
+                if !remember_codex_signature(ts, event) {
+                    continue;
+                }
                 let envelope = codex_event_to_envelope(
                     event,
                     &workspace_id,
@@ -320,38 +361,36 @@ fn tail_codex_activity(
         }
     }
 
-    if ts.session.history_path.is_none() {
-        if now_ms < ts.codex_next_poll_at_ms {
-            return;
-        }
-
-        let Some(thread_id) = ts.session.native_session_id.as_deref() else {
-            return;
-        };
-
-        let events = profile.read_live_events(thread_id, ts.codex_log_offset);
-        for live_event in &events {
-            if !remember_codex_signature(ts, &live_event.event) {
-                continue;
-            }
-            let envelope = codex_event_to_envelope(
-                &live_event.event,
-                &workspace_id,
-                &ts.session.session_id,
-                live_event.occurred_at_ms,
-            );
-            let _ = store.insert_event(&envelope);
-            broadcast_envelope(live_state, sender, &envelope);
-        }
-        if let Some(last) = events.last() {
-            ts.codex_log_offset = last.row_id;
-        }
-        ts.codex_next_poll_at_ms = if events.is_empty() {
-            now_ms.saturating_add(2_000)
-        } else {
-            now_ms.saturating_add(750)
-        };
+    if now_ms < ts.codex_next_poll_at_ms {
+        return;
     }
+
+    let Some(thread_id) = ts.session.native_session_id.as_deref() else {
+        return;
+    };
+
+    let events = profile.read_live_events(thread_id, ts.codex_log_offset);
+    for live_event in &events {
+        if !remember_codex_signature(ts, &live_event.event) {
+            continue;
+        }
+        let envelope = codex_event_to_envelope(
+            &live_event.event,
+            &workspace_id,
+            &ts.session.session_id,
+            live_event.occurred_at_ms,
+        );
+        let _ = store.insert_event(&envelope);
+        broadcast_envelope(live_state, sender, &envelope);
+    }
+    if let Some(last) = events.last() {
+        ts.codex_log_offset = last.row_id;
+    }
+    ts.codex_next_poll_at_ms = if events.is_empty() {
+        now_ms.saturating_add(2_000)
+    } else {
+        now_ms.saturating_add(750)
+    };
 }
 
 const MAX_CODEX_SIGNATURES: usize = 256;
