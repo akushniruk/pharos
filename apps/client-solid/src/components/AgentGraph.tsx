@@ -310,6 +310,9 @@ export default function AgentGraph() {
                 || lane.session.summary
                 || `${lane.session.activeAgentCount}/${lane.session.agents.length} agents`;
               const laneRuntime = lane.session.runtimeLabel || 'Runtime unavailable';
+              const laneReason = (laneTone === 'blocked' || laneTone === 'attention')
+                ? lane.session.statusDetail || 'No new progress after recent activity'
+                : undefined;
 
               return (
                 <g>
@@ -374,6 +377,17 @@ export default function AgentGraph() {
                   >
                     {timeLabel(lane.session.lastEventAt)} · {lane.session.eventCount} events
                   </text>
+                  {laneReason && (
+                    <text
+                      x="26"
+                      y={lane.y + 82}
+                      font-size="10"
+                      fill="var(--text-secondary)"
+                      font-family="var(--font-sans)"
+                    >
+                      {truncate(laneReason, 56)}
+                    </text>
+                  )}
                   <rect
                     x="26"
                     y={lane.y + LANE_ROW_H - 30}
@@ -432,6 +446,9 @@ export default function AgentGraph() {
               const palette = statusPalette(tone);
               const runtimeText = node.agent.runtimeLabel || node.session.runtimeLabel || 'Runtime unavailable';
               const statusText = statusLabel(tone);
+              const reasonText = (tone === 'blocked' || tone === 'attention')
+                ? node.agent.statusDetail || 'No new progress after recent activity'
+                : undefined;
               const actionText = node.agent.currentAction
                 || node.agent.assignment
                 || node.agent.modelName
@@ -497,7 +514,7 @@ export default function AgentGraph() {
                     fill="var(--text-dim)"
                     font-family="var(--font-sans)"
                   >
-                    {truncate(runtimeText, 24)}
+                    {truncate(reasonText || runtimeText, 24)}
                   </text>
                   <text
                     x={node.x + 12}

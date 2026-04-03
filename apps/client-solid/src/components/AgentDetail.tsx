@@ -11,6 +11,11 @@ import { getEventTypeLabel, getEventTypeBgColor, getEventTypeTextColor } from '.
 
 export default function AgentDetail() {
   const detail = createMemo(() => selectedAgentDetailSnapshot());
+  const statusDetail = () =>
+    detail()?.statusDetail
+    || (detail()?.statusTone === 'blocked' || detail()?.statusTone === 'attention'
+      ? 'No new progress after recent activity'
+      : undefined);
 
   const statusColors = () => {
     const tone = detail()?.statusTone;
@@ -84,9 +89,9 @@ export default function AgentDetail() {
             <span style={`width:6px;height:6px;border-radius:50%;background:${statusColors().dot};`} />
             <span>{detail()?.statusLabel ?? 'Unknown'}</span>
           </div>
-          <Show when={detail()?.statusDetail}>
+          <Show when={statusDetail()}>
             <span style="max-width:170px;font-size:9px;color:var(--text-dim);text-align:right;line-height:1.35;">
-              {detail()!.statusDetail}
+              {statusDetail()}
             </span>
           </Show>
         </div>
@@ -164,9 +169,9 @@ export default function AgentDetail() {
               <span style={`font-size:11px;font-weight:600;line-height:1.45;color:${statusColors().text};`}>
                 {detail()!.statusLabel}
               </span>
-              <Show when={detail()!.statusDetail}>
+              <Show when={statusDetail()}>
                 <span style="font-size:10px;color:var(--text-dim);line-height:1.45;">
-                  {detail()!.statusDetail}
+                  {statusDetail()}
                 </span>
               </Show>
             </div>
