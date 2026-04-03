@@ -9,6 +9,7 @@ use tokio::time::interval;
 
 use crate::api::OutboundWsMessage;
 use crate::envelope::{codex_event_to_envelope, transcript_event_to_envelope};
+use crate::live_state::{should_broadcast_registry, LiveState};
 use crate::model::{
     AcquisitionMode, CapabilitySet, EventEnvelope, EventKind, RuntimeSource, SessionRef,
 };
@@ -18,7 +19,7 @@ use crate::profiles::{
     discover_all_sessions,
     DiscoveryOptions,
 };
-use crate::store::{legacy_event_from_envelope, Store};
+use crate::store::Store;
 use crate::tailer::parse_jsonl_line;
 
 struct TrackedSubagent {
@@ -41,6 +42,7 @@ struct TrackedSession {
 
 pub async fn run_scanner(
     store: Store,
+    live_state: LiveState,
     sender: broadcast::Sender<OutboundWsMessage>,
     discovery_options: DiscoveryOptions,
 ) {
@@ -85,11 +87,11 @@ pub async fn run_scanner(
                                 payload: json!({ "title": title }),
                             };
 
-                            let _ = store.insert_event(&envelope);
-                            broadcast_envelope(&store, &sender, &envelope);
-                        }
+                        let _ = store.insert_event(&envelope);
+                        broadcast_envelope(&live_state, &sender, &envelope);
                     }
-                    existing.session = session;
+                }
+                existing.session = session;
                     continue;
                 }
                 let session_id = session.session_id.clone();
@@ -118,8 +120,8 @@ pub async fn run_scanner(
                     }),
                 };
 
-                let _ = store.insert_event(&envelope);
-                broadcast_envelope(&store, &sender, &envelope);
+            let _ = store.insert_event(&envelope);
+            broadcast_envelope(&live_state, &sender, &envelope);
 
                 tracked.insert(
                     session_id,
@@ -163,10 +165,10 @@ pub async fn run_scanner(
                         payload: json!({}),
                     };
 
-                    let _ = store.insert_event(&envelope);
-                    broadcast_envelope(&store, &sender, &envelope);
-                }
+                let _ = store.insert_event(&envelope);
+                broadcast_envelope(&live_state, &sender, &envelope);
             }
+        }
 
             // Re-resolve paths for tracked sessions that are missing transcript/subagent paths.
             // This handles the case where the session file appears before the JSONL transcript.
@@ -195,12 +197,12 @@ pub async fn run_scanner(
             if let Some(ts) = tracked.get_mut(&session_id) {
                 match ts.session.runtime_source {
                     RuntimeSource::ClaudeCode => {
-                        tail_transcript(ts, &store, &sender);
-                        scan_subagents(ts, &store, &sender);
+                        tail_transcript(ts, &store, &live_state, &sender);
+                        scan_subagents(ts, &store, &live_state, &sender);
                     }
                     RuntimeSource::CodexCli => {
                         if let Some(profile) = codex_profile.as_ref() {
-                            tail_codex_activity(ts, profile, &store, &sender);
+                            tail_codex_activity(ts, profile, &store, &live_state, &sender);
                         }
                     }
                     _ => {}
@@ -214,6 +216,7 @@ fn tail_codex_activity(
     ts: &mut TrackedSession,
     profile: &CodexProfile,
     store: &Store,
+    live_state: &LiveState,
     sender: &broadcast::Sender<OutboundWsMessage>,
 ) {
     let now_ms = now_millis();
@@ -229,7 +232,7 @@ fn tail_codex_activity(
                     now_ms,
                 );
                 let _ = store.insert_event(&envelope);
-                broadcast_envelope(store, sender, &envelope);
+                broadcast_envelope(live_state, sender, &envelope);
             }
 
             ts.codex_item_offset = events.len();
@@ -254,7 +257,7 @@ fn tail_codex_activity(
                 live_event.occurred_at_ms,
             );
             let _ = store.insert_event(&envelope);
-            broadcast_envelope(store, sender, &envelope);
+            broadcast_envelope(live_state, sender, &envelope);
         }
         if let Some(last) = events.last() {
             ts.codex_log_offset = last.row_id;
@@ -270,6 +273,7 @@ fn tail_codex_activity(
 fn tail_transcript(
     ts: &mut TrackedSession,
     store: &Store,
+    live_state: &LiveState,
     sender: &broadcast::Sender<OutboundWsMessage>,
 ) {
     let Some(transcript_path) = &ts.session.transcript_path else {
@@ -323,7 +327,7 @@ fn tail_transcript(
                         event_time,
                     );
                     let _ = store.insert_event(&envelope);
-                    broadcast_envelope(store, sender, &envelope);
+                    broadcast_envelope(live_state, sender, &envelope);
                 }
             }
         }
@@ -337,6 +341,7 @@ fn tail_transcript(
 fn scan_subagents(
     ts: &mut TrackedSession,
     store: &Store,
+    live_state: &LiveState,
     sender: &broadcast::Sender<OutboundWsMessage>,
 ) {
     let Some(subagents_dir) = &ts.session.subagents_dir else {
@@ -408,7 +413,7 @@ fn scan_subagents(
         };
 
         let _ = store.insert_event(&envelope);
-        broadcast_envelope(store, sender, &envelope);
+        broadcast_envelope(live_state, sender, &envelope);
 
         // Track subagent for JSONL tailing
         let jsonl_path = subagents_dir.join(format!("{subagent_id}.jsonl"));
@@ -464,7 +469,7 @@ fn scan_subagents(
                             event_time,
                         );
                         let _ = store.insert_event(&envelope);
-                        broadcast_envelope(store, sender, &envelope);
+                        broadcast_envelope(live_state, sender, &envelope);
                     }
                 }
             }
@@ -477,11 +482,11 @@ fn scan_subagents(
 }
 
 fn broadcast_envelope(
-    store: &Store,
+    live_state: &LiveState,
     sender: &broadcast::Sender<OutboundWsMessage>,
     envelope: &EventEnvelope,
 ) {
-    let Ok(compat_event) = legacy_event_from_envelope(envelope) else {
+    let Ok(compat_event) = live_state.record_envelope(envelope) else {
         return;
     };
 
@@ -498,7 +503,7 @@ fn broadcast_envelope(
         return;
     }
 
-    let Ok(registry) = store.list_agent_registry() else {
+    let Ok(registry) = live_state.list_agent_registry() else {
         return;
     };
     let Ok(registry_payload) = serde_json::to_value(registry) else {
@@ -510,16 +515,6 @@ fn broadcast_envelope(
     });
 }
 
-fn should_broadcast_registry(event_kind: &EventKind) -> bool {
-    matches!(
-        event_kind,
-        EventKind::SessionStarted
-            | EventKind::SessionEnded
-            | EventKind::SubagentStarted
-            | EventKind::SubagentStopped
-            | EventKind::SessionTitleChanged
-    )
-}
 
 fn workspace_id_from_cwd(cwd: &str) -> String {
     std::path::Path::new(cwd)

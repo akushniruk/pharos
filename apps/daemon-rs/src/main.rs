@@ -38,8 +38,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             {
                 let scanner_store = state.store.clone();
                 let scanner_sender = state.sender.clone();
+                let scanner_live_state = state.live_state.clone();
                 tokio::spawn(async move {
-                    scanner::run_scanner(scanner_store, scanner_sender, discovery_options).await;
+                    scanner::run_scanner(
+                        scanner_store,
+                        scanner_live_state,
+                        scanner_sender,
+                        discovery_options,
+                    )
+                    .await;
                 });
             }
 

@@ -13,11 +13,12 @@ use std::path::PathBuf;
 use crate::{
     connector::resolve_connector,
     discovery::{discover_claude_sessions, discovered_session_events, discovered_session_summaries},
+    live_state::{should_broadcast_registry, LiveState},
     model::{
         AgentRegistryEntry, DiscoveredSession, EventEnvelope, FilterOptions, LegacyHookEvent,
         SessionSummary,
     },
-    store::{legacy_event_from_envelope, Store},
+    store::Store,
 };
 
 #[derive(Debug, Clone, Default)]
@@ -33,6 +34,7 @@ pub fn build_router(store: Store) -> Router {
 pub fn build_router_with_options(store: Store, options: AppOptions) -> (Router, AppState) {
     let (sender, _) = broadcast::channel(32);
     let state = AppState {
+        live_state: LiveState::bootstrap(&store).unwrap_or_default(),
         store,
         sender,
         claude_sessions_dir: options.claude_sessions_dir,
@@ -57,6 +59,7 @@ pub fn build_router_with_options(store: Store, options: AppOptions) -> (Router, 
 
 #[derive(Clone)]
 pub struct AppState {
+    pub live_state: LiveState,
     pub store: Store,
     pub sender: broadcast::Sender<OutboundWsMessage>,
     pub claude_sessions_dir: Option<PathBuf>,
@@ -105,7 +108,7 @@ async fn list_agent_registry(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<AgentRegistryEntry>>, StatusCode> {
     let entries = state
-        .store
+        .live_state
         .list_agent_registry()
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(Json(entries))
@@ -115,7 +118,7 @@ async fn get_filter_options(
     State(state): State<AppState>,
 ) -> Result<Json<FilterOptions>, StatusCode> {
     let options = state
-        .store
+        .live_state
         .filter_options()
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(Json(options))
@@ -125,7 +128,7 @@ async fn list_sessions(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<SessionSummary>>, StatusCode> {
     let mut sessions = state
-        .store
+        .live_state
         .list_sessions()
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     if let Some(dir) = &state.claude_sessions_dir {
@@ -141,7 +144,7 @@ async fn get_session_events(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<LegacyHookEvent>>, StatusCode> {
     let events = state
-        .store
+        .live_state
         .session_events(&session_id)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     if !events.is_empty() {
@@ -220,7 +223,7 @@ async fn stream_events(
     State(state): State<AppState>,
 ) -> Result<impl axum::response::IntoResponse, StatusCode> {
     let initial_events = state
-        .store
+        .live_state
         .list_legacy_events()
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let receiver = state.sender.subscribe();
@@ -276,19 +279,26 @@ async fn send_ws_raw(
 }
 
 fn broadcast_compat_updates(state: &AppState, event: &EventEnvelope) -> Result<(), serde_json::Error> {
-    let compat_event = legacy_event_from_envelope(event)
-        .map_err(|error| serde_json::Error::io(std::io::Error::other(error.to_string())))?;
-    let registry = state
-        .store
-        .list_agent_registry()
+    let compat_event = state
+        .live_state
+        .record_envelope(event)
         .map_err(|error| serde_json::Error::io(std::io::Error::other(error.to_string())))?;
 
     let event_payload = serde_json::to_value(compat_event)?;
-    let registry_payload = serde_json::to_value(registry)?;
     let _ = state.sender.send(OutboundWsMessage {
         message_type: "event",
         payload: event_payload,
     });
+
+    if !should_broadcast_registry(&event.event_kind) {
+        return Ok(());
+    }
+
+    let registry = state
+        .live_state
+        .list_agent_registry()
+        .map_err(|error| serde_json::Error::io(std::io::Error::other(error.to_string())))?;
+    let registry_payload = serde_json::to_value(registry)?;
     let _ = state.sender.send(OutboundWsMessage {
         message_type: "agent_registry",
         payload: registry_payload,
