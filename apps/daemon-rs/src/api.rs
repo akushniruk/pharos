@@ -9,6 +9,7 @@ use serde::Serialize;
 use serde_json::json;
 use tokio::sync::broadcast;
 use std::path::PathBuf;
+use tower_http::cors::{Any, CorsLayer};
 
 use crate::{
     connector::resolve_connector,
@@ -52,6 +53,12 @@ pub fn build_router_with_options(store: Store, options: AppOptions) -> (Router, 
         .route("/sessions", get(list_sessions))
         .route("/sessions/{id}", get(get_session_events))
         .route("/stream", get(stream_events))
+        .layer(
+            CorsLayer::new()
+                .allow_origin(Any)
+                .allow_methods(Any)
+                .allow_headers(Any),
+        )
         .with_state(state.clone());
 
     (router, state)
