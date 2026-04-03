@@ -1,190 +1,180 @@
-import { For, createMemo } from 'solid-js';
+import { createMemo, createSignal } from 'solid-js';
+import { SolidFlow } from 'solid-flow';
 import { filteredAgents, filteredEvents, selectAgent, selectedAgent } from '../lib/store';
-import type { AgentInfo } from '../lib/types';
-
-const NODE_W = 180;
-const NODE_H = 50;
-const V_GAP = 80;
-const H_GAP = 20;
-const PAD = 24;
-
-interface NodeLayout {
-  agent: AgentInfo;
-  x: number;
-  y: number;
-}
+import type { AgentInfo, HookEvent } from '../lib/types';
 
 export default function AgentGraph() {
-  const layout = createMemo((): { nodes: NodeLayout[]; width: number; height: number } => {
+  const graphData = createMemo(() => {
     const agents = filteredAgents();
-    if (agents.length === 0) return { nodes: [], width: 300, height: 120 };
-
-    // Find root: agentId is null (Orchestrator) or no parentId
-    const root = agents.find(a => a.agentId === null) ?? agents[0];
-
-    // Find children via SubagentStart events: events where hook_event_type === 'SubagentStart'
     const evts = filteredEvents();
-    const childIds = new Set<string>();
+    if (agents.length === 0) return { nodes: [], edges: [] };
+
+    // Build parent→child map from SubagentStart events
+    const parentMap = new Map<string, string>(); // child agentId → parent agentId
     for (const e of evts) {
-      if (e.hook_event_type === 'SubagentStart' && e.payload?.agent_id) {
-        childIds.add(e.payload.agent_id as string);
+      if (e.hook_event_type === 'SubagentStart' && e.agent_id) {
+        // The event's agent_id is the child, the main session agent is the parent
+        parentMap.set(e.agent_id, '__main__');
       }
     }
 
-    const children = agents.filter(a => a.agentId !== null && a.agentId !== root.agentId);
+    // Find root agents (no parent) and children
+    const root = agents.find(a => a.agentId === null) ?? agents[0];
+    const children = agents.filter(a => a.agentId !== null);
 
-    if (children.length === 0) {
-      const cx = PAD + NODE_W / 2;
-      const w = NODE_W + PAD * 2;
-      const h = NODE_H + PAD * 2;
-      return {
-        nodes: [{ agent: root, x: PAD, y: PAD }],
-        width: w,
-        height: h,
-      };
+    // Layout: root at top center, children in rows below
+    const nodeW = 220;
+    const nodeH = 70;
+    const hGap = 30;
+    const vGap = 100;
+    const maxPerRow = 4;
+
+    const rows = [];
+    for (let i = 0; i < children.length; i += maxPerRow) {
+      rows.push(children.slice(i, i + maxPerRow));
     }
 
-    const totalChildW = children.length * NODE_W + (children.length - 1) * H_GAP;
-    const totalW = Math.max(NODE_W, totalChildW) + PAD * 2;
+    const maxRowWidth = Math.max(1, ...rows.map(r => r.length)) * (nodeW + hGap) - hGap;
+    const totalWidth = Math.max(nodeW, maxRowWidth);
 
-    // Root centered at top
-    const rootX = (totalW - NODE_W) / 2;
-    const rootY = PAD;
+    // Root node
+    const nodes: any[] = [{
+      id: '__main__',
+      position: { x: (totalWidth - nodeW) / 2, y: 20 },
+      data: {
+        content: <AgentNode agent={root} />,
+      },
+      inputs: 0,
+      outputs: children.length > 0 ? 1 : 0,
+    }];
 
-    // Children spaced evenly at second row
-    const childY = PAD + NODE_H + V_GAP;
-    const childStartX = (totalW - totalChildW) / 2;
+    // Child nodes in rows
+    rows.forEach((row, rowIdx) => {
+      const rowWidth = row.length * (nodeW + hGap) - hGap;
+      const startX = (totalWidth - rowWidth) / 2;
 
-    const nodes: NodeLayout[] = [{ agent: root, x: rootX, y: rootY }];
-    children.forEach((child, i) => {
-      nodes.push({
-        agent: child,
-        x: childStartX + i * (NODE_W + H_GAP),
-        y: childY,
+      row.forEach((child, colIdx) => {
+        const id = child.agentId || `child-${rowIdx}-${colIdx}`;
+        nodes.push({
+          id,
+          position: {
+            x: startX + colIdx * (nodeW + hGap),
+            y: 20 + (rowIdx + 1) * (nodeH + vGap),
+          },
+          data: {
+            content: <AgentNode agent={child} />,
+          },
+          inputs: 1,
+          outputs: 0,
+        });
       });
     });
 
-    return {
-      nodes,
-      width: totalW,
-      height: childY + NODE_H + PAD,
-    };
+    // Edges from root to all children
+    const edges = children.map((child, i) => ({
+      id: `edge-main-${child.agentId || i}`,
+      sourceNode: '__main__',
+      sourceOutput: 0,
+      targetNode: child.agentId || `child-${Math.floor(i / maxPerRow)}-${i % maxPerRow}`,
+      targetInput: 0,
+    }));
+
+    return { nodes, edges };
   });
 
-  const dotColor = (agent: AgentInfo) => {
-    if (agent.isActive) return 'var(--green)';
-    if (agent.eventCount > 0) return 'var(--yellow)';
-    return 'var(--text-dim)';
-  };
+  const [nodes, setNodes] = createSignal<any[]>([]);
+  const [edges, setEdges] = createSignal<any[]>([]);
 
-  const rootNode = createMemo(() => layout().nodes[0]);
+  // Sync from memo to signals (solid-flow needs signals)
+  const syncedNodes = createMemo(() => {
+    const data = graphData();
+    setNodes(data.nodes);
+    setEdges(data.edges);
+    return data.nodes;
+  });
 
   return (
-    <div style="flex:1;padding:12px 16px;overflow:auto;display:flex;align-items:center;justify-content:center;">
-      <svg
-        width="100%"
-        viewBox={`0 0 ${layout().width} ${layout().height}`}
-        style={`display:block;max-height:100%;min-height:${layout().height}px;`}
-      >
-        {/* Edges: from root bottom-center to each child top-center */}
-        <For each={layout().nodes.slice(1)}>
-          {(child) => {
-            const root = rootNode();
-            const x1 = root.x + NODE_W / 2;
-            const y1 = root.y + NODE_H;
-            const x2 = child.x + NODE_W / 2;
-            const y2 = child.y;
-            const midY = (y1 + y2) / 2;
-            return (
-              <path
-                d={`M ${x1} ${y1} C ${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}`}
-                fill="none"
-                stroke="var(--border)"
-                stroke-width="1"
-              />
-            );
-          }}
-        </For>
+    <div
+      style="flex:1;overflow:hidden;background:var(--bg-primary);"
+      class="agent-graph-container"
+    >
+      <style>{`
+        .agent-graph-container .solid-flow-node {
+          background: var(--bg-card) !important;
+          border: 1px solid var(--border) !important;
+          border-radius: 8px !important;
+          padding: 0 !important;
+          min-width: 220px;
+        }
+        .agent-graph-container .solid-flow-node-selected {
+          border-color: var(--accent) !important;
+        }
+        .agent-graph-container .solid-flow-edge {
+          stroke: var(--border-hover) !important;
+          stroke-width: 1.5 !important;
+        }
+        .agent-graph-container .solid-flow-handle {
+          background: var(--text-dim) !important;
+          width: 6px !important;
+          height: 6px !important;
+        }
+        .agent-graph-container .solid-flow-canvas {
+          background: var(--bg-primary) !important;
+        }
+      `}</style>
+      {syncedNodes() && (
+        <SolidFlow
+          nodes={nodes()}
+          edges={edges()}
+          onNodesChange={(n: any) => setNodes(n)}
+          onEdgesChange={(e: any) => setEdges(e)}
+        />
+      )}
+    </div>
+  );
+}
 
-        {/* Nodes */}
-        <For each={layout().nodes}>
-          {(node) => {
-            const id = node.agent.agentId || '__main__';
-            const isSelected = () => selectedAgent() === id;
-            const stroke = () => {
-              if (isSelected()) return 'var(--accent)';
-              if (node.agent.isActive) return 'var(--green)';
-              return 'var(--border)';
-            };
-            const truncated = node.agent.displayName.length > 23
-              ? node.agent.displayName.slice(0, 22) + '…'
-              : node.agent.displayName;
-            const meta =
-              node.agent.assignment
-              ?? node.agent.currentAction
-              ?? node.agent.modelName?.replace('claude-', '')
-              ?? '';
-            const metaTrunc = meta.length > 24 ? meta.slice(0, 23) + '…' : meta;
-            const typeLabel = node.agent.agentType ?? (node.agent.agentId ? 'subagent' : 'session');
+function AgentNode(props: { agent: AgentInfo }) {
+  const a = () => props.agent;
+  const id = () => a().agentId || '__main__';
+  const isSelected = () => selectedAgent() === id();
 
-            return (
-              <g
-                style="cursor:pointer;"
-                onClick={() => selectAgent(id)}
-              >
-                <rect
-                  x={node.x}
-                  y={node.y}
-                  width={NODE_W}
-                  height={NODE_H}
-                  rx="6"
-                  ry="6"
-                  fill="var(--bg-card)"
-                  stroke={stroke()}
-                  stroke-width="1.5"
-                />
-                {/* Status dot */}
-                <circle
-                  cx={node.x + NODE_W - 10}
-                  cy={node.y + 10}
-                  r="4"
-                  fill={dotColor(node.agent)}
-                />
-                {/* Agent name */}
-                <text
-                  x={node.x + 10}
-                  y={node.y + 20}
-                  font-size="11"
-                  font-weight="500"
-                  fill="var(--text-primary)"
-                  font-family="inherit"
-                >
-                  {truncated}
-                </text>
-                <text
-                  x={node.x + 10}
-                  y={node.y + 33}
-                  font-size="9"
-                  fill="var(--text-secondary)"
-                  font-family="inherit"
-                >
-                  {typeLabel}
-                </text>
-                {/* Model name */}
-                <text
-                  x={node.x + 10}
-                  y={node.y + 44}
-                  font-size="10"
-                  fill="var(--text-dim)"
-                  font-family="var(--font-mono)"
-                >
-                  {metaTrunc}
-                </text>
-              </g>
-            );
-          }}
-        </For>
-      </svg>
+  const dotColor = () => {
+    if (a().isActive) return '#22c55e';
+    if (a().eventCount > 0) return '#eab308';
+    return '#52525b';
+  };
+
+  const statusLabel = () => {
+    if (a().isActive) return 'Online';
+    if (a().eventCount > 0) return 'Idle';
+    return 'Done';
+  };
+
+  return (
+    <div
+      style={`padding:10px 14px;cursor:pointer;border-left:3px solid ${isSelected() ? '#3b82f6' : a().isActive ? '#22c55e' : 'transparent'};min-width:200px;`}
+      onClick={() => selectAgent(id())}
+    >
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+        <span style={`width:7px;height:7px;border-radius:50%;background:${dotColor()};flex-shrink:0;${a().isActive ? 'box-shadow:0 0 6px ' + dotColor() : ''}`} />
+        <span style="font-size:12px;font-weight:600;color:#fafafa;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:170px;">
+          {a().displayName}
+        </span>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <span style="font-size:10px;color:#71717a;">
+          {a().eventCount} events
+        </span>
+        <span style={`font-size:10px;font-weight:500;color:${a().isActive ? '#22c55e' : '#71717a'};`}>
+          {statusLabel()}
+        </span>
+      </div>
+      {a().modelName && (
+        <div style="font-size:10px;font-family:monospace;color:#52525b;margin-top:2px;">
+          {a().modelName?.replace('claude-', '')}
+        </div>
+      )}
     </div>
   );
 }

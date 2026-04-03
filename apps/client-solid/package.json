@@ -8,6 +8,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "solid-flow": "1.0.4",
     "solid-heroicons": "3.2.4",
     "solid-js": "^1.9.0"
   },
