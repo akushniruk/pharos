@@ -2,10 +2,9 @@ import { createSignal } from 'solid-js';
 import type { HookEvent, AgentEntry } from './types';
 
 const SERVER_PORT = import.meta.env.VITE_API_PORT || '4000';
-const DEFAULT_HOST =
-  typeof window !== 'undefined' && window.location.hostname
-    ? window.location.hostname
-    : '127.0.0.1';
+const DEFAULT_HOST = resolveApiHost(
+  typeof window !== 'undefined' ? window.location.hostname : undefined,
+);
 const API_BASE =
   import.meta.env.VITE_API_URL || `http://${DEFAULT_HOST}:${SERVER_PORT}`;
 const WS_URL =
@@ -18,6 +17,18 @@ export const [connected, setConnected] = createSignal(false);
 const MAX_EVENTS = 2000;
 
 let ws: WebSocket | null = null;
+
+export function resolveApiHost(hostname?: string): string {
+  const normalized = hostname?.trim().toLowerCase() ?? '';
+  if (!normalized) return '127.0.0.1';
+  if (normalized === 'localhost' || normalized === '::1' || normalized === '[::1]') {
+    return '127.0.0.1';
+  }
+  if (normalized !== 'localhost' && normalized.endsWith('.localhost')) {
+    return '127.0.0.1';
+  }
+  return hostname!;
+}
 
 export function connectWs() {
   if (ws) return;
