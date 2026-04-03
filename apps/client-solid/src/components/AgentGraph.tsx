@@ -14,16 +14,19 @@ export default function AgentGraph() {
   const [pan, setPan] = createSignal({ x: 0, y: 0 });
   const [dragging, setDragging] = createSignal(false);
   const [dragStart, setDragStart] = createSignal({ x: 0, y: 0 });
-  const [showActiveOnly, setShowActiveOnly] = createSignal(false);
+  const [filter, setFilter] = createSignal<'active' | 'idle' | 'all'>('active');
 
   const visibleAgents = createMemo(() => {
     const agents = filteredAgents();
-    if (!showActiveOnly()) return agents;
-    // Always show root + active agents
-    return agents.filter(a => a.agentId === null || a.isActive || a.eventCount > 0);
+    const f = filter();
+    if (f === 'all') return agents;
+    if (f === 'active') return agents.filter(a => a.agentId === null || a.isActive);
+    // idle = not active but has events
+    return agents.filter(a => a.agentId === null || (!a.isActive && a.eventCount > 0));
   });
 
   const activeCount = createMemo(() => filteredAgents().filter(a => a.isActive).length);
+  const idleCount = createMemo(() => filteredAgents().filter(a => !a.isActive && a.eventCount > 0).length);
   const totalCount = createMemo(() => filteredAgents().length);
 
   const layout = createMemo(() => {
@@ -115,18 +118,25 @@ export default function AgentGraph() {
       {/* Top-left: filter controls */}
       <div style="position:absolute;top:12px;left:12px;display:flex;gap:4px;z-index:10;">
         <button
-          onClick={() => setShowActiveOnly(false)}
+          onClick={() => setFilter('active')}
           class="graph-zoom-btn"
-          style={`font-size:10px;width:auto;padding:0 10px;${!showActiveOnly() ? 'background:var(--bg-elevated);color:var(--text-primary);border-color:var(--accent);' : ''}`}
-        >
-          All ({totalCount()})
-        </button>
-        <button
-          onClick={() => setShowActiveOnly(true)}
-          class="graph-zoom-btn"
-          style={`font-size:10px;width:auto;padding:0 10px;${showActiveOnly() ? 'background:var(--green-dim);color:var(--green);border-color:var(--green);' : ''}`}
+          style={`font-size:10px;width:auto;padding:0 10px;${filter() === 'active' ? 'background:var(--green-dim);color:var(--green);border-color:var(--green);' : ''}`}
         >
           Active ({activeCount()})
+        </button>
+        <button
+          onClick={() => setFilter('idle')}
+          class="graph-zoom-btn"
+          style={`font-size:10px;width:auto;padding:0 10px;${filter() === 'idle' ? 'background:var(--yellow-dim);color:var(--yellow);border-color:var(--yellow);' : ''}`}
+        >
+          Idle ({idleCount()})
+        </button>
+        <button
+          onClick={() => setFilter('all')}
+          class="graph-zoom-btn"
+          style={`font-size:10px;width:auto;padding:0 10px;${filter() === 'all' ? 'background:var(--bg-elevated);color:var(--text-primary);border-color:var(--accent);' : ''}`}
+        >
+          All ({totalCount()})
         </button>
       </div>
 
