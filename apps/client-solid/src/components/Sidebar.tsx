@@ -192,12 +192,17 @@ export default function Sidebar(props: SidebarProps) {
             <span style={labelStyle}>Sessions</span>
             <For each={selectedProjectSessions()}>
               {(s) => {
-                const isSelected = () => selectedSession() === s.sessionId;
-                const shortId = s.sessionId.slice(0, 8);
+                const sessionId = () => (s.sessionId && s.sessionId.trim() ? s.sessionId : null);
+                const isSelected = () => selectedSession() === sessionId();
+                const shortId = () => sessionId()?.slice(0, 8) ?? 'pending';
                 const statusIcon = () => (s.isActive ? bolt : clock);
                 return (
                   <div
-                    onClick={() => selectSession(s.sessionId)}
+                    onClick={() => {
+                      if (sessionId()) {
+                        selectSession(sessionId());
+                      }
+                    }}
                     style={[
                       'display:flex;align-items:center;gap:6px;padding:6px 12px;cursor:pointer;',
                       `border-left:2px solid ${isSelected() ? 'var(--accent)' : 'transparent'};`,
@@ -221,7 +226,7 @@ export default function Sidebar(props: SidebarProps) {
                           s.summary,
                           s.runtimeLabel ? `${s.runtimeLabel} runtime` : undefined,
                           `${s.activeAgentCount}/${s.agents.length} agents`,
-                          shortId,
+                          shortId(),
                         ]
                           .filter(Boolean)
                           .join(' · ')}

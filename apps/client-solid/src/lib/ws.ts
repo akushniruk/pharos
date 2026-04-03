@@ -111,8 +111,13 @@ function normalizeSessions(value: unknown) {
     return [];
   }
 
-  return value.map((session: any) => ({
-    sessionId: session.session_id ?? session.sessionId ?? '',
+  return value.map((session: any, index: number) => ({
+    sessionId:
+      session.session_id
+      ?? session.sessionId
+      ?? (typeof session.label === 'string' && session.label.trim()
+        ? `session-${index}-${session.label.trim().toLowerCase().replace(/\s+/g, '-')}`
+        : `session-${index}`),
     label: session.label ?? 'Session',
     runtimeLabel: session.runtime_label ?? session.runtimeLabel ?? undefined,
     summary: session.summary ?? undefined,

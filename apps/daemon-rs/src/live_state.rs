@@ -453,6 +453,10 @@ fn resolve_session_summary(
     events: &[LegacyHookEvent],
     agents: &[AgentSnapshot],
 ) -> Option<String> {
+    if let Some(summary) = latest_assistant_summary(events) {
+        return Some(summary);
+    }
+
     let active_workers: Vec<_> = agents
         .iter()
         .filter(|agent| agent.agent_id.is_some() && agent.is_active)
@@ -474,7 +478,9 @@ fn resolve_session_summary(
     }
 
     let refs: Vec<_> = events.iter().collect();
-    resolve_assignment(&refs).or_else(|| resolve_current_action(events))
+    resolve_assignment(&refs)
+        .or_else(|| resolve_current_action(events))
+        .or_else(|| active_runtime_summary(events))
 }
 
 fn resolve_project_summary(
@@ -510,6 +516,28 @@ fn summarize_agent(agent: &AgentSnapshot) -> Option<String> {
     match action {
         Some(action) => Some(format!("{}: {}", agent.display_name, truncate(&action, 72))),
         None => Some(agent.display_name.clone()),
+    }
+}
+
+fn latest_assistant_summary(events: &[LegacyHookEvent]) -> Option<String> {
+    events
+        .iter()
+        .rev()
+        .find(|event| event.hook_event_type == "AssistantResponse")
+        .and_then(|event| payload_string(&event.payload, "text"))
+        .map(|text| format!("Responded: {}", truncate(&text, 96)))
+}
+
+fn active_runtime_summary(events: &[LegacyHookEvent]) -> Option<String> {
+    let latest = events.iter().rev().find(|event| event.hook_event_type == "SessionStart")?;
+    let runtime = payload_string(&latest.payload, "runtime_label")
+        .or_else(|| payload_string(&latest.payload, "runtime_source"))
+        .unwrap_or_else(|| "Agent".to_string());
+    let cwd = payload_string(&latest.payload, "cwd")
+        .and_then(|value| workspace_name_from_cwd(&value));
+    match cwd {
+        Some(workspace) => Some(format!("{runtime} active in {workspace}")),
+        None => Some(format!("{runtime} active")),
     }
 }
 
