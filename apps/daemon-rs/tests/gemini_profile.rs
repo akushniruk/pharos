@@ -1,6 +1,8 @@
 use pharos_daemon::model::RuntimeSource;
-use pharos_daemon::profiles::gemini::{enrich_detected_sessions, GeminiProfile};
 use pharos_daemon::profiles::DetectedSession;
+use pharos_daemon::profiles::gemini::{
+    GeminiProfile, GeminiSessionEvent, enrich_detected_sessions,
+};
 use tempfile::tempdir;
 
 #[test]
@@ -34,7 +36,10 @@ fn gemini_profile_discovers_native_sessions_from_logs() {
     assert_eq!(sessions.len(), 1);
     assert_eq!(sessions[0].native_session_id, "gem-a");
     assert_eq!(sessions[0].workspace_hint.as_deref(), Some("pharos"));
-    assert_eq!(sessions[0].title.as_deref(), Some("review the pharos solid app"));
+    assert_eq!(
+        sessions[0].title.as_deref(),
+        Some("review the pharos solid app")
+    );
     assert!(sessions[0].updated_at_ms > 0);
 }
 
@@ -59,6 +64,7 @@ fn gemini_native_session_enrichment_uses_workspace_hint() {
         title: Some("review the pharos solid app".to_string()),
         updated_at_ms: 1_711_234_579_000,
         workspace_hint: Some("pharos".to_string()),
+        logs_path: std::path::PathBuf::from("/tmp/pharos/logs.json"),
     }];
 
     enrich_detected_sessions(&mut sessions, &native_sessions);
@@ -67,4 +73,96 @@ fn gemini_native_session_enrichment_uses_workspace_hint() {
         sessions[0].display_title.as_deref(),
         Some("review the pharos solid app")
     );
+}
+
+#[test]
+fn gemini_profile_parses_supported_live_records_from_logs_json() {
+    let temp_dir = tempdir().expect("tempdir");
+    let logs_dir = temp_dir.path().join("tmp").join("pharos");
+    std::fs::create_dir_all(&logs_dir).expect("logs dir");
+    std::fs::write(
+        logs_dir.join("logs.json"),
+        r#"[
+          {
+            "sessionId": "gem-live",
+            "type": "user",
+            "message": {
+              "role": "user",
+              "content": "build the feature"
+            },
+            "timestamp": "2026-04-03T11:35:03.467Z"
+          },
+          {
+            "sessionId": "gem-live",
+            "type": "assistant",
+            "message": {
+              "role": "assistant",
+              "content": [
+                { "type": "text", "text": "Working on it" }
+              ]
+            },
+            "timestamp": "2026-04-03T11:35:04.467Z"
+          },
+          {
+            "sessionId": "gem-live",
+            "type": "assistant",
+            "message": {
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "tool_use",
+                  "id": "tool-1",
+                  "name": "shell",
+                  "input": { "command": "cargo test" }
+                }
+              ]
+            },
+            "timestamp": "2026-04-03T11:35:05.467Z"
+          },
+          {
+            "sessionId": "gem-live",
+            "type": "user",
+            "message": {
+              "role": "user",
+              "content": [
+                {
+                  "type": "tool_result",
+                  "tool_use_id": "tool-1",
+                  "content": "ok",
+                  "is_error": false
+                }
+              ]
+            },
+            "timestamp": "2026-04-03T11:35:06.467Z"
+          },
+          {
+            "sessionId": "gem-live",
+            "type": "queue-operation",
+            "message": { "role": "system", "content": "ignore me" },
+            "timestamp": "2026-04-03T11:35:07.467Z"
+          }
+        ]"#,
+    )
+    .expect("write logs");
+
+    let profile = GeminiProfile::new(temp_dir.path().to_path_buf());
+    let events = profile.read_live_events(&logs_dir.join("logs.json"), 0);
+
+    assert_eq!(events.len(), 4);
+    assert!(matches!(
+        events[0].event,
+        GeminiSessionEvent::UserPrompt { .. }
+    ));
+    assert!(matches!(
+        events[1].event,
+        GeminiSessionEvent::AssistantText { .. }
+    ));
+    assert!(matches!(
+        events[2].event,
+        GeminiSessionEvent::ToolUse { .. }
+    ));
+    assert!(matches!(
+        events[3].event,
+        GeminiSessionEvent::ToolResult { .. }
+    ));
 }

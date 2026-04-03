@@ -1,6 +1,7 @@
 use pharos_daemon::envelope::{codex_event_to_envelope, transcript_event_to_envelope};
 use pharos_daemon::model::{AcquisitionMode, EventKind, RuntimeSource};
 use pharos_daemon::profiles::codex::CodexSessionEvent;
+use pharos_daemon::profiles::gemini::GeminiSessionEvent;
 use pharos_daemon::tailer::TranscriptEvent;
 use serde_json::json;
 
@@ -194,4 +195,87 @@ fn converts_codex_spawn_agent_to_subagent_start_envelope() {
     assert_eq!(envelope.payload["agent_name"], "Explorer");
     assert_eq!(envelope.payload["description"], "inspect the daemon");
     assert_eq!(envelope.payload["parent_agent_id"], "main");
+}
+
+#[test]
+fn converts_gemini_user_prompt_to_envelope() {
+    let event = GeminiSessionEvent::UserPrompt {
+        text: "build the feature".to_string(),
+    };
+
+    let envelope = pharos_daemon::envelope::gemini_event_to_envelope(
+        &event,
+        "pharos",
+        "gem-live",
+        1_711_234_567_000,
+    );
+
+    assert_eq!(envelope.runtime_source, RuntimeSource::GeminiCli);
+    assert_eq!(envelope.event_kind, EventKind::UserPromptSubmitted);
+    assert_eq!(envelope.title, "user prompt");
+    assert_eq!(envelope.payload["prompt"], "build the feature");
+}
+
+#[test]
+fn converts_gemini_assistant_text_to_envelope() {
+    let event = GeminiSessionEvent::AssistantText {
+        text: "Working on it".to_string(),
+    };
+
+    let envelope = pharos_daemon::envelope::gemini_event_to_envelope(
+        &event,
+        "pharos",
+        "gem-live",
+        1_711_234_567_000,
+    );
+
+    assert_eq!(envelope.runtime_source, RuntimeSource::GeminiCli);
+    assert_eq!(envelope.event_kind, EventKind::AssistantResponse);
+    assert_eq!(envelope.title, "assistant response");
+    assert_eq!(envelope.payload["text"], "Working on it");
+}
+
+#[test]
+fn converts_gemini_tool_use_to_envelope() {
+    let event = GeminiSessionEvent::ToolUse {
+        tool_name: "shell".to_string(),
+        tool_use_id: "tool-1".to_string(),
+        input: json!({"command": "cargo test"}),
+    };
+
+    let envelope = pharos_daemon::envelope::gemini_event_to_envelope(
+        &event,
+        "pharos",
+        "gem-live",
+        1_711_234_567_000,
+    );
+
+    assert_eq!(envelope.runtime_source, RuntimeSource::GeminiCli);
+    assert_eq!(envelope.event_kind, EventKind::ToolCallStarted);
+    assert_eq!(envelope.title, "tool call started: shell");
+    assert_eq!(envelope.payload["tool_name"], "shell");
+    assert_eq!(envelope.payload["tool_use_id"], "tool-1");
+}
+
+#[test]
+fn converts_gemini_tool_result_to_envelope() {
+    let event = GeminiSessionEvent::ToolResult {
+        tool_use_id: "tool-1".to_string(),
+        tool_name: Some("shell".to_string()),
+        is_error: false,
+        content: "ok".to_string(),
+    };
+
+    let envelope = pharos_daemon::envelope::gemini_event_to_envelope(
+        &event,
+        "pharos",
+        "gem-live",
+        1_711_234_567_000,
+    );
+
+    assert_eq!(envelope.runtime_source, RuntimeSource::GeminiCli);
+    assert_eq!(envelope.event_kind, EventKind::ToolCallCompleted);
+    assert_eq!(envelope.title, "tool call completed: shell");
+    assert_eq!(envelope.payload["tool_name"], "shell");
+    assert_eq!(envelope.payload["tool_use_id"], "tool-1");
 }

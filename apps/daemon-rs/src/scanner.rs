@@ -9,15 +9,13 @@ use tokio::time::interval;
 
 use crate::api::OutboundWsMessage;
 use crate::envelope::{codex_event_to_envelope, transcript_event_to_envelope};
-use crate::live_state::{should_broadcast_registry, LiveState};
+use crate::live_state::{LiveState, should_broadcast_registry};
 use crate::model::{
     AcquisitionMode, CapabilitySet, EventEnvelope, EventKind, RuntimeSource, SessionRef,
 };
 use crate::profiles::{
-    claude::ClaudeProfile,
-    codex::CodexProfile,
-    discover_all_sessions,
-    DiscoveryOptions,
+    DiscoveryOptions, claude::ClaudeProfile, codex::CodexProfile, discover_all_sessions,
+    gemini::GeminiProfile,
 };
 use crate::store::Store;
 use crate::tailer::parse_jsonl_line;
@@ -37,6 +35,8 @@ struct TrackedSession {
     codex_log_offset: i64,
     codex_next_poll_at_ms: i64,
     recent_codex_signatures: Vec<String>,
+    gemini_log_offset: usize,
+    recent_gemini_signatures: Vec<String>,
     known_subagents: Vec<TrackedSubagent>,
     /// Maps tool_use_id → tool_name so ToolResult events can inherit the tool name.
     tool_name_map: HashMap<String, String>,
@@ -57,6 +57,10 @@ pub async fn run_scanner(
     let claude_home = discovery_options.claude_home.clone();
     let claude_profile = claude_home.clone().map(ClaudeProfile::new);
     let codex_profile = discovery_options.codex_home.clone().map(CodexProfile::new);
+    let gemini_profile = discovery_options
+        .gemini_home
+        .clone()
+        .map(GeminiProfile::new);
     let mut tracked: HashMap<String, TrackedSession> = HashMap::new();
     let mut tick = interval(Duration::from_secs(1));
     let mut ticks_since_discovery = usize::MAX;
@@ -96,11 +100,11 @@ pub async fn run_scanner(
                                 payload: json!({ "title": title }),
                             };
 
-                        let _ = store.insert_event(&envelope);
-                        broadcast_envelope(&live_state, &sender, &envelope);
+                            let _ = store.insert_event(&envelope);
+                            broadcast_envelope(&live_state, &sender, &envelope);
+                        }
                     }
-                }
-                existing.session = session;
+                    existing.session = session;
                     continue;
                 }
                 let session_id = session.session_id.clone();
@@ -129,8 +133,8 @@ pub async fn run_scanner(
                     }),
                 };
 
-            let _ = store.insert_event(&envelope);
-            broadcast_envelope(&live_state, &sender, &envelope);
+                let _ = store.insert_event(&envelope);
+                broadcast_envelope(&live_state, &sender, &envelope);
 
                 tracked.insert(
                     session_id,
@@ -142,6 +146,8 @@ pub async fn run_scanner(
                         codex_log_offset: 0,
                         codex_next_poll_at_ms: 0,
                         recent_codex_signatures: Vec::new(),
+                        gemini_log_offset: 0,
+                        recent_gemini_signatures: Vec::new(),
                         known_subagents: Vec::new(),
                         tool_name_map: HashMap::new(),
                     },
@@ -185,20 +191,17 @@ pub async fn run_scanner(
                         payload: json!({}),
                     };
 
-                let _ = store.insert_event(&envelope);
-                broadcast_envelope(&live_state, &sender, &envelope);
+                    let _ = store.insert_event(&envelope);
+                    broadcast_envelope(&live_state, &sender, &envelope);
+                }
             }
-        }
 
             // Re-resolve paths for tracked sessions that are missing transcript/subagent paths.
             // This handles the case where the session file appears before the JSONL transcript.
             for (_, ts) in &mut tracked {
                 if ts.session.transcript_path.is_none() {
                     let new_path = claude_profile.as_ref().and_then(|profile| {
-                        profile.resolve_transcript_path(
-                            &ts.session.cwd,
-                            &ts.session.session_id,
-                        )
+                        profile.resolve_transcript_path(&ts.session.cwd, &ts.session.session_id)
                     });
                     if new_path.is_some() {
                         ts.session.subagents_dir = new_path.as_ref().and_then(|tp| {
@@ -225,6 +228,11 @@ pub async fn run_scanner(
                             tail_codex_activity(ts, profile, &store, &live_state, &sender);
                         }
                     }
+                    RuntimeSource::GeminiCli => {
+                        if let Some(profile) = gemini_profile.as_ref() {
+                            tail_gemini_activity(ts, profile, &store, &live_state, &sender);
+                        }
+                    }
                     _ => {}
                 }
             }
@@ -236,14 +244,16 @@ pub async fn run_scanner(
 mod tests {
     use std::collections::HashMap;
 
+    use crate::live_state::LiveState;
     use crate::model::RuntimeSource;
-    use crate::profiles::{codex::CodexSessionEvent, DetectedSession};
+    use crate::profiles::{DetectedSession, codex::CodexSessionEvent, gemini::GeminiProfile};
+    use crate::store::Store;
+    use tempfile::tempdir;
+    use tokio::sync::broadcast;
 
     use super::{
-        codex_signature,
-        remember_codex_signature,
-        should_remove_after_missed_discovery,
-        TrackedSession,
+        TrackedSession, codex_signature, gemini_signature, remember_codex_signature,
+        remember_gemini_signature, should_remove_after_missed_discovery, tail_gemini_activity,
     };
 
     #[test]
@@ -277,6 +287,8 @@ mod tests {
             codex_log_offset: 0,
             codex_next_poll_at_ms: 0,
             recent_codex_signatures: Vec::new(),
+            gemini_log_offset: 0,
+            recent_gemini_signatures: Vec::new(),
             known_subagents: Vec::new(),
             tool_name_map: HashMap::new(),
         };
@@ -289,7 +301,10 @@ mod tests {
 
         assert!(remember_codex_signature(&mut tracked, &event));
         assert!(!remember_codex_signature(&mut tracked, &event));
-        assert_eq!(codex_signature(&event), "tool_use:turn-1:exec_command:{\"cmd\":\"pwd\"}");
+        assert_eq!(
+            codex_signature(&event),
+            "tool_use:turn-1:exec_command:{\"cmd\":\"pwd\"}"
+        );
     }
 
     #[test]
@@ -314,6 +329,8 @@ mod tests {
             codex_log_offset: 0,
             codex_next_poll_at_ms: 0,
             recent_codex_signatures: Vec::new(),
+            gemini_log_offset: 0,
+            recent_gemini_signatures: Vec::new(),
             known_subagents: Vec::new(),
             tool_name_map: HashMap::new(),
         };
@@ -327,6 +344,130 @@ mod tests {
 
         assert!(remember_codex_signature(&mut tracked, &history_event));
         assert!(!remember_codex_signature(&mut tracked, &live_event));
+    }
+
+    #[test]
+    fn gemini_scanner_tails_logs_json_once() {
+        let temp = tempdir().expect("tempdir");
+        let logs_dir = temp.path().join("tmp").join("pharos");
+        std::fs::create_dir_all(&logs_dir).expect("logs dir");
+        std::fs::write(
+            logs_dir.join("logs.json"),
+            r#"[
+              {
+                "sessionId": "gem-live",
+                "type": "user",
+                "message": { "role": "user", "content": "build the feature" },
+                "timestamp": "2026-04-03T11:35:03.467Z"
+              },
+              {
+                "sessionId": "gem-live",
+                "type": "assistant",
+                "message": {
+                  "role": "assistant",
+                  "content": [
+                    { "type": "text", "text": "Working on it" },
+                    {
+                      "type": "tool_use",
+                      "id": "tool-1",
+                      "name": "shell",
+                      "input": { "command": "cargo test" }
+                    }
+                  ]
+                },
+                "timestamp": "2026-04-03T11:35:04.467Z"
+              },
+              {
+                "sessionId": "gem-live",
+                "type": "user",
+                "message": {
+                  "role": "user",
+                  "content": [
+                    {
+                      "type": "tool_result",
+                      "tool_use_id": "tool-1",
+                      "content": "ok",
+                      "is_error": false
+                    }
+                  ]
+                },
+                "timestamp": "2026-04-03T11:35:05.467Z"
+              },
+              {
+                "sessionId": "gem-live",
+                "type": "queue-operation",
+                "message": { "role": "system", "content": "ignore me" },
+                "timestamp": "2026-04-03T11:35:06.467Z"
+              }
+            ]"#,
+        )
+        .expect("write logs");
+
+        let mut tracked = TrackedSession {
+            session: DetectedSession {
+                runtime_source: RuntimeSource::GeminiCli,
+                session_id: "gem-live".to_string(),
+                native_session_id: Some("gem-live".to_string()),
+                pid: Some(42),
+                cwd: "/Users/tester/workspace/pharos".to_string(),
+                started_at_ms: 0,
+                entrypoint: "gemini".to_string(),
+                display_title: None,
+                history_path: Some(logs_dir.join("logs.json")),
+                transcript_path: None,
+                subagents_dir: None,
+            },
+            missed_discovery_cycles: 0,
+            file_offset: 0,
+            codex_item_offset: 0,
+            codex_log_offset: 0,
+            codex_next_poll_at_ms: 0,
+            recent_codex_signatures: Vec::new(),
+            gemini_log_offset: 0,
+            recent_gemini_signatures: Vec::new(),
+            known_subagents: Vec::new(),
+            tool_name_map: HashMap::new(),
+        };
+
+        let profile = GeminiProfile::new(temp.path().to_path_buf());
+        let store = Store::open_in_memory().expect("store");
+        let live_state = LiveState::default();
+        let (sender, _receiver) = broadcast::channel(8);
+
+        tail_gemini_activity(&mut tracked, &profile, &store, &live_state, &sender);
+        tail_gemini_activity(&mut tracked, &profile, &store, &live_state, &sender);
+
+        let events = store.list_events().expect("events");
+        assert_eq!(events.len(), 4);
+        assert_eq!(
+            events[0].event_kind,
+            crate::model::EventKind::UserPromptSubmitted
+        );
+        assert_eq!(
+            events[1].event_kind,
+            crate::model::EventKind::AssistantResponse
+        );
+        assert_eq!(
+            events[2].event_kind,
+            crate::model::EventKind::ToolCallStarted
+        );
+        assert_eq!(
+            events[3].event_kind,
+            crate::model::EventKind::ToolCallCompleted
+        );
+        assert_eq!(tracked.gemini_log_offset, 3);
+        assert_eq!(
+            gemini_signature(&crate::profiles::gemini::GeminiSessionEvent::UserPrompt {
+                text: "build the feature".to_string(),
+            }),
+            "prompt:build the feature"
+        );
+        assert!(!remember_gemini_signature(
+            &mut tracked,
+            &crate::profiles::gemini::GeminiSessionEvent::UserPrompt {
+                text: "build the feature".to_string(),
+            }
+        ));
     }
 }
 
@@ -347,12 +488,8 @@ fn tail_codex_activity(
                 if !remember_codex_signature(ts, event) {
                     continue;
                 }
-                let envelope = codex_event_to_envelope(
-                    event,
-                    &workspace_id,
-                    &ts.session.session_id,
-                    now_ms,
-                );
+                let envelope =
+                    codex_event_to_envelope(event, &workspace_id, &ts.session.session_id, now_ms);
                 let _ = store.insert_event(&envelope);
                 broadcast_envelope(live_state, sender, &envelope);
             }
@@ -393,6 +530,45 @@ fn tail_codex_activity(
     };
 }
 
+fn tail_gemini_activity(
+    ts: &mut TrackedSession,
+    profile: &GeminiProfile,
+    store: &Store,
+    live_state: &LiveState,
+    sender: &broadcast::Sender<OutboundWsMessage>,
+) {
+    let now_ms = now_millis();
+    let workspace_id = workspace_id_from_cwd(&ts.session.cwd);
+
+    let Some(logs_path) = ts.session.history_path.as_ref() else {
+        return;
+    };
+
+    let events = profile.read_live_events(logs_path, ts.gemini_log_offset);
+    for live_event in &events {
+        if !remember_gemini_signature(ts, &live_event.event) {
+            continue;
+        }
+
+        let envelope = crate::envelope::gemini_event_to_envelope(
+            &live_event.event,
+            &workspace_id,
+            &ts.session.session_id,
+            if live_event.occurred_at_ms > 0 {
+                live_event.occurred_at_ms
+            } else {
+                now_ms
+            },
+        );
+        let _ = store.insert_event(&envelope);
+        broadcast_envelope(live_state, sender, &envelope);
+    }
+
+    if let Some(last) = events.last() {
+        ts.gemini_log_offset = last.row_id;
+    }
+}
+
 const MAX_CODEX_SIGNATURES: usize = 256;
 
 fn remember_codex_signature(
@@ -408,6 +584,48 @@ fn remember_codex_signature(
         session.recent_codex_signatures.remove(0);
     }
     true
+}
+
+const MAX_GEMINI_SIGNATURES: usize = 256;
+
+fn remember_gemini_signature(
+    session: &mut TrackedSession,
+    event: &crate::profiles::gemini::GeminiSessionEvent,
+) -> bool {
+    let signature = gemini_signature(event);
+    if session.recent_gemini_signatures.contains(&signature) {
+        return false;
+    }
+    session.recent_gemini_signatures.push(signature);
+    if session.recent_gemini_signatures.len() > MAX_GEMINI_SIGNATURES {
+        session.recent_gemini_signatures.remove(0);
+    }
+    true
+}
+
+fn gemini_signature(event: &crate::profiles::gemini::GeminiSessionEvent) -> String {
+    match event {
+        crate::profiles::gemini::GeminiSessionEvent::UserPrompt { text } => {
+            format!("prompt:{text}")
+        }
+        crate::profiles::gemini::GeminiSessionEvent::AssistantText { text } => {
+            format!("assistant:{text}")
+        }
+        crate::profiles::gemini::GeminiSessionEvent::ToolUse {
+            tool_name,
+            tool_use_id,
+            input,
+        } => format!("tool_use:{tool_use_id}:{tool_name}:{input}"),
+        crate::profiles::gemini::GeminiSessionEvent::ToolResult {
+            tool_use_id,
+            tool_name,
+            is_error,
+            content,
+        } => format!(
+            "tool_result:{tool_use_id}:{}:{is_error}:{content}",
+            tool_name.clone().unwrap_or_default()
+        ),
+    }
 }
 
 fn codex_signature(event: &crate::profiles::codex::CodexSessionEvent) -> String {
@@ -483,11 +701,22 @@ fn tail_transcript(
                 }
                 for mut te in parse_jsonl_line(trimmed) {
                     // Track tool_use_id → tool_name from ToolUse events
-                    if let crate::tailer::TranscriptEvent::ToolUse { ref tool_name, ref tool_use_id, .. } = te.event {
-                        ts.tool_name_map.insert(tool_use_id.clone(), tool_name.clone());
+                    if let crate::tailer::TranscriptEvent::ToolUse {
+                        ref tool_name,
+                        ref tool_use_id,
+                        ..
+                    } = te.event
+                    {
+                        ts.tool_name_map
+                            .insert(tool_use_id.clone(), tool_name.clone());
                     }
                     // Enrich ToolResult with tool_name from the map
-                    if let crate::tailer::TranscriptEvent::ToolResult { ref tool_use_id, ref mut tool_name, .. } = te.event {
+                    if let crate::tailer::TranscriptEvent::ToolResult {
+                        ref tool_use_id,
+                        ref mut tool_name,
+                        ..
+                    } = te.event
+                    {
                         if tool_name.is_none() {
                             *tool_name = ts.tool_name_map.get(tool_use_id).cloned();
                         }
@@ -628,10 +857,22 @@ fn scan_subagents(
                     }
                     for mut te in parse_jsonl_line(trimmed) {
                         // Track tool names for this subagent
-                        if let crate::tailer::TranscriptEvent::ToolUse { ref tool_name, ref tool_use_id, .. } = te.event {
-                            subagent.tool_name_map.insert(tool_use_id.clone(), tool_name.clone());
+                        if let crate::tailer::TranscriptEvent::ToolUse {
+                            ref tool_name,
+                            ref tool_use_id,
+                            ..
+                        } = te.event
+                        {
+                            subagent
+                                .tool_name_map
+                                .insert(tool_use_id.clone(), tool_name.clone());
                         }
-                        if let crate::tailer::TranscriptEvent::ToolResult { ref tool_use_id, ref mut tool_name, .. } = te.event {
+                        if let crate::tailer::TranscriptEvent::ToolResult {
+                            ref tool_use_id,
+                            ref mut tool_name,
+                            ..
+                        } = te.event
+                        {
                             if tool_name.is_none() {
                                 *tool_name = subagent.tool_name_map.get(tool_use_id).cloned();
                             }
@@ -692,7 +933,6 @@ fn broadcast_envelope(
         payload: registry_payload,
     });
 }
-
 
 fn workspace_id_from_cwd(cwd: &str) -> String {
     std::path::Path::new(cwd)
