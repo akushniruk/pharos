@@ -10,9 +10,9 @@ use tokio::time::interval;
 use crate::api::OutboundWsMessage;
 use crate::envelope::transcript_event_to_envelope;
 use crate::model::{
-    AcquisitionMode, CapabilitySet, EventEnvelope, EventKind, RuntimeSource, SessionRef,
+    AcquisitionMode, CapabilitySet, EventEnvelope, EventKind, SessionRef,
 };
-use crate::profiles::claude::ClaudeProfile;
+use crate::profiles::{claude::ClaudeProfile, discover_all_sessions};
 use crate::store::{legacy_event_from_envelope, Store};
 use crate::tailer::parse_jsonl_line;
 
@@ -37,14 +37,14 @@ pub async fn run_scanner(
     sender: broadcast::Sender<OutboundWsMessage>,
     claude_home: PathBuf,
 ) {
-    let profile = ClaudeProfile::new(claude_home);
+    let profile = ClaudeProfile::new(claude_home.clone());
     let mut tracked: HashMap<String, TrackedSession> = HashMap::new();
     let mut tick = interval(Duration::from_secs(2));
 
     loop {
         tick.tick().await;
 
-        let current_sessions = profile.discover_sessions();
+        let current_sessions = discover_all_sessions(Some(claude_home.clone()));
         let current_ids: Vec<String> = current_sessions
             .iter()
             .map(|s| s.session_id.clone())
@@ -60,7 +60,7 @@ pub async fn run_scanner(
             let now_ms = now_millis();
 
             let envelope = EventEnvelope {
-                runtime_source: RuntimeSource::ClaudeCode,
+                runtime_source: session.runtime_source.clone(),
                 acquisition_mode: AcquisitionMode::Observed,
                 event_kind: EventKind::SessionStarted,
                 session: SessionRef {
@@ -73,6 +73,7 @@ pub async fn run_scanner(
                 capabilities: observed_capabilities(),
                 title: "session started".to_string(),
                 payload: json!({
+                    "runtime_source": format!("{:?}", session.runtime_source),
                     "pid": session.pid,
                     "cwd": session.cwd,
                     "entrypoint": session.entrypoint,
@@ -107,7 +108,7 @@ pub async fn run_scanner(
                 let now_ms = now_millis();
 
                 let envelope = EventEnvelope {
-                    runtime_source: RuntimeSource::ClaudeCode,
+                    runtime_source: ts.session.runtime_source.clone(),
                     acquisition_mode: AcquisitionMode::Observed,
                     event_kind: EventKind::SessionEnded,
                     session: SessionRef {
@@ -205,7 +206,7 @@ fn tail_transcript(
 
                     let envelope = transcript_event_to_envelope(
                         &te.event,
-                        RuntimeSource::ClaudeCode,
+                        ts.session.runtime_source.clone(),
                         &workspace_id,
                         &ts.session.session_id,
                         None,
@@ -277,7 +278,7 @@ fn scan_subagents(
             .to_string();
 
         let envelope = EventEnvelope {
-            runtime_source: RuntimeSource::ClaudeCode,
+            runtime_source: ts.session.runtime_source.clone(),
             acquisition_mode: AcquisitionMode::Observed,
             event_kind: EventKind::SubagentStarted,
             session: SessionRef {
@@ -347,7 +348,7 @@ fn scan_subagents(
                         let event_time = te.timestamp_ms.unwrap_or(now_ms);
                         let envelope = transcript_event_to_envelope(
                             &te.event,
-                            RuntimeSource::ClaudeCode,
+                            ts.session.runtime_source.clone(),
                             &workspace_id,
                             &ts.session.session_id,
                             Some(&subagent.agent_id),

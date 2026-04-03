@@ -23,6 +23,7 @@ dist/
 # Logs
 logs/
 *.log
+.run/
 
 # Env
 .env

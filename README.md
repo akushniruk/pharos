@@ -8,7 +8,21 @@ Real-time observability for AI coding agents. See what Claude, Codex, and other 
 AI Agent (Claude, Codex, ...) → writes native files → Pharos reads them → live dashboard
 ```
 
-Pharos scans `~/.claude/sessions/` for active sessions, tails JSONL transcripts, and streams events to a real-time dashboard. No hooks to install, no project mutation, no dependencies in your project.
+Pharos uses a mixed observation model:
+
+- Claude: native session files plus JSONL transcript tailing for rich event visibility
+- Other agent CLIs: process-based live session detection for supported runtimes and unknown agent-like tools
+
+Today, first-pass process detection covers:
+
+- Codex / Codex CLI
+- Gemini CLI
+- OpenCode
+- Pi / Pi CLI
+- Aider
+- unknown agent-like CLIs detected from process-name heuristics
+
+No hooks to install, no project mutation, no dependencies in your project.
 
 ## Quick Start
 
@@ -19,7 +33,7 @@ make up
 # Open http://localhost:5173
 ```
 
-That's it. Start Claude in any folder — Pharos detects it automatically.
+That's it. Start Claude, Codex, Gemini, OpenCode, Pi, Aider, or another agent-like CLI in any folder — Pharos detects what it can automatically.
 
 Stop everything:
 
@@ -46,6 +60,7 @@ Single binary — daemon + dashboard in one window.
 ## What You See
 
 - **Live sessions** — detected the moment an agent starts
+- **Multi-runtime observation** — Claude plus supported non-Claude agent CLIs
 - **User prompts** — every message you send
 - **Tool calls** — Bash, Read, Write, Edit, Grep, Agent, etc.
 - **Tool results** — success/failure with output

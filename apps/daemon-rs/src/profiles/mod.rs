@@ -1,4 +1,5 @@
 pub mod claude;
+pub mod process;
 
 use std::path::PathBuf;
 
@@ -15,4 +16,15 @@ pub struct DetectedSession {
     pub entrypoint: String,
     pub transcript_path: Option<PathBuf>,
     pub subagents_dir: Option<PathBuf>,
+}
+
+pub fn discover_all_sessions(claude_home: Option<PathBuf>) -> Vec<DetectedSession> {
+    let mut sessions = Vec::new();
+
+    if let Some(claude_home) = claude_home {
+        sessions.extend(claude::ClaudeProfile::new(claude_home).discover_sessions());
+    }
+
+    sessions.extend(process::ProcessProfile::new().discover_sessions());
+    sessions
 }
