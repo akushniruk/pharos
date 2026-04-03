@@ -158,6 +158,46 @@ fn codex_session_items_parse_into_user_tool_and_assistant_events() {
 }
 
 #[test]
+fn codex_session_items_parse_structured_successful_tool_output() {
+    let items = serde_json::from_str::<Vec<serde_json::Value>>(
+        r#"[
+          {
+            "type": "function_call",
+            "status": "completed",
+            "arguments": "{\"command\":[\"cat\",\"package.json\"]}",
+            "call_id": "call_2",
+            "name": "shell"
+          },
+          {
+            "type": "function_call_output",
+            "call_id": "call_2",
+            "output": "{\"output\":[{\"type\":\"output_text\",\"text\":\"{\\\"name\\\":\\\"client\\\"}\"}],\"metadata\":{\"exit_code\":0,\"duration_seconds\":0.12}}"
+          }
+        ]"#,
+    )
+    .expect("items");
+
+    let events = parse_codex_items(&items);
+
+    assert_eq!(
+        events,
+        vec![
+            CodexSessionEvent::ToolUse {
+                tool_name: "shell".to_string(),
+                tool_use_id: "call_2".to_string(),
+                input: serde_json::json!({"command": ["cat", "package.json"]}),
+            },
+            CodexSessionEvent::ToolResult {
+                tool_use_id: "call_2".to_string(),
+                tool_name: Some("shell".to_string()),
+                is_error: false,
+                content: "{\"name\":\"client\"}".to_string(),
+            },
+        ]
+    );
+}
+
+#[test]
 fn codex_live_log_body_parses_tool_use_and_workdir() {
     let temp_dir = tempdir().expect("tempdir");
     let profile = CodexProfile::new(temp_dir.path().to_path_buf());

@@ -439,14 +439,8 @@ pub fn parse_codex_items(items: &[Value]) -> Vec<CodexSessionEvent> {
                     .is_some_and(|exit_code| exit_code != 0);
                 let content = parsed_output
                     .as_ref()
-                    .and_then(|output| output.get("output"))
-                    .and_then(Value::as_str)
-                    .map(ToString::to_string)
-                    .or_else(|| {
-                        item.get("output")
-                            .and_then(Value::as_str)
-                            .map(ToString::to_string)
-                    })
+                    .and_then(extract_codex_tool_result_content)
+                    .or_else(|| item.get("output").and_then(Value::as_str).map(ToString::to_string))
                     .unwrap_or_default();
                 events.push(CodexSessionEvent::ToolResult {
                     tool_use_id: tool_use_id.to_string(),
@@ -766,6 +760,45 @@ fn normalize_stream_output_text(value: &str) -> String {
         .replace("\\n", "\n")
         .replace("\\r", "\r")
         .replace("\\t", "\t")
+}
+
+fn extract_codex_tool_result_content(value: &Value) -> Option<String> {
+    match value {
+        Value::String(text) => {
+            if text.trim().is_empty() {
+                None
+            } else {
+                Some(text.to_string())
+            }
+        }
+        Value::Array(values) => {
+            let parts = values
+                .iter()
+                .filter_map(extract_codex_tool_result_content)
+                .collect::<Vec<_>>();
+            if parts.is_empty() {
+                None
+            } else {
+                Some(parts.join("\n"))
+            }
+        }
+        Value::Object(map) => {
+            if let Some(content) = map.get("output").and_then(extract_codex_tool_result_content) {
+                return Some(content);
+            }
+            if let Some(content) = map.get("content").and_then(extract_codex_tool_result_content) {
+                return Some(content);
+            }
+            map.get("text").and_then(Value::as_str).and_then(|text| {
+                if text.trim().is_empty() {
+                    None
+                } else {
+                    Some(text.to_string())
+                }
+            })
+        }
+        _ => None,
+    }
 }
 
 fn parse_spawn_agent_event(input: &Value, tool_use_id: &str) -> CodexSessionEvent {
