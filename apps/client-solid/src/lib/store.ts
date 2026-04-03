@@ -168,9 +168,21 @@ export const selectedProjectSnapshot = createMemo((): Project | null => {
 });
 
 export const selectedSessionSnapshot = createMemo((): SessionInfo | null => {
-  const sessionId = selectedSession();
   const project = selectedProjectSnapshot();
-  if (!sessionId || !project) return null;
+  if (!project) return null;
+
+  const agentId = selectedAgent();
+  if (agentId) {
+    const agentSession = project.sessions.find((session) =>
+      session.agents.some((agent) => (agent.agentId || MAIN_AGENT_KEY) === agentId),
+    );
+    if (agentSession) {
+      return agentSession;
+    }
+  }
+
+  const sessionId = selectedSession();
+  if (!sessionId) return null;
   return project.sessions.find((session) => session.sessionId === sessionId) ?? null;
 });
 
@@ -186,6 +198,46 @@ export const selectedAgentSnapshot = createMemo((): AgentInfo | null => {
   return project.sessions
     .flatMap((session) => session.agents)
     .find((agent) => (agent.agentId || MAIN_AGENT_KEY) === agentId) ?? null;
+});
+
+type AgentStatusTone = 'active' | 'idle' | 'muted';
+
+interface SelectedAgentDetailSnapshot {
+  agent: AgentInfo;
+  session: SessionInfo | null;
+  projectName: string | null;
+  runtimeLabel: string;
+  statusLabel: string;
+  statusTone: AgentStatusTone;
+  assignmentLabel: string;
+  currentActionLabel: string;
+  lastUsefulResultLabel: string;
+  lastUsefulResultAt: number | null;
+  recentEvents: HookEvent[];
+}
+
+export const selectedAgentDetailSnapshot = createMemo((): SelectedAgentDetailSnapshot | null => {
+  const agent = selectedAgentSnapshot();
+  if (!agent) return null;
+
+  const session = selectedSessionSnapshot();
+  const project = selectedProjectSnapshot();
+  const scopedEvents = selectedAgentEvents(session, project, agent.agentId);
+  const lastUsefulResult = resolveLastUsefulResult(scopedEvents);
+
+  return {
+    agent,
+    session,
+    projectName: project?.name ?? null,
+    runtimeLabel: agent.runtimeLabel || session?.runtimeLabel || 'Runtime unavailable',
+    statusLabel: resolveAgentStatusLabel(agent),
+    statusTone: resolveAgentStatusTone(agent),
+    assignmentLabel: agent.assignment?.trim() || 'No assignment captured yet',
+    currentActionLabel: agent.currentAction?.trim() || 'Waiting for the next action',
+    lastUsefulResultLabel: lastUsefulResult?.label || 'No useful result captured yet',
+    lastUsefulResultAt: lastUsefulResult?.timestamp ?? null,
+    recentEvents: scopedEvents,
+  };
 });
 
 function resolveAgentName(evts: HookEvent[], isMain: boolean): string {
@@ -320,9 +372,7 @@ function resolveSessionSummary(evts: HookEvent[], agents: AgentInfo[]): string |
 }
 
 function latestUsefulEventSummary(evts: HookEvent[]): string | undefined {
-  const latest = [...evts]
-    .sort((left, right) => (right.timestamp || 0) - (left.timestamp || 0))
-    .find((event) => ['AssistantResponse', 'PostToolUse', 'PostToolUseFailure', 'UserPromptSubmit'].includes(event.hook_event_type));
+  const latest = latestUsefulEvent(evts);
 
   if (!latest) return undefined;
 
@@ -388,12 +438,67 @@ function resolveProjectSummary(
   return undefined;
 }
 
+function latestUsefulEvent(evts: HookEvent[]): HookEvent | undefined {
+  return [...evts]
+    .sort((left, right) => (right.timestamp || 0) - (left.timestamp || 0))
+    .find((event) => ['AssistantResponse', 'PostToolUse', 'PostToolUseFailure'].includes(event.hook_event_type));
+}
+
 function summarizeAgent(agent: AgentInfo): string | undefined {
   const action = agent.currentAction && agent.currentAction !== agent.assignment
     ? agent.currentAction
     : agent.assignment;
   if (!action) return agent.displayName;
   return `${agent.displayName}: ${truncate(action, 72)}`;
+}
+
+function resolveAgentStatusLabel(agent: AgentInfo): string {
+  if (agent.isActive) return 'Active';
+  if (agent.eventCount > 0) return 'Idle';
+  return 'Completed';
+}
+
+function resolveAgentStatusTone(agent: AgentInfo): AgentStatusTone {
+  if (agent.isActive) return 'active';
+  if (agent.eventCount > 0) return 'idle';
+  return 'muted';
+}
+
+function selectedAgentEvents(
+  session: SessionInfo | null,
+  project: Project | null,
+  agentId: string | null,
+): HookEvent[] {
+  if (!agentId) return [];
+
+  let scoped = events();
+  if (project) {
+    scoped = scoped.filter((event) => event.source_app === project.name);
+  }
+  if (session) {
+    scoped = scoped.filter((event) => event.session_id === session.sessionId);
+  }
+
+  const key = agentId || MAIN_AGENT_KEY;
+  return scoped
+    .filter((event) => (event.agent_id || MAIN_AGENT_KEY) === key)
+    .slice(-120)
+    .reverse();
+}
+
+function resolveLastUsefulResult(
+  evts: HookEvent[],
+): { label: string; timestamp: number } | undefined {
+  const latest = latestUsefulEvent(evts);
+  if (!latest) return undefined;
+
+  const label = latestUsefulEventSummary([latest]) || describeEvent(latest).trim();
+  if (!label) return undefined;
+
+  return {
+    label,
+    timestamp: latest.timestamp || 0,
+  };
 }
 
 function latestEvent(evts: HookEvent[]): HookEvent | undefined {
