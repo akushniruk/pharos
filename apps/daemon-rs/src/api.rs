@@ -244,17 +244,41 @@ async fn stream_events(
         .live_state
         .list_legacy_events()
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let initial_registry = state
+        .live_state
+        .list_agent_registry()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let initial_projects = state
+        .live_state
+        .list_projects()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let receiver = state.sender.subscribe();
 
-    Ok(ws.on_upgrade(move |socket| stream_socket(socket, initial_events, receiver)))
+    Ok(ws.on_upgrade(move |socket| {
+        stream_socket(socket, initial_events, initial_registry, initial_projects, receiver)
+    }))
 }
 
 async fn stream_socket(
     mut socket: WebSocket,
     initial_events: Vec<LegacyHookEvent>,
+    initial_registry: Vec<AgentRegistryEntry>,
+    initial_projects: Vec<ProjectSnapshot>,
     mut receiver: broadcast::Receiver<OutboundWsMessage>,
 ) {
     if send_ws_message(&mut socket, "initial", &initial_events).await.is_err() {
+        return;
+    }
+    if send_ws_message(&mut socket, "agent_registry", &initial_registry)
+        .await
+        .is_err()
+    {
+        return;
+    }
+    if send_ws_message(&mut socket, "projects", &initial_projects)
+        .await
+        .is_err()
+    {
         return;
     }
 
@@ -306,6 +330,16 @@ fn broadcast_compat_updates(state: &AppState, event: &EventEnvelope) -> Result<(
     let _ = state.sender.send(OutboundWsMessage {
         message_type: "event",
         payload: event_payload,
+    });
+
+    let projects = state
+        .live_state
+        .list_projects()
+        .map_err(|error| serde_json::Error::io(std::io::Error::other(error.to_string())))?;
+    let projects_payload = serde_json::to_value(projects)?;
+    let _ = state.sender.send(OutboundWsMessage {
+        message_type: "projects",
+        payload: projects_payload,
     });
 
     if !should_broadcast_registry(&event.event_kind) {

@@ -421,6 +421,36 @@ async fn websocket_stream_sends_initial_event_list() {
     assert_eq!(data[0]["source_app"], "demo-project");
     assert_eq!(data[0]["hook_event_type"], "PreToolUse");
 
+    let registry_message = socket
+        .next()
+        .await
+        .expect("registry websocket frame")
+        .expect("websocket message");
+    let registry_payload: serde_json::Value =
+        serde_json::from_str(registry_message.to_text().expect("text frame"))
+            .expect("json payload");
+    assert_eq!(registry_payload["type"], "agent_registry");
+    let registry_data = registry_payload["data"]
+        .as_array()
+        .expect("registry array");
+    assert_eq!(registry_data.len(), 1);
+    assert_eq!(registry_data[0]["source_app"], "demo-project");
+
+    let projects_message = socket
+        .next()
+        .await
+        .expect("projects websocket frame")
+        .expect("websocket message");
+    let projects_payload: serde_json::Value =
+        serde_json::from_str(projects_message.to_text().expect("text frame"))
+            .expect("json payload");
+    assert_eq!(projects_payload["type"], "projects");
+    let projects_data = projects_payload["data"]
+        .as_array()
+        .expect("projects array");
+    assert_eq!(projects_data.len(), 1);
+    assert_eq!(projects_data[0]["name"], "demo-project");
+
     server.abort();
 }
 

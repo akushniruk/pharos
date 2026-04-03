@@ -47,6 +47,10 @@ export function connectWs() {
       if (msg.type === 'initial') {
         const initial = Array.isArray(msg.data) ? msg.data : [];
         setEvents(initial.slice(-MAX_EVENTS));
+      } else if (msg.type === 'projects') {
+        if (Array.isArray(msg.data)) {
+          setProjectSnapshots(msg.data);
+        }
       } else if (msg.type === 'event') {
         setEvents((prev) => {
           const next = [...prev, msg.data];
@@ -56,7 +60,6 @@ export function connectWs() {
         if (Array.isArray(msg.data)) {
           setAgents(msg.data);
         }
-        void fetchProjects();
       }
     } catch {}
   };
