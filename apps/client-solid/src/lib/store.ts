@@ -126,23 +126,28 @@ export const projects = createMemo((): Project[] => {
       for (const [aid, aevts] of agentMap) {
         const aLast = Math.max(...aevts.map((e) => e.timestamp || 0));
         const displayName = resolveAgentName(aevts, aid === '__main__');
-        const assignment = resolveAssignment(aevts);
-        const assignmentDetail = resolveAssignmentDetail(aevts);
-        const currentAction = resolveCurrentAction(aevts);
-        const currentActionDetail = resolveCurrentActionDetail(aevts);
+        const currentProgress = resolveCurrentProgress(aevts);
+        const currentProgressDetail = resolveCurrentProgressDetail(aevts);
+        const nextAction = resolveNextAction(aevts);
+        const nextActionDetail = resolveNextActionDetail(aevts);
+        const agentIsActive = isRegistryActive(registry, sid, aid);
         agentsArr.push({
           agentId: aid === '__main__' ? null : aid,
           displayName,
           runtimeLabel,
-          assignment,
-          assignmentDetail,
-          currentAction,
-          currentActionDetail,
+          assignment: nextAction,
+          assignmentDetail: nextActionDetail,
+          currentProgress,
+          currentProgressDetail,
+          currentAction: currentProgress,
+          currentActionDetail: currentProgressDetail,
+          nextAction,
+          nextActionDetail,
           agentType: aevts.find((e) => e.payload?.agent_type)?.payload.agent_type,
           modelName: aevts.find((e) => e.model_name || e.payload?.model)?.model_name || aevts.find((e) => e.payload?.model)?.payload.model,
           eventCount: aevts.length,
           lastEventAt: aLast,
-          isActive: isRegistryActive(registry, sid, aid),
+          isActive: agentIsActive,
           parentId: undefined,
         });
       }
@@ -157,8 +162,12 @@ export const projects = createMemo((): Project[] => {
         runtimeLabel,
         summary: sessionSummary.label,
         summaryDetail: sessionSummary.detail,
-        currentAction: resolveCurrentAction(sevts),
-        currentActionDetail: resolveCurrentActionDetail(sevts),
+        currentProgress: sessionSummary.label,
+        currentProgressDetail: sessionSummary.detail,
+        currentAction: sessionSummary.nextAction,
+        currentActionDetail: sessionSummary.nextActionDetail,
+        nextAction: sessionSummary.nextAction,
+        nextActionDetail: sessionSummary.nextActionDetail,
         eventCount: sevts.length,
         agents: agentsArr.sort((a, b) => b.eventCount - a.eventCount),
         activeAgentCount: agentsArr.filter((agent) => agent.isActive).length,
@@ -237,6 +246,10 @@ export interface ProjectFocusSnapshot {
   sessionId: string | null;
   sessionLabel: string | null;
   sessionSummary: string | null;
+  currentProgress: string | null;
+  currentProgressDetail: string | null;
+  nextAction: string | null;
+  nextActionDetail: string | null;
   agentId: string | null;
   agentLabel: string | null;
   agentSummary: string | null;
@@ -276,13 +289,27 @@ export function buildProjectFocusSnapshot(
   const projectSummary = project.summary
     || `${project.activeSessionCount} active · ${project.sessions.length} sessions`;
   const sessionLabel = session?.label || session?.sessionId || null;
-  const sessionSummary = session
-    ? session.summary || session.currentAction || `${session.activeAgentCount}/${session.agents.length} agents`
+  const sessionProgress = session
+    ? session.currentProgress || session.summary || session.currentAction
     : null;
+  const sessionProgressDetail = session
+    ? session.currentProgressDetail || session.summaryDetail || session.currentActionDetail || null
+    : null;
+  const sessionNextAction = session?.nextAction || session?.currentAction || null;
+  const sessionNextActionDetail = session?.nextActionDetail || session?.currentActionDetail || null;
   const agentLabel = agent?.displayName || null;
-  const agentSummary = agent ? agent.currentAction || agent.assignment || null : null;
+  const agentProgress = agent
+    ? agent.currentProgress || agent.currentAction || agent.assignment || null
+    : null;
+  const agentProgressDetail = agent
+    ? agent.currentProgressDetail || agent.currentActionDetail || agent.assignmentDetail || null
+    : null;
+  const agentNextAction = agent?.nextAction || agent?.assignment || null;
+  const agentNextActionDetail = agent?.nextActionDetail || agent?.assignmentDetail || null;
+  const sessionSummary = sessionProgress;
+  const agentSummary = agentProgress;
   const focusSubject = agentLabel || sessionLabel || project.name;
-  const focusAction = agentSummary || session?.currentAction || sessionSummary || projectSummary;
+  const focusAction = agentProgress || agentNextAction || sessionProgress || sessionNextAction || projectSummary;
   const scopeLabel = agent
     ? 'Agent focus'
     : session
@@ -290,15 +317,23 @@ export function buildProjectFocusSnapshot(
       : 'Project overview';
   const breadcrumb = [project.name, sessionLabel, agentLabel].filter(Boolean).join(' · ');
   const headline = formatNowHeadline(focusSubject, focusAction);
-  const subheadline = agent?.assignment
-    ? formatContextLabel('Assigned work', agent.assignment)
-    : sessionSummary
-      ? formatContextLabel('Session summary', sessionSummary)
-      : projectSummary
-        ? formatContextLabel('Project summary', projectSummary)
-        : project.runtimeLabels[0]
-          ? formatContextLabel('Runtime', project.runtimeLabels[0])
-          : 'Watching recent activity';
+  const subheadline = agentNextAction
+    ? formatContextLabel('Next action', agentNextAction)
+    : sessionNextAction
+      ? formatContextLabel('Next action', sessionNextAction)
+      : agentProgressDetail
+        ? formatContextLabel('Current progress', agentProgressDetail)
+        : sessionProgressDetail
+          ? formatContextLabel('Current progress', sessionProgressDetail)
+          : projectSummary
+            ? formatContextLabel('Project summary', projectSummary)
+            : project.runtimeLabels[0]
+              ? formatContextLabel('Runtime', project.runtimeLabels[0])
+              : 'Watching recent activity';
+  const currentProgress = agentProgress || sessionProgress || null;
+  const currentProgressDetail = agentProgressDetail || sessionProgressDetail || null;
+  const nextAction = agentNextAction || sessionNextAction || null;
+  const nextActionDetail = agentNextActionDetail || sessionNextActionDetail || null;
 
   return {
     projectName: project.name,
@@ -306,6 +341,10 @@ export function buildProjectFocusSnapshot(
     sessionId: session?.sessionId ?? null,
     sessionLabel,
     sessionSummary,
+    currentProgress,
+    currentProgressDetail,
+    nextAction,
+    nextActionDetail,
     agentId: agent?.agentId ?? null,
     agentLabel,
     agentSummary,
@@ -421,10 +460,10 @@ export const selectedAgentDetailSnapshot = createMemo((): SelectedAgentDetailSna
     runtimeLabel: agent.runtimeLabel || session?.runtimeLabel || 'Runtime unavailable',
     statusLabel: resolveAgentStatusLabel(agent),
     statusTone: resolveAgentStatusTone(agent),
-    assignmentLabel: agent.assignment?.trim() || 'No assignment captured yet',
-    assignmentDetail: agent.assignmentDetail?.trim() || undefined,
-    currentActionLabel: agent.currentAction?.trim() || 'Waiting for the next action',
-    currentActionDetail: agent.currentActionDetail?.trim() || undefined,
+    assignmentLabel: agent.nextAction?.trim() || agent.assignment?.trim() || 'No next action captured yet',
+    assignmentDetail: agent.nextActionDetail?.trim() || agent.assignmentDetail?.trim() || undefined,
+    currentActionLabel: agent.currentProgress?.trim() || agent.currentAction?.trim() || 'No current progress captured yet',
+    currentActionDetail: agent.currentProgressDetail?.trim() || agent.currentActionDetail?.trim() || undefined,
     lastUsefulResultLabel: lastUsefulResult?.label || 'No useful result captured yet',
     lastUsefulResultDetail: lastUsefulResult?.detail ?? undefined,
     lastUsefulResultAt: lastUsefulResult?.timestamp ?? null,
@@ -488,7 +527,7 @@ function resolveSessionLabel(evts: HookEvent[], workspaceName: string): string {
   return workspaceName;
 }
 
-function resolveAssignment(evts: HookEvent[]): string | undefined {
+function resolveNextAction(evts: HookEvent[]): string | undefined {
   const subagentStart = latestEventOfType(evts, 'SubagentStart');
   const description = subagentStart?.payload?.description;
   if (typeof description === 'string' && description.trim()) {
@@ -516,7 +555,7 @@ function resolveAssignment(evts: HookEvent[]): string | undefined {
   return undefined;
 }
 
-function resolveAssignmentDetail(evts: HookEvent[]): string | undefined {
+function resolveNextActionDetail(evts: HookEvent[]): string | undefined {
   const subagentStart = latestEventOfType(evts, 'SubagentStart');
   const description = subagentStart?.payload?.description;
   if (typeof description === 'string' && description.trim()) {
@@ -553,21 +592,19 @@ function isGenericName(name: string): boolean {
   return name === 'Session' || name === 'Agent';
 }
 
-function resolveCurrentAction(evts: HookEvent[]): string | undefined {
+function resolveCurrentProgress(evts: HookEvent[]): string | undefined {
   const latest = latestMeaningfulEvent(evts) ?? latestEvent(evts);
 
   if (!latest) return undefined;
-  if (latest.hook_event_type === 'SubagentStart') return undefined;
 
   const summary = describeEvent(latest).trim();
   return summary || undefined;
 }
 
-function resolveCurrentActionDetail(evts: HookEvent[]): string | undefined {
+function resolveCurrentProgressDetail(evts: HookEvent[]): string | undefined {
   const latest = latestMeaningfulEvent(evts) ?? latestEvent(evts);
 
   if (!latest) return undefined;
-  if (latest.hook_event_type === 'SubagentStart') return undefined;
 
   const detail = describeEventDetail(latest)?.trim();
   return detail || undefined;
@@ -576,7 +613,7 @@ function resolveCurrentActionDetail(evts: HookEvent[]): string | undefined {
 function resolveSessionSummary(
   evts: HookEvent[],
   agents: AgentInfo[],
-): { label?: string; detail?: string } {
+): { label?: string; detail?: string; nextAction?: string; nextActionDetail?: string } {
   const activeWorkers = agents
     .filter((agent) => agent.agentId && agent.isActive)
     .map((agent) => summarizeAgent(agent))
@@ -587,6 +624,8 @@ function resolveSessionSummary(
     return {
       label: activeWorkers.join(' · '),
       detail: `${activeCount} active agent${activeCount === 1 ? '' : 's'}`,
+      nextAction: resolveNextAction(evts),
+      nextActionDetail: resolveNextActionDetail(evts),
     };
   }
 
@@ -600,29 +639,44 @@ function resolveSessionSummary(
     return {
       label: recentWorkers.join(' · '),
       detail: `${totalWorkers} agent${totalWorkers === 1 ? '' : 's'} involved`,
+      nextAction: resolveNextAction(evts),
+      nextActionDetail: resolveNextActionDetail(evts),
     };
   }
 
   const latestUseful = latestUsefulEventSummary(evts);
-  if (latestUseful?.label) return latestUseful;
-
-  const assignment = resolveAssignment(evts);
-  if (assignment) {
+  if (latestUseful?.label) {
     return {
-      label: assignment,
-      detail: resolveAssignmentDetail(evts),
+      ...latestUseful,
+      nextAction: resolveNextAction(evts),
+      nextActionDetail: resolveNextActionDetail(evts),
     };
   }
 
-  const currentAction = resolveCurrentAction(evts);
-  if (currentAction) {
+  const nextAction = resolveNextAction(evts);
+  if (nextAction) {
     return {
-      label: currentAction,
-      detail: resolveCurrentActionDetail(evts),
+      label: nextAction,
+      detail: resolveNextActionDetail(evts),
+      nextAction,
+      nextActionDetail: resolveNextActionDetail(evts),
     };
   }
 
-  return {};
+  const currentProgress = resolveCurrentProgress(evts);
+  if (currentProgress) {
+    return {
+      label: currentProgress,
+      detail: resolveCurrentProgressDetail(evts),
+      nextAction: resolveNextAction(evts),
+      nextActionDetail: resolveNextActionDetail(evts),
+    };
+  }
+
+  return {
+    nextAction: resolveNextAction(evts),
+    nextActionDetail: resolveNextActionDetail(evts),
+  };
 }
 
 function latestUsefulEventSummary(evts: HookEvent[]): { label?: string; detail?: string } | undefined {
@@ -703,9 +757,7 @@ function latestUsefulEvent(evts: HookEvent[]): HookEvent | undefined {
 }
 
 function summarizeAgent(agent: AgentInfo): string | undefined {
-  const action = agent.currentAction && agent.currentAction !== agent.assignment
-    ? agent.currentAction
-    : agent.assignment;
+  const action = agent.currentProgress || agent.currentAction || agent.assignment;
   if (!action) return agent.displayName;
   return `${agent.displayName}: ${truncate(action, 72)}`;
 }

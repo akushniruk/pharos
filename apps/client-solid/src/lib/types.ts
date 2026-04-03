@@ -49,8 +49,12 @@ export interface SessionInfo {
   runtimeLabel?: string;
   summary?: string;
   summaryDetail?: string;
+  currentProgress?: string;
+  currentProgressDetail?: string;
   currentAction?: string;
   currentActionDetail?: string;
+  nextAction?: string;
+  nextActionDetail?: string;
   eventCount: number;
   agents: AgentInfo[];
   activeAgentCount: number;
@@ -65,8 +69,12 @@ export interface AgentInfo {
   runtimeLabel?: string;
   assignment?: string;
   assignmentDetail?: string;
+  currentProgress?: string;
+  currentProgressDetail?: string;
   currentAction?: string;
   currentActionDetail?: string;
+  nextAction?: string;
+  nextActionDetail?: string;
   agentType?: string;
   modelName?: string;
   eventCount: number;

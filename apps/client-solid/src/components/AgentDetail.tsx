@@ -21,6 +21,20 @@ export default function AgentDetail() {
         background: 'var(--green-dim)',
       };
     }
+    if (tone === 'blocked') {
+      return {
+        dot: 'var(--yellow)',
+        text: 'var(--yellow)',
+        background: 'rgba(245, 158, 11, 0.12)',
+      };
+    }
+    if (tone === 'attention') {
+      return {
+        dot: 'var(--red)',
+        text: 'var(--red)',
+        background: 'rgba(239, 68, 68, 0.12)',
+      };
+    }
     if (tone === 'idle') {
       return {
         dot: 'var(--yellow)',
@@ -59,15 +73,22 @@ export default function AgentDetail() {
             {headerContext()}
           </span>
         </div>
-        <div
-          style={[
-            'display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:4px 8px;font-size:10px;font-weight:600;',
-            `background:${statusColors().background};`,
-            `color:${statusColors().text};`,
-          ].join('')}
-        >
-          <span style={`width:6px;height:6px;border-radius:50%;background:${statusColors().dot};`} />
-          <span>{detail()?.statusLabel ?? 'Unknown'}</span>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;">
+          <div
+            style={[
+              'display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:4px 8px;font-size:10px;font-weight:600;',
+              `background:${statusColors().background};`,
+              `color:${statusColors().text};`,
+            ].join('')}
+          >
+            <span style={`width:6px;height:6px;border-radius:50%;background:${statusColors().dot};`} />
+            <span>{detail()?.statusLabel ?? 'Unknown'}</span>
+          </div>
+          <Show when={detail()?.statusDetail}>
+            <span style="max-width:170px;font-size:9px;color:var(--text-dim);text-align:right;line-height:1.35;">
+              {detail()!.statusDetail}
+            </span>
+          </Show>
         </div>
         <button
           onClick={() => selectAgent(null)}
@@ -135,21 +156,42 @@ export default function AgentDetail() {
             </div>
           </div>
 
-          <div style="padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg-card);display:flex;flex-direction:column;gap:4px;">
-            <span style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;">What it was asked to do</span>
-            <span style="font-size:11px;color:var(--text-primary);line-height:1.45;">
-              {detail()!.assignmentLabel}
-            </span>
-          </div>
+          <Show when={detail()!.statusTone === 'blocked' || detail()!.statusTone === 'attention'}>
+            <div style="padding:10px;border:1px solid var(--border);border-radius:8px;background:rgba(239, 68, 68, 0.08);display:flex;flex-direction:column;gap:4px;">
+              <span style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;">
+                Needs review
+              </span>
+              <span style={`font-size:11px;font-weight:600;line-height:1.45;color:${statusColors().text};`}>
+                {detail()!.statusLabel}
+              </span>
+              <Show when={detail()!.statusDetail}>
+                <span style="font-size:10px;color:var(--text-dim);line-height:1.45;">
+                  {detail()!.statusDetail}
+                </span>
+              </Show>
+            </div>
+          </Show>
 
           <div style="padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg-card);display:flex;flex-direction:column;gap:4px;">
-            <span style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;">What it's doing now</span>
+            <span style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;">Current progress</span>
             <span style="font-size:11px;color:var(--text-primary);line-height:1.45;">
               {detail()!.currentActionLabel}
             </span>
             <Show when={detail()!.currentActionDetail}>
               <span style="font-size:10px;color:var(--text-dim);line-height:1.45;">
                 {detail()!.currentActionDetail}
+              </span>
+            </Show>
+          </div>
+
+          <div style="padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg-card);display:flex;flex-direction:column;gap:4px;">
+            <span style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;">Next action</span>
+            <span style="font-size:11px;color:var(--text-primary);line-height:1.45;">
+              {detail()!.assignmentLabel}
+            </span>
+            <Show when={detail()!.assignmentDetail}>
+              <span style="font-size:10px;color:var(--text-dim);line-height:1.45;">
+                {detail()!.assignmentDetail}
               </span>
             </Show>
           </div>

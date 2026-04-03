@@ -67,7 +67,7 @@ export function describeEventDescription(event: HookEvent): EventDescription {
       if (toolName === 'Agent') {
         const description = toolInput?.description;
         return {
-          primary: 'Handing work to another agent',
+          primary: 'Handing off work to another agent',
           secondary: description ? truncate(description, 80) : undefined,
         };
       }
@@ -79,7 +79,7 @@ export function describeEventDescription(event: HookEvent): EventDescription {
       }
       if (toolName === 'wait_agent') {
         return {
-          primary: 'Waiting for the subagent to finish',
+          primary: 'Waiting for a helper agent to finish',
         };
       }
       return {

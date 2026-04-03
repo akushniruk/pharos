@@ -55,4 +55,22 @@ describe('describeEvent', () => {
     expect(describeEvent(event)).toBe('Shared an update');
     expect(describeEventDetail(event)).toBe('Updated the sidebar so the summary line now leads with plain language.');
   });
+
+  it('describes delegated work as a next action for non-technical readers', () => {
+    const event: HookEvent = {
+      source_app: 'demo',
+      session_id: 'session-1',
+      hook_event_type: 'PreToolUse',
+      payload: {
+        tool_name: 'Agent',
+        tool_input: {
+          description: 'Verify the build output and report any regressions.',
+        },
+      },
+      timestamp: 1,
+    };
+
+    expect(describeEvent(event)).toBe('Handing off work to another agent');
+    expect(describeEventDetail(event)).toBe('Verify the build output and report any regressions.');
+  });
 });

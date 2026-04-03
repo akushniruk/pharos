@@ -23,6 +23,25 @@ function resolveProjectName(e: HookEvent): string {
   return e.source_app;
 }
 
+function resolveSummaryKind(e: HookEvent): string | undefined {
+  if (e.hook_event_type === 'SubagentStart') {
+    return 'Next action';
+  }
+  if (e.hook_event_type === 'PreToolUse') {
+    if (e.payload?.tool_name === 'Agent') {
+      return 'Next action';
+    }
+    return 'Current progress';
+  }
+  if (e.hook_event_type === 'UserPromptSubmit') {
+    return 'Requested work';
+  }
+  if (e.hook_event_type === 'AssistantResponse') {
+    return 'Update';
+  }
+  return undefined;
+}
+
 export default function EventRow(props: Props) {
   const [expanded, setExpanded] = createSignal(false);
   const e = () => props.event;
@@ -79,6 +98,11 @@ export default function EventRow(props: Props) {
         </div>
         <div style="display:flex;align-items:flex-start;gap:8px;min-width:0;padding-left:64px;">
           <div style="min-width:0;flex:1;display:flex;flex-direction:column;gap:2px;">
+            <Show when={resolveSummaryKind(e())}>
+              <span style="font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-dim);">
+                {resolveSummaryKind(e())}
+              </span>
+            </Show>
             <span style="font-size:11px;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
               {description()}
             </span>
