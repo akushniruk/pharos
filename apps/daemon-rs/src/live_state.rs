@@ -105,6 +105,22 @@ impl LiveState {
         let inner = self.inner.lock().map_err(|_| StoreError::Poisoned)?;
         Ok(inner.build_projects())
     }
+
+    pub fn project(&self, project_name: &str) -> Result<Option<ProjectSnapshot>, StoreError> {
+        let inner = self.inner.lock().map_err(|_| StoreError::Poisoned)?;
+        Ok(inner
+            .build_projects()
+            .into_iter()
+            .find(|project| project.name == project_name))
+    }
+
+    pub fn session_snapshot(
+        &self,
+        session_id: &str,
+    ) -> Result<Option<SessionSnapshot>, StoreError> {
+        let inner = self.inner.lock().map_err(|_| StoreError::Poisoned)?;
+        Ok(inner.build_session_snapshot(session_id))
+    }
 }
 
 impl LiveStateData {
@@ -151,33 +167,15 @@ impl LiveStateData {
                 project_agent_count += session.summary.agent_count;
                 last_event_at = last_event_at.max(session.summary.last_event_at);
 
-                let events = self
-                    .session_events
-                    .get(&session.summary.session_id)
-                    .cloned()
-                    .unwrap_or_default();
-                let agents = self.build_agents(&events);
-                let active_agent_count = agents.iter().filter(|agent| agent.is_active).count();
-                let runtime_label = resolve_runtime_label(&events);
-                if let Some(label) = &runtime_label {
-                    runtime_labels.insert(label.clone());
+                if let Some(snapshot) = self.build_session_snapshot(&session.summary.session_id) {
+                    if let Some(label) = &snapshot.runtime_label {
+                        runtime_labels.insert(label.clone());
+                    }
+                    if snapshot.is_active {
+                        active_session_count += 1;
+                    }
+                    session_snaps.push(snapshot);
                 }
-                let is_active = session.summary.is_active || active_agent_count > 0;
-                if is_active {
-                    active_session_count += 1;
-                }
-                session_snaps.push(SessionSnapshot {
-                    session_id: session.summary.session_id.clone(),
-                    label: resolve_session_label(&events, &name),
-                    runtime_label,
-                    summary: resolve_session_summary(&events, &agents),
-                    current_action: resolve_current_action(&events),
-                    event_count: session.summary.event_count,
-                    agents,
-                    active_agent_count,
-                    last_event_at: session.summary.last_event_at,
-                    is_active,
-                });
             }
 
             session_snaps.sort_by(|left, right| right.last_event_at.cmp(&left.last_event_at));
@@ -197,6 +195,28 @@ impl LiveStateData {
 
         projects.sort_by(|left, right| right.last_event_at.cmp(&left.last_event_at));
         projects
+    }
+
+    fn build_session_snapshot(&self, session_id: &str) -> Option<SessionSnapshot> {
+        let session = self.sessions.get(session_id)?;
+        let events = self.session_events.get(session_id).cloned().unwrap_or_default();
+        let agents = self.build_agents(&events);
+        let active_agent_count = agents.iter().filter(|agent| agent.is_active).count();
+        let runtime_label = resolve_runtime_label(&events);
+        let is_active = session.summary.is_active || active_agent_count > 0;
+
+        Some(SessionSnapshot {
+            session_id: session.summary.session_id.clone(),
+            label: resolve_session_label(&events, &session.summary.source_app),
+            runtime_label,
+            summary: resolve_session_summary(&events, &agents),
+            current_action: resolve_current_action(&events),
+            event_count: session.summary.event_count,
+            agents,
+            active_agent_count,
+            last_event_at: session.summary.last_event_at,
+            is_active,
+        })
     }
 
     fn build_agents(&self, events: &[LegacyHookEvent]) -> Vec<AgentSnapshot> {

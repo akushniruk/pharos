@@ -161,6 +161,33 @@ export const projects = createMemo((): Project[] => {
   return result.sort((a, b) => b.lastEventAt - a.lastEventAt);
 });
 
+export const selectedProjectSnapshot = createMemo((): Project | null => {
+  const projectName = selectedProject();
+  if (!projectName) return null;
+  return projects().find((project) => project.name === projectName) ?? null;
+});
+
+export const selectedSessionSnapshot = createMemo((): SessionInfo | null => {
+  const sessionId = selectedSession();
+  const project = selectedProjectSnapshot();
+  if (!sessionId || !project) return null;
+  return project.sessions.find((session) => session.sessionId === sessionId) ?? null;
+});
+
+export const selectedAgentSnapshot = createMemo((): AgentInfo | null => {
+  const agentId = selectedAgent();
+  if (!agentId) return null;
+  const session = selectedSessionSnapshot();
+  if (session) {
+    return session.agents.find((agent) => (agent.agentId || MAIN_AGENT_KEY) === agentId) ?? null;
+  }
+  const project = selectedProjectSnapshot();
+  if (!project) return null;
+  return project.sessions
+    .flatMap((session) => session.agents)
+    .find((agent) => (agent.agentId || MAIN_AGENT_KEY) === agentId) ?? null;
+});
+
 function resolveAgentName(evts: HookEvent[], isMain: boolean): string {
   for (const e of evts) {
     if (e.display_name) return e.display_name;
@@ -345,14 +372,11 @@ function truncate(text: string, max: number): string {
 
 /** Filtered agents based on selection */
 export const filteredAgents = createMemo((): AgentInfo[] => {
-  const proj = selectedProject();
-  if (!proj) return projects().flatMap(p => p.sessions.flatMap(s => s.agents));
-  const project = projects().find(p => p.name === proj);
-  if (!project) return [];
-  const sess = selectedSession();
-  if (sess) {
-    const session = project.sessions.find(s => s.sessionId === sess);
-    return session?.agents || [];
+  const project = selectedProjectSnapshot();
+  if (!project) return projects().flatMap(p => p.sessions.flatMap(s => s.agents));
+  const session = selectedSessionSnapshot();
+  if (session) {
+    return session.agents;
   }
   return project.sessions.flatMap(s => s.agents);
 });

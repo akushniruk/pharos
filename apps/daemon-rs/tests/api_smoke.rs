@@ -379,6 +379,112 @@ async fn lists_agent_registry_entries_from_stored_events() {
 }
 
 #[tokio::test]
+async fn returns_project_and_session_snapshots_from_live_state() {
+    let store = Store::open_in_memory().expect("in-memory sqlite");
+    let app = build_router(store);
+
+    let start_event = json!({
+        "runtime_source": "codex_cli",
+        "acquisition_mode": "observed",
+        "event_kind": "session_started",
+        "session": {
+            "host_id": "local",
+            "workspace_id": "signal",
+            "session_id": "sess-signal"
+        },
+        "agent_id": null,
+        "occurred_at_ms": 1711234567000_i64,
+        "capabilities": {
+            "can_observe": true,
+            "can_start": false,
+            "can_stop": false,
+            "can_retry": false,
+            "can_respond": false
+        },
+        "title": "session started",
+        "payload": {
+            "runtime_label": "Codex",
+            "cwd": "/Users/test/work/signal",
+            "title": "read about this project"
+        }
+    });
+
+    let assistant_event = json!({
+        "runtime_source": "codex_cli",
+        "acquisition_mode": "observed",
+        "event_kind": "assistant_response",
+        "session": {
+            "host_id": "local",
+            "workspace_id": "signal",
+            "session_id": "sess-signal"
+        },
+        "agent_id": null,
+        "occurred_at_ms": 1711234568000_i64,
+        "capabilities": {
+            "can_observe": true,
+            "can_start": false,
+            "can_stop": false,
+            "can_retry": false,
+            "can_respond": false
+        },
+        "title": "assistant response",
+        "payload": {
+            "text": "Repository is a single-package Vite app."
+        }
+    });
+
+    for event in [start_event, assistant_event] {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::post("/api/events")
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(event.to_string()))
+                    .expect("request"),
+            )
+            .await
+            .expect("post response");
+        assert_eq!(response.status(), StatusCode::CREATED);
+    }
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::get("/api/projects/signal")
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("project response");
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("project body");
+    let project: serde_json::Value = serde_json::from_slice(&body).expect("project json");
+    assert_eq!(project["name"], "signal");
+    assert_eq!(project["sessions"][0]["session_id"], "sess-signal");
+
+    let response = app
+        .oneshot(
+            Request::get("/api/sessions/sess-signal/snapshot")
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("session snapshot response");
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("session body");
+    let session: serde_json::Value = serde_json::from_slice(&body).expect("session json");
+    assert_eq!(session["session_id"], "sess-signal");
+    assert_eq!(
+        session["summary"],
+        "Responded: Repository is a single-package Vite app."
+    );
+}
+
+#[tokio::test]
 async fn websocket_stream_sends_initial_event_list() {
     let store = Store::open_in_memory().expect("in-memory sqlite");
     let app = build_router(store.clone());

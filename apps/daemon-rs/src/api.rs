@@ -49,6 +49,8 @@ pub fn build_router_with_options(store: Store, options: AppOptions) -> (Router, 
         .route("/api/events", post(create_event).get(list_events))
         .route("/api/agents", get(list_agent_registry))
         .route("/api/projects", get(list_projects))
+        .route("/api/projects/{name}", get(get_project))
+        .route("/api/sessions/{id}/snapshot", get(get_session_snapshot))
         .route("/api/events/legacy/claude", post(create_legacy_claude_event))
         .route("/events/filter-options", get(get_filter_options))
         .route("/sessions", get(list_sessions))
@@ -130,6 +132,30 @@ async fn list_projects(
         .list_projects()
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(Json(projects))
+}
+
+async fn get_project(
+    axum::extract::Path(project_name): axum::extract::Path<String>,
+    State(state): State<AppState>,
+) -> Result<Json<ProjectSnapshot>, StatusCode> {
+    let project = state
+        .live_state
+        .project(&project_name)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+    Ok(Json(project))
+}
+
+async fn get_session_snapshot(
+    axum::extract::Path(session_id): axum::extract::Path<String>,
+    State(state): State<AppState>,
+) -> Result<Json<crate::model::SessionSnapshot>, StatusCode> {
+    let snapshot = state
+        .live_state
+        .session_snapshot(&session_id)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+    Ok(Json(snapshot))
 }
 
 async fn get_filter_options(

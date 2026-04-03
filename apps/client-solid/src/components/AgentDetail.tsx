@@ -1,7 +1,13 @@
 import { Show, For, createMemo } from 'solid-js';
 import { Icon } from 'solid-heroicons';
 import { xMark } from 'solid-heroicons/solid';
-import { selectedAgent, selectAgent, filteredAgents, selectedProject, selectedSession } from '../lib/store';
+import {
+  selectedAgent,
+  selectAgent,
+  selectedProject,
+  selectedSession,
+  selectedAgentSnapshot,
+} from '../lib/store';
 import { events } from '../lib/ws';
 import { formatTime } from '../lib/time';
 import { describeEvent } from '../lib/describe';
@@ -9,11 +15,7 @@ import { getEventTypeLabel, getEventTypeBgColor, getEventTypeTextColor } from '.
 import type { HookEvent } from '../lib/types';
 
 export default function AgentDetail() {
-  const agent = createMemo(() => {
-    const id = selectedAgent();
-    if (!id) return null;
-    return filteredAgents().find(a => (a.agentId || '__main__') === id) ?? null;
-  });
+  const agent = createMemo(() => selectedAgentSnapshot());
 
   const agentEvents = createMemo((): HookEvent[] => {
     const id = selectedAgent();
