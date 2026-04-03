@@ -1,0 +1,32 @@
+---
+source: tests/model_normalization.rs
+assertion_line: 9
+expression: envelope
+---
+{
+  "runtime_source": "claude_code",
+  "acquisition_mode": "observed",
+  "event_kind": "tool_call_started",
+  "session": {
+    "host_id": "local",
+    "workspace_id": "demo-project",
+    "session_id": "sess-1234"
+  },
+  "agent_id": null,
+  "occurred_at_ms": 1711234571000,
+  "capabilities": {
+    "can_observe": true,
+    "can_start": false,
+    "can_stop": false,
+    "can_retry": false,
+    "can_respond": false
+  },
+  "title": "tool call started: Bash",
+  "payload": {
+    "tool_input": {
+      "command": "git status"
+    },
+    "tool_name": "Bash",
+    "tool_use_id": "toolu_123"
+  }
+}

@@ -1,0 +1,8 @@
+{
+    "pid": 12345,
+    "sessionId": "abc12345-def6-7890-abcd-ef1234567890",
+    "cwd": "/Users/testuser/my-project",
+    "startedAt": 1775143799221,
+    "kind": "interactive",
+    "entrypoint": "claude-vscode"
+}

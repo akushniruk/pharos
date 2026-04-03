@@ -1,0 +1,204 @@
+/* ========================================
+   Pharos — Dark + Light theme
+   ======================================== */
+
+:root[data-theme="dark"], :root:not([data-theme]) {
+  --bg-primary: #0a0a0a;
+  --bg-secondary: #111111;
+  --bg-card: #171717;
+  --bg-card-hover: #1e1e1e;
+  --bg-elevated: #1a1a1a;
+  --border: #262626;
+  --border-hover: #333333;
+  --text-primary: #fafafa;
+  --text-secondary: #a1a1aa;
+  --text-tertiary: #71717a;
+  --text-dim: #52525b;
+  --accent: #3b82f6;
+  --accent-hover: #2563eb;
+  --green: #22c55e;
+  --green-dim: rgba(34, 197, 94, 0.15);
+  --yellow: #eab308;
+  --yellow-dim: rgba(234, 179, 8, 0.15);
+  --red: #ef4444;
+  --red-dim: rgba(239, 68, 68, 0.15);
+  --purple: #a78bfa;
+  --purple-dim: rgba(167, 139, 250, 0.15);
+  --blue-dim: rgba(59, 130, 246, 0.15);
+}
+
+:root[data-theme="light"] {
+  --bg-primary: #ffffff;
+  --bg-secondary: #fafafa;
+  --bg-card: #f4f4f5;
+  --bg-card-hover: #e4e4e7;
+  --bg-elevated: #f4f4f5;
+  --border: #e4e4e7;
+  --border-hover: #d4d4d8;
+  --text-primary: #09090b;
+  --text-secondary: #3f3f46;
+  --text-tertiary: #71717a;
+  --text-dim: #a1a1aa;
+  --accent: #3b82f6;
+  --accent-hover: #2563eb;
+  --green: #22c55e;
+  --green-dim: rgba(34, 197, 94, 0.15);
+  --yellow: #eab308;
+  --yellow-dim: rgba(234, 179, 8, 0.15);
+  --red: #ef4444;
+  --red-dim: rgba(239, 68, 68, 0.15);
+  --purple: #a78bfa;
+  --purple-dim: rgba(167, 139, 250, 0.15);
+  --blue-dim: rgba(59, 130, 246, 0.15);
+}
+
+:root {
+  --font-sans: 'Inter', -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  --radius: 8px;
+  --radius-sm: 6px;
+}
+
+/* ---- Reset ---- */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: var(--font-sans);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---- Scrollbar ---- */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-hover);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-dim);
+}
+
+/* ========================================
+   4-Zone Layout
+   ======================================== */
+
+/* Zone: App shell */
+.app {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+/* Zone 1: Header */
+.app-header {
+  height: 44px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+  gap: 12px;
+}
+
+/* Zone 2+3+4: Body (sidebar + main) */
+.app-body {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+/* Zone 2: Sidebar */
+.app-sidebar {
+  width: 220px;
+  flex-shrink: 0;
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.app-sidebar--collapsed {
+  width: 40px;
+}
+
+/* Zone 3+4: Main content */
+.app-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+}
+
+/* Zone 5: Status bar */
+.app-statusbar {
+  height: 24px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+}
+
+/* ---- Status dot ---- */
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.status-dot.connected {
+  background: var(--green);
+}
+
+.status-dot.disconnected {
+  background: var(--red);
+  animation: blink 1.5s ease-in-out infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+/* ---- Event stream rows ---- */
+.event-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  transition: background-color 0.1s;
+}
+
+.event-row:hover {
+  background: var(--bg-card-hover);
+}
+
+/* ---- Event type badges ---- */
+.event-type--error { background: var(--red-dim); color: var(--red); }
+.event-type--prompt { background: var(--blue-dim); color: var(--accent); }
+.event-type--response { background: var(--purple-dim); color: var(--purple); }
+.event-type--spawn { background: var(--yellow-dim); color: var(--yellow); }
+.event-type--lifecycle { background: var(--green-dim); color: var(--green); }

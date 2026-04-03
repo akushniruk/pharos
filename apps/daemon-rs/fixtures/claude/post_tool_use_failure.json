@@ -1,0 +1,11 @@
+{
+  "source_app": "demo-project",
+  "session_id": "sess-1234",
+  "hook_event_type": "PostToolUseFailure",
+  "timestamp": 1711234573000,
+  "payload": {
+    "tool_name": "Bash",
+    "tool_use_id": "toolu_123",
+    "error": "Command failed with exit code 1"
+  }
+}

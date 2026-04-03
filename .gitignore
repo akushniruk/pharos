@@ -1,0 +1,78 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Rust
+target/
+
+# Node
+node_modules/
+dist/
+
+# Database
+*.db
+*.db-shm
+*.db-wal
+
+# Logs
+logs/
+*.log
+
+# Env
+.env
+.env.*
+
+# Claude Code local data
+.claude/data/
+.claude/settings.local.json
+.claude/hooks/
+.claude/status_lines/
+.claude/commands/
+.claude/agents/
+
+# Data
+data/
+
+# Python bytecode (leftover from old hooks)
+__pycache__/
+*.pyc
+
+# Tauri build
+apps/desktop/src-tauri/target/
+apps/desktop/src-tauri/gen/
+
+# Legacy files (removed from repo, may linger on disk)
+apps/server-go/
+scripts/
+Dockerfile
+docker-compose.yml
+nginx.conf
+.dockerignore
+.env.sample
+.superpowers/
+AGENTS.md
+docs/api-reference.md
+docs/architecture.md
+docs/deployment.md
+docs/hook-events.md
+docs/setup-guide.md
+docs/superpowers/specs/2026-04-02-claude-no-hook-observation-design.md
+
+# Unused template/legacy client files
+apps/client/README.md
+apps/client/public/vite.svg
+apps/client/src/assets/vue.svg
+apps/client/src/components/HelloWorld.vue
+apps/client/src/components/SpawnAgentModal.vue
+apps/client/src/composables/useHITLNotifications.ts
+
+# Misc
+*.bak
+*.tmp
+.cache/

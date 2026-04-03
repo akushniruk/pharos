@@ -1,0 +1,13 @@
+{
+  "source_app": "demo-project",
+  "session_id": "sess-1234",
+  "hook_event_type": "PreToolUse",
+  "timestamp": 1711234571000,
+  "payload": {
+    "tool_name": "Bash",
+    "tool_use_id": "toolu_123",
+    "tool_input": {
+      "command": "git status"
+    }
+  }
+}

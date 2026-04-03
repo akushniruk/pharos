@@ -1,0 +1,11 @@
+{
+  "source_app": "demo-project",
+  "session_id": "sess-1234",
+  "hook_event_type": "SessionStart",
+  "timestamp": 1711234567000,
+  "payload": {
+    "session_id": "sess-1234",
+    "agent_type": "main",
+    "model": "claude-opus-4-5"
+  }
+}
