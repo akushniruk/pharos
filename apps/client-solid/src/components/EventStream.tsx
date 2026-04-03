@@ -1,14 +1,35 @@
-import { For, createSignal, createMemo, createEffect } from 'solid-js';
+import { For, Show, createSignal, createMemo, createEffect } from 'solid-js';
 import { Icon } from 'solid-heroicons';
-import { bars_3BottomLeft, queueList, signal, pauseCircle } from 'solid-heroicons/solid';
+import { bars_3BottomLeft, queueList, signal, pauseCircle, funnel } from 'solid-heroicons/solid';
 import { filteredEvents } from '../lib/store';
+import { getEventTypeLabel, getEventTypeBgColor, getEventTypeTextColor } from '../lib/colors';
 import SearchBar, { searchQuery } from './SearchBar';
 import EventRow from './EventRow';
+
+const EVENT_TYPES = [
+  'PreToolUse', 'PostToolUse', 'PostToolUseFailure',
+  'UserPromptSubmit', 'AssistantResponse',
+  'SubagentStart', 'SubagentStop',
+  'SessionStart', 'SessionEnd', 'SessionTitleChanged',
+];
 
 export default function EventStream() {
   const [detailed, setDetailed] = createSignal(false);
   const [stick, setStick] = createSignal(true);
+  const [showFilters, setShowFilters] = createSignal(false);
+  const [hiddenTypes, setHiddenTypes] = createSignal<Set<string>>(
+    new Set(['SessionStart', 'SessionEnd', 'SessionTitleChanged'])
+  );
   let containerRef: HTMLDivElement | undefined;
+
+  const toggleType = (type: string) => {
+    setHiddenTypes(prev => {
+      const next = new Set(prev);
+      if (next.has(type)) next.delete(type);
+      else next.add(type);
+      return next;
+    });
+  };
 
   const tabStyle = (active: boolean) => [
     'font-size:10px;padding:4px 10px;border-radius:4px;cursor:pointer;border:none;',
@@ -18,14 +39,20 @@ export default function EventStream() {
       : 'background:transparent;color:var(--text-dim);',
   ].join('');
 
+  // Count events by type for badges
+  const typeCounts = createMemo(() => {
+    const counts = new Map<string, number>();
+    for (const e of filteredEvents()) {
+      counts.set(e.hook_event_type, (counts.get(e.hook_event_type) || 0) + 1);
+    }
+    return counts;
+  });
+
   const displayEvents = createMemo(() => {
     const query = searchQuery();
-    let evts = filteredEvents();
-    if (!detailed()) {
-      evts = evts.filter(
-        (event) => !['SessionStart', 'SessionEnd', 'SessionTitleChanged'].includes(event.hook_event_type),
-      );
-    }
+    const hidden = hiddenTypes();
+    let evts = filteredEvents().filter(e => !hidden.has(e.hook_event_type));
+
     if (query) {
       try {
         const re = new RegExp(query, 'i');
@@ -37,18 +64,14 @@ export default function EventStream() {
           re.test(e.payload?.tool_name || '') ||
           re.test(JSON.stringify(e.payload))
         );
-      } catch {
-        // invalid regex — show all
-      }
+      } catch { /* invalid regex */ }
     }
     return evts.slice(-500).reverse();
   });
 
   createEffect(() => {
-    displayEvents(); // track reactivity
-    if (stick() && containerRef) {
-      containerRef.scrollTop = 0;
-    }
+    displayEvents();
+    if (stick() && containerRef) containerRef.scrollTop = 0;
   });
 
   return (
@@ -57,20 +80,30 @@ export default function EventStream() {
       <div style="display:flex;align-items:center;gap:8px;padding:8px 16px;border-bottom:1px solid var(--border);flex-shrink:0;">
         <button style={tabStyle(!detailed())} onClick={() => setDetailed(false)}>
           <span style="display:flex;align-items:center;gap:6px;">
-            <Icon path={queueList} style="width:12px;height:12px;" />
-            Simple
+            <Icon path={queueList} style="width:12px;height:12px;" /> Simple
           </span>
         </button>
         <button style={tabStyle(detailed())} onClick={() => setDetailed(true)}>
           <span style="display:flex;align-items:center;gap:6px;">
-            <Icon path={bars_3BottomLeft} style="width:12px;height:12px;" />
-            Detailed
+            <Icon path={bars_3BottomLeft} style="width:12px;height:12px;" /> Detailed
           </span>
         </button>
+
         <SearchBar />
+
+        <button
+          style={tabStyle(showFilters())}
+          onClick={() => setShowFilters(f => !f)}
+          title="Toggle event type filters"
+        >
+          <span style="display:flex;align-items:center;gap:6px;">
+            <Icon path={funnel} style="width:12px;height:12px;" /> Filter
+          </span>
+        </button>
+
         <button
           onClick={() => setStick(s => !s)}
-          title={stick() ? 'Unpin (auto-scroll off)' : 'Pin (auto-scroll on)'}
+          title={stick() ? 'Pause auto-scroll' : 'Resume auto-scroll'}
           style={[
             'margin-left:auto;font-size:10px;padding:4px 10px;border-radius:4px;cursor:pointer;border:none;',
             'transition:background 0.15s,color 0.15s;',
@@ -86,14 +119,43 @@ export default function EventStream() {
         </button>
       </div>
 
+      {/* Filter chips */}
+      <Show when={showFilters()}>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;padding:8px 16px;border-bottom:1px solid var(--border);flex-shrink:0;">
+          <For each={EVENT_TYPES}>
+            {(type) => {
+              const count = () => typeCounts().get(type) || 0;
+              const hidden = () => hiddenTypes().has(type);
+              return (
+                <button
+                  onClick={() => toggleType(type)}
+                  style={[
+                    'font-size:10px;font-weight:500;padding:3px 8px;border-radius:4px;cursor:pointer;border:none;',
+                    'transition:opacity 0.15s;display:flex;align-items:center;gap:4px;',
+                    hidden()
+                      ? 'opacity:0.35;background:var(--bg-elevated);color:var(--text-dim);'
+                      : `opacity:1;background:${getEventTypeBgColor(type)};color:${getEventTypeTextColor(type)};`,
+                  ].join('')}
+                >
+                  {getEventTypeLabel(type)}
+                  <span style="font-size:9px;opacity:0.7;">{count()}</span>
+                </button>
+              );
+            }}
+          </For>
+        </div>
+      </Show>
+
       {/* Event list */}
-      <div
-        ref={containerRef}
-        style="flex:1;overflow-y:auto;"
-      >
+      <div ref={containerRef} style="flex:1;overflow-y:auto;">
         <For each={displayEvents()}>
           {(e) => <EventRow event={e} detailed={detailed()} />}
         </For>
+        <Show when={displayEvents().length === 0}>
+          <div style="padding:40px;text-align:center;color:var(--text-dim);font-size:12px;">
+            No events match the current filters
+          </div>
+        </Show>
       </div>
     </div>
   );
