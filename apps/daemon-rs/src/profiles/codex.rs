@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{LazyLock, Mutex};
-use std::time::{Duration, SystemTime};
+use std::time::SystemTime;
 
 use rusqlite::Connection;
 use serde::Deserialize;
@@ -283,7 +283,7 @@ impl CodexProfile {
             return Vec::new();
         };
 
-        let recent_cutoff_ms = now_millis().saturating_sub(Duration::from_hours(12).as_millis() as i64);
+        let recent_cutoff_ms = now_millis().saturating_sub(12 * 60 * 60 * 1000);
         let recent_cutoff_secs = recent_cutoff_ms / 1000;
 
         let Ok(mut statement) = connection.prepare(
