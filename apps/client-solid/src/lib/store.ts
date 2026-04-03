@@ -1,6 +1,6 @@
 import { createSignal, createMemo } from 'solid-js';
 import type { View, Project, SessionInfo, AgentInfo, HookEvent } from './types';
-import { events } from './ws';
+import { agents, events } from './ws';
 import { describeEvent } from './describe';
 
 /** Navigation state (legacy, kept for compatibility) */
@@ -43,11 +43,21 @@ export function clearSelection() {
 }
 
 const ACTIVE_THRESHOLD_MS = 30_000;
+const MAIN_AGENT_KEY = '__main__';
+
+const registryBySessionAgent = createMemo(() => {
+  const map = new Map<string, string>();
+  for (const entry of agents()) {
+    const agentKey = entry.agent_id || MAIN_AGENT_KEY;
+    map.set(`${entry.session_id}:${agentKey}`, entry.lifecycle_status);
+  }
+  return map;
+});
 
 /** Derive projects from the event stream */
 export const projects = createMemo((): Project[] => {
-  const now = Date.now();
   const evts = events();
+  const registry = registryBySessionAgent();
   const map = new Map<string, { events: HookEvent[]; sessions: Map<string, HookEvent[]> }>();
 
   for (const e of evts) {
@@ -101,12 +111,15 @@ export const projects = createMemo((): Project[] => {
           modelName: aevts.find((e) => e.model_name || e.payload?.model)?.model_name || aevts.find((e) => e.payload?.model)?.payload.model,
           eventCount: aevts.length,
           lastEventAt: aLast,
-          isActive: now - aLast < ACTIVE_THRESHOLD_MS,
+          isActive: isRegistryActive(registry, sid, aid),
           parentId: undefined,
         });
       }
 
       const sessionSummary = resolveSessionSummary(sevts, agentsArr);
+      const sessionIsActive =
+        isRegistryActive(registry, sid, MAIN_AGENT_KEY)
+        || agentsArr.some((agent) => agent.isActive);
       sessions.push({
         sessionId: sid,
         label: resolveSessionLabel(sevts, name),
@@ -117,7 +130,7 @@ export const projects = createMemo((): Project[] => {
         agents: agentsArr.sort((a, b) => b.eventCount - a.eventCount),
         activeAgentCount: agentsArr.filter((agent) => agent.isActive).length,
         lastEventAt: sLastEvent,
-        isActive: now - sLastEvent < ACTIVE_THRESHOLD_MS,
+        isActive: sessionIsActive,
       });
     }
 
@@ -136,7 +149,7 @@ export const projects = createMemo((): Project[] => {
       agentCount: agentIds.size,
       activeSessionCount,
       lastEventAt,
-      isActive: now - lastEventAt < ACTIVE_THRESHOLD_MS,
+      isActive: activeSessionCount > 0,
     });
   }
 
@@ -162,6 +175,19 @@ function resolveAgentName(evts: HookEvent[], isMain: boolean): string {
   const agentType = evts.find((e) => e.payload?.agent_type)?.payload.agent_type;
   if (agentType && agentType !== 'main') return agentType;
   return isMain ? 'Session' : 'Agent';
+}
+
+function isRegistryActive(
+  registry: Map<string, string>,
+  sessionId: string,
+  agentId: string | null,
+): boolean {
+  const key = `${sessionId}:${agentId || MAIN_AGENT_KEY}`;
+  const status = registry.get(key);
+  if (status) {
+    return status === 'active';
+  }
+  return false;
 }
 
 function resolveRuntimeLabel(evts: HookEvent[]): string | undefined {
