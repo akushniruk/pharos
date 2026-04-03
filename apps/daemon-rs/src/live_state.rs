@@ -519,28 +519,68 @@ fn describe_legacy_event(event: &LegacyHookEvent) -> String {
         "PreToolUse" => {
             if let Some(tool_input) = event.payload.get("tool_input") {
                 if (tool_name == "Bash" || tool_name == "exec_command")
-                    && tool_input.get("command").and_then(serde_json::Value::as_str).is_some()
+                    && extract_command(tool_input).is_some()
                 {
-                    let command = tool_input
-                        .get("command")
+                    let command = extract_command(tool_input).unwrap_or_default();
+                    if let Some(workdir) = tool_input
+                        .get("workdir")
                         .and_then(serde_json::Value::as_str)
-                        .unwrap_or_default();
-                    return format!("Running {}", truncate(command, 72));
+                        .and_then(basename_from_path)
+                    {
+                        return format!("Running {} in {workdir}", truncate(&command, 64));
+                    }
+                    return format!("Running {}", truncate(&command, 72));
                 }
-                if tool_name == "exec_command"
-                    && tool_input.get("cmd").and_then(serde_json::Value::as_str).is_some()
+                if ["Read", "Edit", "Write"].contains(&tool_name.as_str())
+                    && extract_file_target(tool_input).is_some()
                 {
-                    let command = tool_input
-                        .get("cmd")
+                    let target = extract_file_target(tool_input).unwrap_or_default();
+                    let verb = match tool_name.as_str() {
+                        "Read" => "Reading",
+                        "Edit" => "Editing",
+                        _ => "Writing",
+                    };
+                    return format!("{verb} {target}");
+                }
+                if tool_name == "apply_patch" {
+                    let patch = tool_input
+                        .get("patch")
                         .and_then(serde_json::Value::as_str)
+                        .or_else(|| tool_input.get("input").and_then(serde_json::Value::as_str))
                         .unwrap_or_default();
-                    return format!("Running {}", truncate(command, 72));
+                    if let Some(target) = extract_patched_file(patch) {
+                        return format!("Patching {target}");
+                    }
+                    return "Applying patch".to_string();
                 }
             }
             format!("Using {tool_name}")
         }
-        "PostToolUse" => format!("{tool_name} completed"),
-        "PostToolUseFailure" => format!("{tool_name} failed"),
+        "PostToolUse" => {
+            if let Some(content) = event
+                .payload
+                .get("content")
+                .and_then(serde_json::Value::as_str)
+                .and_then(content_preview)
+            {
+                if tool_name == "exec_command" {
+                    return format!("Command completed: {}", truncate(&content, 72));
+                }
+                return format!("{tool_name} completed: {}", truncate(&content, 72));
+            }
+            format!("{tool_name} completed")
+        }
+        "PostToolUseFailure" => {
+            if let Some(content) = event
+                .payload
+                .get("content")
+                .and_then(serde_json::Value::as_str)
+                .and_then(content_preview)
+            {
+                return format!("{tool_name} failed: {}", truncate(&content, 72));
+            }
+            format!("{tool_name} failed")
+        }
         "SessionStart" => payload_string(&event.payload, "title")
             .map(|title| format!("Watching {}", truncate(&title, 80)))
             .unwrap_or_else(|| "Session observed".to_string()),
@@ -567,6 +607,75 @@ fn describe_legacy_event(event: &LegacyHookEvent) -> String {
         "SessionTitleChanged" => payload_string(&event.payload, "title").unwrap_or_else(|| "Title changed".to_string()),
         _ => event.hook_event_type.clone(),
     }
+}
+
+fn extract_command(tool_input: &serde_json::Value) -> Option<String> {
+    if let Some(command) = tool_input.get("cmd").and_then(serde_json::Value::as_str) {
+        let trimmed = command.trim();
+        if !trimmed.is_empty() {
+            return Some(trimmed.to_string());
+        }
+    }
+    if let Some(command) = tool_input.get("command").and_then(serde_json::Value::as_str) {
+        let trimmed = command.trim();
+        if !trimmed.is_empty() {
+            return Some(trimmed.to_string());
+        }
+    }
+    if let Some(parts) = tool_input.get("command").and_then(serde_json::Value::as_array) {
+        let joined = parts
+            .iter()
+            .filter_map(serde_json::Value::as_str)
+            .map(str::trim)
+            .filter(|part| !part.is_empty())
+            .collect::<Vec<_>>()
+            .join(" ");
+        if !joined.is_empty() {
+            return Some(joined);
+        }
+    }
+    None
+}
+
+fn extract_file_target(tool_input: &serde_json::Value) -> Option<String> {
+    ["file_path", "path", "file"]
+        .iter()
+        .find_map(|key| tool_input.get(*key).and_then(serde_json::Value::as_str))
+        .and_then(short_path)
+}
+
+fn extract_patched_file(patch: &str) -> Option<String> {
+    let marker = ["*** Add File: ", "*** Update File: ", "*** Delete File: "];
+    for prefix in marker {
+        if let Some(rest) = patch.lines().find_map(|line| line.strip_prefix(prefix)) {
+            return short_path(rest);
+        }
+    }
+    None
+}
+
+fn content_preview(content: &str) -> Option<String> {
+    content
+        .lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty())
+        .map(ToString::to_string)
+}
+
+fn short_path(path: &str) -> Option<String> {
+    let parts = path.split('/').filter(|part| !part.is_empty()).collect::<Vec<_>>();
+    if parts.is_empty() {
+        None
+    } else {
+        Some(parts.into_iter().rev().take(3).collect::<Vec<_>>().into_iter().rev().collect::<Vec<_>>().join("/"))
+    }
+}
+
+fn basename_from_path(path: &str) -> Option<String> {
+    path.split('/')
+        .filter(|part| !part.is_empty())
+        .next_back()
+        .map(ToString::to_string)
 }
 
 fn truncate(text: &str, max: usize) -> String {
