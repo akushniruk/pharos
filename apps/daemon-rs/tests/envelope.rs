@@ -142,6 +142,7 @@ fn converts_codex_tool_use_to_envelope() {
         tool_name: "exec_command".to_string(),
         tool_use_id: "call_123".to_string(),
         input: json!({"command": ["ls"]}),
+        model: None,
     };
 
     let envelope = codex_event_to_envelope(&event, "pharos", "proc-42", 1_711_234_567_000);
@@ -163,6 +164,7 @@ fn converts_codex_tool_result_failure_to_envelope() {
         tool_name: Some("exec_command".to_string()),
         is_error: true,
         content: "permission denied".to_string(),
+        model: None,
     };
 
     let envelope = codex_event_to_envelope(&event, "pharos", "proc-42", 1_711_234_567_000);
@@ -173,6 +175,23 @@ fn converts_codex_tool_result_failure_to_envelope() {
     assert_eq!(envelope.payload["tool_name"], "exec_command");
     assert_eq!(envelope.payload["is_error"], true);
     assert_eq!(envelope.payload["content"], "permission denied");
+}
+
+#[test]
+fn converts_codex_session_title_changed_to_envelope() {
+    let event = CodexSessionEvent::SessionTitleChanged {
+        title: "Review native Codex metadata".to_string(),
+    };
+
+    let envelope = codex_event_to_envelope(&event, "pharos", "proc-42", 1_711_234_567_000);
+
+    assert_eq!(envelope.runtime_source, RuntimeSource::CodexCli);
+    assert_eq!(envelope.event_kind, EventKind::SessionTitleChanged);
+    assert_eq!(
+        envelope.title,
+        "session title: Review native Codex metadata"
+    );
+    assert_eq!(envelope.payload["title"], "Review native Codex metadata");
 }
 
 #[test]

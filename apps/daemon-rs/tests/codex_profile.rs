@@ -1,11 +1,8 @@
 use pharos_daemon::model::RuntimeSource;
-use pharos_daemon::profiles::codex::{
-    enrich_detected_sessions,
-    parse_codex_items,
-    CodexProfile,
-    CodexSessionEvent,
-};
 use pharos_daemon::profiles::DetectedSession;
+use pharos_daemon::profiles::codex::{
+    CodexProfile, CodexSessionEvent, enrich_detected_sessions, parse_codex_items,
+};
 use tempfile::tempdir;
 
 #[test]
@@ -14,7 +11,7 @@ fn codex_profile_discovers_native_session_titles_and_project_roots() {
     std::fs::create_dir_all(temp_dir.path().join("sessions")).expect("sessions dir");
     std::fs::write(
         temp_dir.path().join("session_index.jsonl"),
-        r#"{"id":"sess-a","thread_name":"Review pharos runtime design","updated_at":"2026-04-03T11:40:03.467Z"}"#,
+        r#"{"id":"sess-a","updated_at":"2026-04-03T11:40:03.467Z"}"#,
     )
     .expect("write index");
     std::fs::write(
@@ -56,10 +53,106 @@ fn codex_profile_discovers_native_session_titles_and_project_roots() {
 
     assert_eq!(sessions.len(), 1);
     assert_eq!(sessions[0].native_session_id, "sess-a");
-    assert_eq!(sessions[0].project_root.as_deref(), Some("/Users/tester/workspace/pharos"));
+    assert_eq!(
+        sessions[0].project_root.as_deref(),
+        Some("/Users/tester/workspace/pharos")
+    );
     assert_eq!(sessions[0].title.as_deref(), Some("review codebase fully"));
     assert!(sessions[0].history_path.is_some());
     assert!(sessions[0].updated_at_ms > 0);
+}
+
+#[test]
+fn codex_profile_discovers_state_db_sessions_and_rollout_metadata() {
+    let temp_dir = tempdir().expect("tempdir");
+    let rollout_path = temp_dir.path().join("sessions").join("thread-a.jsonl");
+    std::fs::create_dir_all(rollout_path.parent().expect("rollout parent")).expect("sessions dir");
+
+    let connection =
+        rusqlite::Connection::open(temp_dir.path().join("state_5.sqlite")).expect("open sqlite");
+    connection
+        .execute_batch(
+            "CREATE TABLE threads (
+                id TEXT PRIMARY KEY,
+                title TEXT,
+                updated_at TEXT,
+                rollout_path TEXT,
+                cwd TEXT
+            );",
+        )
+        .expect("create threads");
+    connection
+        .execute(
+            "INSERT INTO threads (id, title, updated_at, rollout_path, cwd)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            rusqlite::params![
+                "thread-a",
+                "Review native Codex metadata",
+                "2026-04-03T11:40:03.467Z",
+                rollout_path.to_string_lossy().to_string(),
+                "/Users/tester/workspace/pharos",
+            ],
+        )
+        .expect("insert thread");
+    std::fs::write(
+        &rollout_path,
+        concat!(
+            r#"{"type":"ai-title","aiTitle":"Review native Codex metadata"}"#,
+            "\n",
+            r#"{"type":"message","role":"assistant","model":"gpt-5.4-codex","content":[{"type":"output_text","text":"Working"}]}"#,
+            "\n",
+            r#"{"type":"function_call","call_id":"call_9","name":"exec_command","arguments":"{\"command\":[\"ls\"]}","model":"gpt-5.4-codex"}"#,
+            "\n",
+            r#"{"type":"function_call_output","call_id":"call_9","output":"{\"output\":\"README.md\\n\",\"metadata\":{\"exit_code\":0}}","model":"gpt-5.4-codex"}"#,
+            "\n",
+        ),
+    )
+    .expect("write rollout");
+
+    let profile = CodexProfile::new(temp_dir.path().to_path_buf());
+    let sessions = profile.discover_native_sessions();
+
+    assert_eq!(sessions.len(), 1);
+    assert_eq!(sessions[0].native_session_id, "thread-a");
+    assert_eq!(
+        sessions[0].project_root.as_deref(),
+        Some("/Users/tester/workspace/pharos")
+    );
+    assert_eq!(
+        sessions[0].title.as_deref(),
+        Some("Review native Codex metadata")
+    );
+    assert_eq!(
+        sessions[0].history_path.as_deref(),
+        Some(rollout_path.as_path())
+    );
+
+    let events = profile.read_session_events(&rollout_path);
+    assert_eq!(
+        events,
+        vec![
+            CodexSessionEvent::SessionTitleChanged {
+                title: "Review native Codex metadata".to_string(),
+            },
+            CodexSessionEvent::AssistantText {
+                text: "Working".to_string(),
+                model: Some("gpt-5.4-codex".to_string()),
+            },
+            CodexSessionEvent::ToolUse {
+                tool_name: "exec_command".to_string(),
+                tool_use_id: "call_9".to_string(),
+                input: serde_json::json!({"command": ["ls"]}),
+                model: Some("gpt-5.4-codex".to_string()),
+            },
+            CodexSessionEvent::ToolResult {
+                tool_use_id: "call_9".to_string(),
+                tool_name: Some("exec_command".to_string()),
+                is_error: false,
+                content: "README.md\n".to_string(),
+                model: Some("gpt-5.4-codex".to_string()),
+            },
+        ]
+    );
 }
 
 #[test]
@@ -143,15 +236,18 @@ fn codex_session_items_parse_into_user_tool_and_assistant_events() {
                 tool_name: "exec_command".to_string(),
                 tool_use_id: "call_1".to_string(),
                 input: serde_json::json!({"command": ["ls"]}),
+                model: None,
             },
             CodexSessionEvent::ToolResult {
                 tool_use_id: "call_1".to_string(),
                 tool_name: Some("exec_command".to_string()),
                 is_error: false,
                 content: "README.md\n".to_string(),
+                model: None,
             },
             CodexSessionEvent::AssistantText {
                 text: "I listed the files.".to_string(),
+                model: None,
             },
         ]
     );
@@ -186,12 +282,14 @@ fn codex_session_items_parse_structured_successful_tool_output() {
                 tool_name: "shell".to_string(),
                 tool_use_id: "call_2".to_string(),
                 input: serde_json::json!({"command": ["cat", "package.json"]}),
+                model: None,
             },
             CodexSessionEvent::ToolResult {
                 tool_use_id: "call_2".to_string(),
                 tool_name: Some("shell".to_string()),
                 is_error: false,
                 content: "{\"name\":\"client\"}".to_string(),
+                model: None,
             },
         ]
     );
@@ -257,6 +355,7 @@ fn codex_live_log_body_parses_tool_use_and_workdir() {
                 "cmd": "sed -n '1,240p' src/main.tsx",
                 "workdir": "/Users/tester/work/demo/signal"
             }),
+            model: None,
         }
     );
 }
@@ -387,11 +486,13 @@ fn codex_live_log_body_parses_exec_command_failure() {
             tool_name,
             is_error,
             content,
+            model,
         } => {
             assert!(tool_use_id.starts_with("log-"));
             assert_eq!(tool_name.as_deref(), Some("exec_command"));
             assert!(*is_error);
             assert_eq!(content, "zsh:1: operation not permitted: ps\n");
+            assert!(model.is_none());
         }
         other => panic!("expected tool result, got {other:?}"),
     }
@@ -447,8 +548,17 @@ fn codex_enrichment_assigns_distinct_live_threads_to_distinct_projects() {
 
     enrich_detected_sessions(&mut sessions, &native_sessions);
 
-    assert_eq!(sessions[0].native_session_id.as_deref(), Some("thread-pharos"));
-    assert_eq!(sessions[1].native_session_id.as_deref(), Some("thread-signal"));
+    assert_eq!(
+        sessions[0].native_session_id.as_deref(),
+        Some("thread-pharos")
+    );
+    assert_eq!(
+        sessions[1].native_session_id.as_deref(),
+        Some("thread-signal")
+    );
     assert_eq!(sessions[0].display_title.as_deref(), Some("Fix pharos bug"));
-    assert_eq!(sessions[1].display_title.as_deref(), Some("Read signal repo"));
+    assert_eq!(
+        sessions[1].display_title.as_deref(),
+        Some("Read signal repo")
+    );
 }

@@ -315,6 +315,7 @@ mod tests {
             tool_name: "exec_command".to_string(),
             tool_use_id: "turn-1".to_string(),
             input: serde_json::json!({"cmd":"pwd"}),
+            model: None,
         };
 
         assert!(remember_codex_signature(&mut tracked, &event));
@@ -355,9 +356,11 @@ mod tests {
 
         let history_event = CodexSessionEvent::AssistantText {
             text: "Repository is a single-package Vite app.".to_string(),
+            model: None,
         };
         let live_event = CodexSessionEvent::AssistantText {
             text: "Repository is a single-package Vite app.".to_string(),
+            model: None,
         };
 
         assert!(remember_codex_signature(&mut tracked, &history_event));
@@ -666,8 +669,11 @@ fn codex_signature(event: &crate::profiles::codex::CodexSessionEvent) -> String 
         crate::profiles::codex::CodexSessionEvent::UserPrompt { text } => {
             format!("prompt:{text}")
         }
-        crate::profiles::codex::CodexSessionEvent::AssistantText { text } => {
+        crate::profiles::codex::CodexSessionEvent::AssistantText { text, .. } => {
             format!("assistant:{text}")
+        }
+        crate::profiles::codex::CodexSessionEvent::SessionTitleChanged { title } => {
+            format!("title:{title}")
         }
         crate::profiles::codex::CodexSessionEvent::SubagentStart {
             agent_type,
@@ -686,12 +692,14 @@ fn codex_signature(event: &crate::profiles::codex::CodexSessionEvent) -> String 
             tool_name,
             tool_use_id,
             input,
+            ..
         } => format!("tool_use:{tool_use_id}:{tool_name}:{input}"),
         crate::profiles::codex::CodexSessionEvent::ToolResult {
             tool_use_id,
             tool_name,
             is_error,
             content,
+            ..
         } => format!(
             "tool_result:{tool_use_id}:{}:{is_error}:{content}",
             tool_name.clone().unwrap_or_default()

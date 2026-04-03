@@ -111,10 +111,18 @@ pub fn codex_event_to_envelope(
             "user prompt".to_string(),
             json!({ "prompt": truncate(text, 500) }),
         ),
-        CodexSessionEvent::AssistantText { text } => (
+        CodexSessionEvent::AssistantText { text, model } => (
             EventKind::AssistantResponse,
             "assistant response".to_string(),
-            json!({ "text": truncate(text, 200), "model": "codex" }),
+            json!({
+                "text": truncate(text, 200),
+                "model": model.as_deref().unwrap_or("codex"),
+            }),
+        ),
+        CodexSessionEvent::SessionTitleChanged { title } => (
+            EventKind::SessionTitleChanged,
+            format!("session title: {title}"),
+            json!({ "title": title }),
         ),
         CodexSessionEvent::SubagentStart {
             agent_type,
@@ -140,6 +148,7 @@ pub fn codex_event_to_envelope(
             tool_name,
             tool_use_id,
             input,
+            model,
         } => (
             EventKind::ToolCallStarted,
             format!("tool call started: {tool_name}"),
@@ -147,7 +156,7 @@ pub fn codex_event_to_envelope(
                 "tool_name": tool_name,
                 "tool_use_id": tool_use_id,
                 "tool_input": input,
-                "model": "codex",
+                "model": model.as_deref().unwrap_or("codex"),
             }),
         ),
         CodexSessionEvent::ToolResult {
@@ -155,6 +164,7 @@ pub fn codex_event_to_envelope(
             tool_name,
             is_error,
             content,
+            model,
         } => {
             let resolved_name = tool_name.as_deref().unwrap_or("unknown");
             let kind = if *is_error {
@@ -175,6 +185,7 @@ pub fn codex_event_to_envelope(
                     "tool_use_id": tool_use_id,
                     "is_error": is_error,
                     "content": truncate(content, 500),
+                    "model": model.as_deref().unwrap_or("codex"),
                 }),
             )
         }

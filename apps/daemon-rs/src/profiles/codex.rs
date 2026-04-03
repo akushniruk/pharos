@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use std::sync::{LazyLock, Mutex};
 use std::time::SystemTime;
 
-use rusqlite::Connection;
+use rusqlite::{Connection, types::ValueRef};
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -42,6 +42,10 @@ pub enum CodexSessionEvent {
     },
     AssistantText {
         text: String,
+        model: Option<String>,
+    },
+    SessionTitleChanged {
+        title: String,
     },
     SubagentStart {
         agent_type: String,
@@ -55,12 +59,14 @@ pub enum CodexSessionEvent {
         tool_name: String,
         tool_use_id: String,
         input: Value,
+        model: Option<String>,
     },
     ToolResult {
         tool_use_id: String,
         tool_name: Option<String>,
         is_error: bool,
         content: String,
+        model: Option<String>,
     },
 }
 
@@ -98,6 +104,7 @@ struct CachedCodexHistory {
 struct CodexDiscoveryFingerprint {
     index_modified_ms: u128,
     sessions_modified_ms: u128,
+    state_modified_ms: u128,
     session_file_count: usize,
 }
 
@@ -131,6 +138,10 @@ impl CodexProfile {
 
         let mut sessions_by_id = HashMap::<String, NativeCodexSession>::new();
 
+        for state_session in self.discover_state_sessions() {
+            merge_native_session(&mut sessions_by_id, state_session);
+        }
+
         let index_path = self.codex_home.join("session_index.jsonl");
         if let Ok(content) = std::fs::read_to_string(index_path) {
             for line in content.lines() {
@@ -138,10 +149,10 @@ impl CodexProfile {
                     continue;
                 };
 
-                sessions_by_id.insert(
-                    entry.id.clone(),
+                merge_native_session(
+                    &mut sessions_by_id,
                     NativeCodexSession {
-                        native_session_id: entry.id,
+                        native_session_id: entry.id.clone(),
                         title: non_empty_string(entry.thread_name),
                         updated_at_ms: parse_rfc3339_ms(&entry.updated_at).unwrap_or(0),
                         project_root: None,
@@ -152,23 +163,7 @@ impl CodexProfile {
         }
 
         for live_session in self.discover_log_sessions() {
-            let native_session_id = live_session.native_session_id.clone();
-            match sessions_by_id.get_mut(&native_session_id) {
-                Some(existing) => {
-                    if existing.title.is_none() {
-                        existing.title = live_session.title.clone();
-                    }
-                    if existing.project_root.is_none() {
-                        existing.project_root = live_session.project_root.clone();
-                    }
-                    if live_session.updated_at_ms > existing.updated_at_ms {
-                        existing.updated_at_ms = live_session.updated_at_ms;
-                    }
-                }
-                None => {
-                    sessions_by_id.insert(native_session_id, live_session);
-                }
-            }
+            merge_native_session(&mut sessions_by_id, live_session);
         }
 
         let sessions_dir = self.codex_home.join("sessions");
@@ -189,20 +184,28 @@ impl CodexProfile {
                 continue;
             };
 
-            let title = latest_user_prompt(&parsed.items)
-                .or_else(|| sessions_by_id.get(&parsed.session.id).and_then(|entry| entry.title.clone()));
+            let title = extract_session_metadata(&parsed.items)
+                .title
+                .or_else(|| latest_user_prompt(&parsed.items))
+                .or_else(|| {
+                    sessions_by_id
+                        .get(&parsed.session.id)
+                        .and_then(|entry| entry.title.clone())
+                });
             let updated_at_ms = sessions_by_id
                 .get(&parsed.session.id)
                 .map(|entry| entry.updated_at_ms)
                 .filter(|timestamp| *timestamp > 0)
                 .or_else(|| parse_rfc3339_ms(&parsed.session.timestamp))
                 .unwrap_or(0);
-            let project_root = extract_project_root(&parsed.items);
+            let project_root = extract_session_metadata(&parsed.items)
+                .project_root
+                .or_else(|| extract_project_root(&parsed.items));
 
-            sessions_by_id.insert(
-                parsed.session.id.clone(),
+            merge_native_session(
+                &mut sessions_by_id,
                 NativeCodexSession {
-                    native_session_id: parsed.session.id,
+                    native_session_id: parsed.session.id.clone(),
                     title,
                     updated_at_ms,
                     project_root,
@@ -227,10 +230,7 @@ impl CodexProfile {
         sessions
     }
 
-    pub fn read_session_events(
-        &self,
-        history_path: &std::path::Path,
-    ) -> Vec<CodexSessionEvent> {
+    pub fn read_session_events(&self, history_path: &std::path::Path) -> Vec<CodexSessionEvent> {
         let fingerprint = history_fingerprint(history_path);
         if let Ok(cache) = HISTORY_CACHE.lock() {
             if let Some(cached) = cache.get(history_path) {
@@ -243,10 +243,13 @@ impl CodexProfile {
         let Ok(content) = std::fs::read_to_string(history_path) else {
             return Vec::new();
         };
-        let Ok(parsed) = serde_json::from_str::<CodexSessionFile>(&content) else {
-            return Vec::new();
+        let events = if history_path.extension().and_then(|value| value.to_str()) == Some("jsonl") {
+            parse_codex_jsonl(&content)
+        } else if let Ok(parsed) = serde_json::from_str::<CodexSessionFile>(&content) {
+            parse_codex_items(&parsed.items)
+        } else {
+            parse_codex_jsonl(&content)
         };
-        let events = parse_codex_items(&parsed.items);
 
         if let Ok(mut cache) = HISTORY_CACHE.lock() {
             cache.insert(
@@ -259,6 +262,57 @@ impl CodexProfile {
         }
 
         events
+    }
+
+    fn discover_state_sessions(&self) -> Vec<NativeCodexSession> {
+        let Ok(entries) = std::fs::read_dir(&self.codex_home) else {
+            return Vec::new();
+        };
+
+        let mut sessions = Vec::new();
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let Some(file_name) = path.file_name().and_then(|value| value.to_str()) else {
+                continue;
+            };
+            if !file_name.starts_with("state_")
+                || path.extension().and_then(|value| value.to_str()) != Some("sqlite")
+            {
+                continue;
+            }
+
+            let Ok(connection) = Connection::open(&path) else {
+                continue;
+            };
+            let Ok(mut statement) = connection.prepare(
+                "SELECT id, title, updated_at, rollout_path, cwd
+                 FROM threads
+                 ORDER BY updated_at DESC",
+            ) else {
+                continue;
+            };
+            let Ok(rows) = statement.query_map([], |row| {
+                let native_session_id: String = row.get(0)?;
+                let title: Option<String> = row.get::<_, Option<String>>(1)?;
+                let updated_at_ms = parse_sqlite_timestamp(row.get_ref(2)?).unwrap_or(0);
+                let rollout_path: Option<String> = row.get::<_, Option<String>>(3)?;
+                let cwd: Option<String> = row.get::<_, Option<String>>(4)?;
+
+                Ok(NativeCodexSession {
+                    native_session_id,
+                    title: title.and_then(non_empty_string),
+                    updated_at_ms,
+                    project_root: cwd.and_then(non_empty_string),
+                    history_path: rollout_path.and_then(non_empty_string).map(PathBuf::from),
+                })
+            }) else {
+                continue;
+            };
+
+            sessions.extend(rows.flatten());
+        }
+
+        sessions
     }
 
     pub fn read_live_events(&self, thread_id: &str, after_row_id: i64) -> Vec<CodexLiveEvent> {
@@ -300,22 +354,34 @@ impl CodexProfile {
         let index_modified_ms = modified_ms(self.codex_home.join("session_index.jsonl"));
         let sessions_dir = self.codex_home.join("sessions");
         let mut sessions_modified_ms = modified_ms(&sessions_dir);
+        let mut state_modified_ms = 0_u128;
         let mut session_file_count = 0_usize;
 
-        if let Ok(entries) = std::fs::read_dir(&sessions_dir) {
+        if let Ok(entries) = std::fs::read_dir(&self.codex_home) {
             for entry in entries.flatten() {
                 let path = entry.path();
-                if path.extension().and_then(|value| value.to_str()) != Some("json") {
+                let Some(file_name) = path.file_name().and_then(|value| value.to_str()) else {
+                    continue;
+                };
+                if file_name.starts_with("state_")
+                    && path.extension().and_then(|value| value.to_str()) == Some("sqlite")
+                {
+                    state_modified_ms = state_modified_ms.max(modified_ms(path));
                     continue;
                 }
-                session_file_count += 1;
-                sessions_modified_ms = sessions_modified_ms.max(modified_ms(path));
+                if path.parent() == Some(sessions_dir.as_path())
+                    && path.extension().and_then(|value| value.to_str()) == Some("json")
+                {
+                    session_file_count += 1;
+                    sessions_modified_ms = sessions_modified_ms.max(modified_ms(path));
+                }
             }
         }
 
         CodexDiscoveryFingerprint {
             index_modified_ms,
             sessions_modified_ms,
+            state_modified_ms,
             session_file_count,
         }
     }
@@ -371,21 +437,59 @@ pub fn parse_codex_items(items: &[Value]) -> Vec<CodexSessionEvent> {
     let mut tool_names = HashMap::<String, String>::new();
 
     for item in items {
-        let Some(item_type) = item.get("type").and_then(Value::as_str) else {
+        parse_codex_item(item, &mut tool_names, &mut events);
+    }
+
+    events
+}
+
+fn parse_codex_jsonl(content: &str) -> Vec<CodexSessionEvent> {
+    let mut events = Vec::new();
+    let mut tool_names = HashMap::<String, String>::new();
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        let Ok(item) = serde_json::from_str::<Value>(trimmed) else {
             continue;
         };
-        match item_type {
-            "message" => {
-                let role = item.get("role").and_then(Value::as_str).unwrap_or("");
-                let Some(content) = item.get("content").and_then(Value::as_array) else {
-                    continue;
-                };
+        parse_codex_item(&item, &mut tool_names, &mut events);
+    }
 
+    events
+}
+
+fn parse_codex_item(
+    item: &Value,
+    tool_names: &mut HashMap<String, String>,
+    events: &mut Vec<CodexSessionEvent>,
+) {
+    if let Some(title) = extract_session_title(item) {
+        events.push(CodexSessionEvent::SessionTitleChanged { title });
+        return;
+    }
+
+    let item_type = item.get("type").and_then(Value::as_str).unwrap_or("");
+    let message = item.get("message").unwrap_or(item);
+    let role = message
+        .get("role")
+        .and_then(Value::as_str)
+        .or_else(|| item.get("role").and_then(Value::as_str))
+        .unwrap_or("");
+    let model = message
+        .get("model")
+        .and_then(Value::as_str)
+        .or_else(|| item.get("model").and_then(Value::as_str))
+        .map(ToString::to_string);
+
+    match item_type {
+        "message" | "user" | "assistant" | "response_item" | "session_meta" | "turn_context" => {
+            if let Some(content) = message.get("content").and_then(Value::as_array) {
                 for block in content {
-                    match (
-                        role,
-                        block.get("type").and_then(Value::as_str),
-                    ) {
+                    match (role, block.get("type").and_then(Value::as_str)) {
                         ("user", Some("input_text")) => {
                             if let Some(text) = block.get("text").and_then(Value::as_str) {
                                 events.push(CodexSessionEvent::UserPrompt {
@@ -393,67 +497,68 @@ pub fn parse_codex_items(items: &[Value]) -> Vec<CodexSessionEvent> {
                                 });
                             }
                         }
-                        ("assistant", Some("output_text")) => {
+                        ("assistant", Some("output_text")) | ("assistant", Some("text")) => {
                             if let Some(text) = block.get("text").and_then(Value::as_str) {
                                 events.push(CodexSessionEvent::AssistantText {
                                     text: text.to_string(),
+                                    model: model.clone(),
                                 });
+                            }
+                        }
+                        ("assistant", Some("tool_use")) => {
+                            if let Some(event) = parse_tool_use_block(block, model.clone()) {
+                                if let CodexSessionEvent::ToolUse {
+                                    tool_use_id,
+                                    tool_name,
+                                    ..
+                                } = &event
+                                {
+                                    tool_names.insert(tool_use_id.clone(), tool_name.clone());
+                                }
+                                events.push(event);
+                            }
+                        }
+                        ("user", Some("tool_result")) | ("assistant", Some("tool_result")) => {
+                            if let Some(event) = parse_tool_result_block(block, model.clone()) {
+                                events.push(event);
                             }
                         }
                         _ => {}
                     }
                 }
+            } else if role == "user" {
+                if let Some(text) = text_from_value(message) {
+                    events.push(CodexSessionEvent::UserPrompt { text });
+                }
+            } else if role == "assistant" {
+                if let Some(text) = text_from_value(message) {
+                    events.push(CodexSessionEvent::AssistantText {
+                        text,
+                        model: model.clone(),
+                    });
+                }
             }
-            "function_call" => {
-                let Some(tool_name) = item.get("name").and_then(Value::as_str) else {
-                    continue;
-                };
-                let Some(tool_use_id) = item.get("call_id").and_then(Value::as_str) else {
-                    continue;
-                };
-                let input = item
-                    .get("arguments")
-                    .and_then(Value::as_str)
-                    .and_then(|raw| serde_json::from_str::<Value>(raw).ok())
-                    .unwrap_or(Value::Null);
-                tool_names.insert(tool_use_id.to_string(), tool_name.to_string());
-                events.push(CodexSessionEvent::ToolUse {
-                    tool_name: tool_name.to_string(),
-                    tool_use_id: tool_use_id.to_string(),
-                    input,
-                });
-            }
-            "function_call_output" => {
-                let Some(tool_use_id) = item.get("call_id").and_then(Value::as_str) else {
-                    continue;
-                };
-                let parsed_output = item
-                    .get("output")
-                    .and_then(Value::as_str)
-                    .and_then(|raw| serde_json::from_str::<Value>(raw).ok());
-                let is_error = parsed_output
-                    .as_ref()
-                    .and_then(|output| output.get("metadata"))
-                    .and_then(|metadata| metadata.get("exit_code"))
-                    .and_then(Value::as_i64)
-                    .is_some_and(|exit_code| exit_code != 0);
-                let content = parsed_output
-                    .as_ref()
-                    .and_then(extract_codex_tool_result_content)
-                    .or_else(|| item.get("output").and_then(Value::as_str).map(ToString::to_string))
-                    .unwrap_or_default();
-                events.push(CodexSessionEvent::ToolResult {
-                    tool_use_id: tool_use_id.to_string(),
-                    tool_name: tool_names.get(tool_use_id).cloned(),
-                    is_error,
-                    content,
-                });
-            }
-            _ => {}
         }
+        "function_call" | "tool_use" => {
+            if let Some(event) = parse_tool_use_item(item, model.clone()) {
+                if let CodexSessionEvent::ToolUse {
+                    tool_use_id,
+                    tool_name,
+                    ..
+                } = &event
+                {
+                    tool_names.insert(tool_use_id.clone(), tool_name.clone());
+                }
+                events.push(event);
+            }
+        }
+        "function_call_output" | "tool_result" => {
+            if let Some(event) = parse_tool_result_item(item, tool_names, model.clone()) {
+                events.push(event);
+            }
+        }
+        _ => {}
     }
-
-    events
 }
 
 pub fn enrich_detected_sessions(
@@ -471,11 +576,7 @@ pub fn enrich_detected_sessions(
     let mut candidates = Vec::<(i64, usize, usize)>::new();
     for &session_index in &codex_indices {
         for (native_index, native_session) in native_sessions.iter().enumerate() {
-            let score = match_score(
-                &sessions[session_index],
-                native_session,
-                live_codex_count,
-            );
+            let score = match_score(&sessions[session_index], native_session, live_codex_count);
             if score > 0 {
                 candidates.push((score, session_index, native_index));
             }
@@ -547,7 +648,8 @@ fn latest_user_prompt(items: &[Value]) -> Option<String> {
                     if block.get("type").and_then(Value::as_str) != Some("input_text") {
                         return None;
                     }
-                    block.get("text")
+                    block
+                        .get("text")
                         .and_then(Value::as_str)
                         .map(trimmed_preview)
                 })
@@ -562,13 +664,259 @@ fn extract_project_root(items: &[Value]) -> Option<String> {
             .and_then(Value::as_array)
             .and_then(|blocks| {
                 blocks.iter().find_map(|block| {
-                    block.get("text").and_then(Value::as_str).map(ToString::to_string)
+                    block
+                        .get("text")
+                        .and_then(Value::as_str)
+                        .map(ToString::to_string)
                 })
             })?;
 
         text.lines()
             .find_map(|line| line.strip_prefix("Project root: ").map(ToString::to_string))
     })
+}
+
+fn extract_session_title(item: &Value) -> Option<String> {
+    match item.get("type").and_then(Value::as_str) {
+        Some("ai-title") => item
+            .get("aiTitle")
+            .and_then(Value::as_str)
+            .map(ToString::to_string),
+        Some("session_meta") => item
+            .get("title")
+            .and_then(Value::as_str)
+            .or_else(|| {
+                item.get("session")
+                    .and_then(|session| session.get("title"))
+                    .and_then(Value::as_str)
+            })
+            .map(ToString::to_string),
+        _ => None,
+    }
+}
+
+fn extract_session_metadata(items: &[Value]) -> SessionMetadata {
+    for item in items {
+        let title = extract_session_title(item);
+        let project_root = extract_project_root(std::slice::from_ref(item));
+        if title.is_some() || project_root.is_some() {
+            return SessionMetadata {
+                title,
+                project_root,
+            };
+        }
+    }
+
+    SessionMetadata::default()
+}
+
+#[derive(Default)]
+struct SessionMetadata {
+    title: Option<String>,
+    project_root: Option<String>,
+}
+
+fn merge_native_session(
+    sessions_by_id: &mut HashMap<String, NativeCodexSession>,
+    session: NativeCodexSession,
+) {
+    match sessions_by_id.get_mut(&session.native_session_id) {
+        Some(existing) => {
+            if existing.title.is_none() {
+                existing.title = session.title.clone();
+            }
+            if existing.project_root.is_none() {
+                existing.project_root = session.project_root.clone();
+            }
+            if existing.history_path.is_none() {
+                existing.history_path = session.history_path.clone();
+            }
+            if session.updated_at_ms > existing.updated_at_ms {
+                existing.updated_at_ms = session.updated_at_ms;
+            }
+        }
+        None => {
+            sessions_by_id.insert(session.native_session_id.clone(), session);
+        }
+    }
+}
+
+fn parse_sqlite_timestamp(value: ValueRef<'_>) -> Option<i64> {
+    match value {
+        ValueRef::Integer(raw) => {
+            if raw >= 1_000_000_000_000 {
+                Some(raw)
+            } else {
+                Some(raw.saturating_mul(1000))
+            }
+        }
+        ValueRef::Real(raw) if raw.is_sign_negative() => None,
+        ValueRef::Real(raw) => Some(raw as i64),
+        ValueRef::Text(raw) => std::str::from_utf8(raw).ok().and_then(|text| {
+            text.parse::<i64>()
+                .ok()
+                .map(|value| {
+                    if value >= 1_000_000_000_000 {
+                        value
+                    } else {
+                        value.saturating_mul(1000)
+                    }
+                })
+                .or_else(|| parse_rfc3339_ms(text))
+        }),
+        _ => None,
+    }
+}
+
+fn parse_tool_use_block(block: &Value, model: Option<String>) -> Option<CodexSessionEvent> {
+    let tool_name = block
+        .get("name")
+        .and_then(Value::as_str)
+        .or_else(|| block.get("tool_name").and_then(Value::as_str))?
+        .to_string();
+    let tool_use_id = block
+        .get("id")
+        .and_then(Value::as_str)
+        .or_else(|| block.get("tool_use_id").and_then(Value::as_str))?
+        .to_string();
+    let input = block.get("input").cloned().unwrap_or(Value::Null);
+
+    Some(CodexSessionEvent::ToolUse {
+        tool_name,
+        tool_use_id,
+        input,
+        model,
+    })
+}
+
+fn parse_tool_use_item(item: &Value, model: Option<String>) -> Option<CodexSessionEvent> {
+    let tool_name = item
+        .get("name")
+        .and_then(Value::as_str)
+        .or_else(|| item.get("tool_name").and_then(Value::as_str))?
+        .to_string();
+    let tool_use_id = item
+        .get("call_id")
+        .and_then(Value::as_str)
+        .or_else(|| item.get("id").and_then(Value::as_str))
+        .or_else(|| item.get("tool_use_id").and_then(Value::as_str))?
+        .to_string();
+    let input = item
+        .get("arguments")
+        .and_then(Value::as_str)
+        .and_then(|raw| serde_json::from_str::<Value>(raw).ok())
+        .or_else(|| item.get("input").cloned())
+        .unwrap_or(Value::Null);
+
+    Some(CodexSessionEvent::ToolUse {
+        tool_name,
+        tool_use_id,
+        input,
+        model,
+    })
+}
+
+fn parse_tool_result_block(block: &Value, model: Option<String>) -> Option<CodexSessionEvent> {
+    let tool_use_id = block
+        .get("tool_use_id")
+        .and_then(Value::as_str)
+        .or_else(|| block.get("id").and_then(Value::as_str))?
+        .to_string();
+    let tool_name = block
+        .get("tool_name")
+        .and_then(Value::as_str)
+        .map(ToString::to_string);
+    let is_error = block
+        .get("is_error")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let content = block
+        .get("content")
+        .and_then(text_from_value)
+        .or_else(|| block.get("output").and_then(text_from_value))
+        .unwrap_or_default();
+
+    Some(CodexSessionEvent::ToolResult {
+        tool_use_id,
+        tool_name,
+        is_error,
+        content,
+        model,
+    })
+}
+
+fn parse_tool_result_item(
+    item: &Value,
+    tool_names: &HashMap<String, String>,
+    model: Option<String>,
+) -> Option<CodexSessionEvent> {
+    let tool_use_id = item
+        .get("call_id")
+        .and_then(Value::as_str)
+        .or_else(|| item.get("tool_use_id").and_then(Value::as_str))
+        .or_else(|| item.get("id").and_then(Value::as_str))?
+        .to_string();
+    let parsed_output = item
+        .get("output")
+        .and_then(Value::as_str)
+        .and_then(|raw| serde_json::from_str::<Value>(raw).ok());
+    let is_error = parsed_output
+        .as_ref()
+        .and_then(|output| output.get("metadata"))
+        .and_then(|metadata| metadata.get("exit_code"))
+        .and_then(Value::as_i64)
+        .is_some_and(|exit_code| exit_code != 0);
+    let content = parsed_output
+        .as_ref()
+        .and_then(extract_codex_tool_result_content)
+        .or_else(|| {
+            item.get("output")
+                .and_then(Value::as_str)
+                .map(ToString::to_string)
+        })
+        .unwrap_or_default();
+
+    Some(CodexSessionEvent::ToolResult {
+        tool_use_id: tool_use_id.clone(),
+        tool_name: tool_names.get(&tool_use_id).cloned().or_else(|| {
+            item.get("tool_name")
+                .and_then(Value::as_str)
+                .map(ToString::to_string)
+        }),
+        is_error,
+        content,
+        model,
+    })
+}
+
+fn text_from_value(value: &Value) -> Option<String> {
+    match value {
+        Value::String(text) => {
+            let trimmed = text.trim();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed.to_string())
+            }
+        }
+        Value::Array(values) => {
+            let parts = values
+                .iter()
+                .filter_map(text_from_value)
+                .collect::<Vec<_>>();
+            if parts.is_empty() {
+                None
+            } else {
+                Some(parts.join("\n"))
+            }
+        }
+        Value::Object(map) => map
+            .get("text")
+            .and_then(text_from_value)
+            .or_else(|| map.get("content").and_then(text_from_value))
+            .or_else(|| map.get("output").and_then(text_from_value)),
+        _ => None,
+    }
 }
 
 fn latest_body_for_thread(connection: &Connection, thread_id: &str) -> Option<String> {
@@ -655,8 +1003,7 @@ fn parse_live_log_event(body: &str) -> Option<CodexSessionEvent> {
         .next()
         .and_then(|raw| serde_json::from_str::<Value>(raw).ok())
         .unwrap_or(Value::Null);
-    let tool_use_id = extract_turn_id(body)
-        .unwrap_or_else(|| format!("log-{}", stable_hash(body)));
+    let tool_use_id = extract_turn_id(body).unwrap_or_else(|| format!("log-{}", stable_hash(body)));
 
     if tool_name == "spawn_agent" {
         return Some(parse_spawn_agent_event(&input, &tool_use_id));
@@ -666,6 +1013,7 @@ fn parse_live_log_event(body: &str) -> Option<CodexSessionEvent> {
         tool_name: tool_name.to_string(),
         tool_use_id,
         input,
+        model: None,
     })
 }
 
@@ -688,6 +1036,7 @@ fn parse_exec_command_failure(body: &str) -> Option<CodexSessionEvent> {
         tool_name: Some("exec_command".to_string()),
         is_error: true,
         content,
+        model: None,
     })
 }
 
@@ -698,7 +1047,8 @@ fn extract_stream_output_text(body: &str, stream_name: &str) -> Option<String> {
     }
 
     let escaped_marker = format!(r#"{stream_name}: StreamOutput {{ text: \"#);
-    extract_escaped_quoted_value(body, &escaped_marker).map(|value| normalize_stream_output_text(&value))
+    extract_escaped_quoted_value(body, &escaped_marker)
+        .map(|value| normalize_stream_output_text(&value))
 }
 
 fn extract_escaped_quoted_value(body: &str, marker: &str) -> Option<String> {
@@ -783,10 +1133,16 @@ fn extract_codex_tool_result_content(value: &Value) -> Option<String> {
             }
         }
         Value::Object(map) => {
-            if let Some(content) = map.get("output").and_then(extract_codex_tool_result_content) {
+            if let Some(content) = map
+                .get("output")
+                .and_then(extract_codex_tool_result_content)
+            {
                 return Some(content);
             }
-            if let Some(content) = map.get("content").and_then(extract_codex_tool_result_content) {
+            if let Some(content) = map
+                .get("content")
+                .and_then(extract_codex_tool_result_content)
+            {
                 return Some(content);
             }
             map.get("text").and_then(Value::as_str).and_then(|text| {
@@ -910,7 +1266,9 @@ fn title_case(value: &str) -> String {
 fn now_millis() -> i64 {
     SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
-        .map_or(0, |duration| i64::try_from(duration.as_millis()).unwrap_or(i64::MAX))
+        .map_or(0, |duration| {
+            i64::try_from(duration.as_millis()).unwrap_or(i64::MAX)
+        })
 }
 
 fn history_fingerprint(path: &std::path::Path) -> CodexHistoryFingerprint {
@@ -957,7 +1315,8 @@ fn trimmed_preview(value: &str) -> String {
 }
 
 fn parse_rfc3339_ms(value: &str) -> Option<i64> {
-    let timestamp = time::OffsetDateTime::parse(value, &time::format_description::well_known::Rfc3339).ok()?;
+    let timestamp =
+        time::OffsetDateTime::parse(value, &time::format_description::well_known::Rfc3339).ok()?;
     i64::try_from(timestamp.unix_timestamp_nanos() / 1_000_000).ok()
 }
 
