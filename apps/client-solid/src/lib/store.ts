@@ -251,6 +251,21 @@ export interface ProjectFocusSnapshot {
   hasAgentFocus: boolean;
 }
 
+export interface RecentChangeItem {
+  label: string;
+  detail?: string;
+  timestamp: number;
+}
+
+export interface RecentChangesSnapshot {
+  scopeLabel: string;
+  scopeDetail: string;
+  headline: string;
+  eventCount: number;
+  lastEventAt: number;
+  items: RecentChangeItem[];
+}
+
 export function buildProjectFocusSnapshot(
   project: Project | null,
   session: SessionInfo | null,
@@ -303,6 +318,70 @@ export function buildProjectFocusSnapshot(
     agentCount: project.agentCount,
     hasSessionFocus: Boolean(session),
     hasAgentFocus: Boolean(agent),
+  };
+}
+
+const RECENT_CHANGE_TYPES = new Set([
+  'PreToolUse',
+  'PostToolUse',
+  'PostToolUseFailure',
+  'UserPromptSubmit',
+  'AssistantResponse',
+  'SubagentStart',
+  'SubagentStop',
+  'SessionTitleChanged',
+]);
+
+export function buildRecentChangesSnapshot(
+  project: Project | null,
+  session: SessionInfo | null,
+  evts: HookEvent[],
+): RecentChangesSnapshot | null {
+  if (!project) return null;
+
+  const scopedEvents = evts
+    .filter((event) => event.source_app === project.name)
+    .filter((event) => !session || event.session_id === session.sessionId);
+
+  if (scopedEvents.length === 0) return null;
+
+  const recentEvents = [...scopedEvents]
+    .sort((left, right) => (right.timestamp || 0) - (left.timestamp || 0))
+    .filter((event) => RECENT_CHANGE_TYPES.has(event.hook_event_type));
+
+  const selectedEvents = (recentEvents.length > 0 ? recentEvents : [...scopedEvents]
+    .sort((left, right) => (right.timestamp || 0) - (left.timestamp || 0)))
+    .slice(0, 3);
+
+  const items = selectedEvents
+    .map((event) => {
+      const label = describeEvent(event).trim();
+      const detail = describeEventDetail(event)?.trim() || undefined;
+      if (!label && !detail) return null;
+      return {
+        label: label || detail || 'Observed an event',
+        detail: detail && detail !== label ? detail : undefined,
+        timestamp: event.timestamp || 0,
+      };
+    })
+    .filter((item): item is RecentChangeItem => Boolean(item));
+
+  if (items.length === 0) return null;
+
+  const scopeLabel = session?.label || session?.sessionId || project.name;
+  const scopeDetail = session
+    ? `${session.eventCount} event${session.eventCount === 1 ? '' : 's'} in this session`
+    : `${project.sessions.length} session${project.sessions.length === 1 ? '' : 's'} in this project`;
+
+  return {
+    scopeLabel,
+    scopeDetail,
+    headline: session
+      ? `Recent changes in ${scopeLabel}`
+      : `Recent changes in ${project.name}`,
+    eventCount: scopedEvents.length,
+    lastEventAt: items[0]?.timestamp ?? 0,
+    items,
   };
 }
 
@@ -728,6 +807,12 @@ export const selectedProjectFocusSnapshot = createMemo((): ProjectFocusSnapshot 
   const project = selectedProjectSnapshot();
   if (!project) return null;
   return buildProjectFocusSnapshot(project, selectedSessionSnapshot(), selectedAgentSnapshot());
+});
+
+export const selectedRecentChangesSnapshot = createMemo((): RecentChangesSnapshot | null => {
+  const project = selectedProjectSnapshot();
+  if (!project) return null;
+  return buildRecentChangesSnapshot(project, selectedSessionSnapshot(), events());
 });
 
 /** Get events filtered by selection signals */

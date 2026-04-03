@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildProjectFocusSnapshot } from './store';
-import type { AgentInfo, Project, SessionInfo } from './types';
+import { buildProjectFocusSnapshot, buildRecentChangesSnapshot } from './store';
+import type { AgentInfo, HookEvent, Project, SessionInfo } from './types';
 
 describe('buildProjectFocusSnapshot', () => {
   it('builds a coherent digest for project, session, and agent focus', () => {
@@ -64,6 +64,103 @@ describe('buildProjectFocusSnapshot', () => {
       agentCount: 3,
       hasSessionFocus: true,
       hasAgentFocus: true,
+    });
+  });
+});
+
+describe('buildRecentChangesSnapshot', () => {
+  it('summarizes the latest meaningful changes for the selected session', () => {
+    const project = {
+      name: 'pharos',
+      runtimeLabels: ['codex'],
+      eventCount: 4,
+      agentCount: 1,
+      activeSessionCount: 1,
+      lastEventAt: 400,
+      isActive: true,
+      sessions: [],
+    } satisfies Project;
+
+    const session = {
+      sessionId: 'session-123',
+      label: 'Deploy review',
+      summary: 'Waiting on final validation',
+      eventCount: 4,
+      agents: [],
+      activeAgentCount: 0,
+      lastEventAt: 400,
+      isActive: true,
+    } satisfies SessionInfo;
+
+    project.sessions = [session];
+
+    const events = [
+      {
+        source_app: 'pharos',
+        session_id: 'session-123',
+        hook_event_type: 'SessionTitleChanged',
+        payload: { title: 'Deploy review' },
+        timestamp: 100,
+      },
+      {
+        source_app: 'pharos',
+        session_id: 'session-123',
+        hook_event_type: 'PreToolUse',
+        payload: {
+          tool_name: 'Bash',
+          tool_input: {
+            cmd: 'pnpm build',
+            workdir: '/Users/akushniruk/home_projects/pharos/apps/client-solid',
+          },
+        },
+        timestamp: 200,
+      },
+      {
+        source_app: 'pharos',
+        session_id: 'session-123',
+        hook_event_type: 'PreToolUse',
+        payload: {
+          tool_name: 'Edit',
+          tool_input: {
+            file_path: 'apps/client-solid/src/lib/store.ts',
+          },
+        },
+        timestamp: 300,
+      },
+      {
+        source_app: 'pharos',
+        session_id: 'session-123',
+        hook_event_type: 'AssistantResponse',
+        payload: {
+          text: 'Updated the digest strip.',
+        },
+        timestamp: 400,
+      },
+    ] satisfies HookEvent[];
+
+    expect(buildRecentChangesSnapshot(project, session, events)).toEqual({
+      scopeLabel: 'Deploy review',
+      scopeDetail: '4 events in this session',
+      headline: 'Recent changes in Deploy review',
+      eventCount: 4,
+      lastEventAt: 400,
+      items: [
+        {
+          label: 'Shared an update',
+          detail: 'Updated the digest strip.',
+          timestamp: 400,
+        },
+        {
+          label: 'Editing a file',
+          detail: 'src/lib/store.ts',
+          timestamp: 300,
+        },
+        {
+          label: 'Running a command in client-solid',
+          detail: 'pnpm build',
+          timestamp: 200,
+        },
+      ],
     });
   });
 });

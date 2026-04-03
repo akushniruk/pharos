@@ -5,6 +5,7 @@ import {
   selectedProject,
   selectedProjectSnapshot,
   selectedProjectFocusSnapshot,
+  selectedRecentChangesSnapshot,
   selectedSession,
   selectedAgent,
   helpVisible,
@@ -67,6 +68,8 @@ export default function App() {
             </Show>
 
             <ProjectTimeline />
+
+            <RecentChangesStrip />
 
             {/* Toolbar: project breadcrumb + view mode toggle */}
             <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 16px;border-bottom:1px solid var(--border);flex-shrink:0;">
@@ -289,6 +292,61 @@ function ProjectTimeline() {
                 }}
               </For>
             </div>
+          </div>
+        </div>
+      )}
+    </Show>
+  );
+}
+
+function RecentChangesStrip() {
+  const recentChanges = createMemo(() => selectedRecentChangesSnapshot());
+
+  return (
+    <Show when={recentChanges()}>
+      {(currentChanges) => (
+        <div
+          style="margin:0 16px 10px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.01));flex-shrink:0;"
+        >
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:8px;">
+            <div style="min-width:0;">
+              <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);">
+                Recent changes
+              </div>
+              <div style="font-size:13px;font-weight:600;color:var(--text-primary);line-height:1.35;">
+                {currentChanges().headline}
+              </div>
+              <div style="font-size:11px;color:var(--text-dim);line-height:1.45;">
+                {currentChanges().scopeDetail}
+              </div>
+            </div>
+            <span
+              style="font-size:10px;padding:2px 8px;border-radius:9999px;border:1px solid var(--border);background:var(--bg-elevated);color:var(--text-secondary);flex-shrink:0;"
+            >
+              {currentChanges().eventCount} events
+            </span>
+          </div>
+
+          <div style="display:flex;flex-wrap:wrap;gap:6px;">
+            <For each={currentChanges().items}>
+              {(item) => (
+                <div
+                  style="display:flex;align-items:center;gap:6px;max-width:100%;padding:5px 8px;border-radius:9999px;border:1px solid var(--border);background:var(--bg-card);color:var(--text-secondary);font-size:10px;line-height:1.3;"
+                >
+                  <span style="font-weight:600;color:var(--text-primary);">
+                    {item.label}
+                  </span>
+                  <Show when={item.detail}>
+                    <span style="color:var(--text-dim);">
+                      {item.detail}
+                    </span>
+                  </Show>
+                  <span style="color:var(--text-dim);white-space:nowrap;">
+                    {timeAgo(item.timestamp)}
+                  </span>
+                </div>
+              )}
+            </For>
           </div>
         </div>
       )}
