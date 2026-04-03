@@ -47,137 +47,142 @@ pub async fn run_scanner(
     let claude_profile = claude_home.clone().map(ClaudeProfile::new);
     let codex_profile = discovery_options.codex_home.clone().map(CodexProfile::new);
     let mut tracked: HashMap<String, TrackedSession> = HashMap::new();
-    let mut tick = interval(Duration::from_secs(2));
+    let mut tick = interval(Duration::from_secs(1));
+    let mut ticks_since_discovery = usize::MAX;
 
     loop {
         tick.tick().await;
 
-        let current_sessions = discover_all_sessions(&discovery_options);
-        let current_ids: Vec<String> = current_sessions
-            .iter()
-            .map(|s| s.session_id.clone())
-            .collect();
+        ticks_since_discovery = ticks_since_discovery.saturating_add(1);
+        if ticks_since_discovery >= 5 {
+            ticks_since_discovery = 0;
 
-        // Detect new sessions
-        for session in current_sessions {
-            if let Some(existing) = tracked.get_mut(&session.session_id) {
-                if session.display_title != existing.session.display_title {
-                    if let Some(title) = session.display_title.clone() {
-                        let envelope = EventEnvelope {
-                            runtime_source: session.runtime_source.clone(),
-                            acquisition_mode: AcquisitionMode::Observed,
-                            event_kind: EventKind::SessionTitleChanged,
-                            session: SessionRef {
-                                host_id: "local".to_string(),
-                                workspace_id: workspace_id_from_cwd(&session.cwd),
-                                session_id: session.session_id.clone(),
-                            },
-                            agent_id: None,
-                            occurred_at_ms: now_millis(),
-                            capabilities: observed_capabilities(),
-                            title: "session title changed".to_string(),
-                            payload: json!({ "title": title }),
-                        };
+            let current_sessions = discover_all_sessions(&discovery_options);
+            let current_ids: Vec<String> = current_sessions
+                .iter()
+                .map(|s| s.session_id.clone())
+                .collect();
 
-                        let _ = store.insert_event(&envelope);
-                        broadcast_envelope(&store, &sender, &envelope);
+            // Detect new sessions
+            for session in current_sessions {
+                if let Some(existing) = tracked.get_mut(&session.session_id) {
+                    if session.display_title != existing.session.display_title {
+                        if let Some(title) = session.display_title.clone() {
+                            let envelope = EventEnvelope {
+                                runtime_source: session.runtime_source.clone(),
+                                acquisition_mode: AcquisitionMode::Observed,
+                                event_kind: EventKind::SessionTitleChanged,
+                                session: SessionRef {
+                                    host_id: "local".to_string(),
+                                    workspace_id: workspace_id_from_cwd(&session.cwd),
+                                    session_id: session.session_id.clone(),
+                                },
+                                agent_id: None,
+                                occurred_at_ms: now_millis(),
+                                capabilities: observed_capabilities(),
+                                title: "session title changed".to_string(),
+                                payload: json!({ "title": title }),
+                            };
+
+                            let _ = store.insert_event(&envelope);
+                            broadcast_envelope(&store, &sender, &envelope);
+                        }
                     }
+                    existing.session = session;
+                    continue;
                 }
-                existing.session = session;
-                continue;
-            }
-            let session_id = session.session_id.clone();
-            let workspace_id = workspace_id_from_cwd(&session.cwd);
-            let now_ms = now_millis();
-
-            let envelope = EventEnvelope {
-                runtime_source: session.runtime_source.clone(),
-                acquisition_mode: AcquisitionMode::Observed,
-                event_kind: EventKind::SessionStarted,
-                session: SessionRef {
-                    host_id: "local".to_string(),
-                    workspace_id: workspace_id.clone(),
-                    session_id: session_id.clone(),
-                },
-                agent_id: None,
-                occurred_at_ms: now_ms,
-                capabilities: observed_capabilities(),
-                title: "session started".to_string(),
-                payload: json!({
-                    "runtime_source": format!("{:?}", session.runtime_source),
-                    "pid": session.pid,
-                    "cwd": session.cwd,
-                    "entrypoint": session.entrypoint,
-                    "title": session.display_title,
-                }),
-            };
-
-            let _ = store.insert_event(&envelope);
-            broadcast_envelope(&store, &sender, &envelope);
-
-            tracked.insert(
-                session_id,
-                TrackedSession {
-                    session,
-                    file_offset: 0,
-                    codex_item_offset: 0,
-                    codex_log_offset: 0,
-                    known_subagents: Vec::new(),
-                    tool_name_map: HashMap::new(),
-                },
-            );
-
-        }
-
-        // Detect removed sessions
-        let removed_ids: Vec<String> = tracked
-            .keys()
-            .filter(|id| !current_ids.contains(id))
-            .cloned()
-            .collect();
-
-        for session_id in removed_ids {
-            if let Some(ts) = tracked.remove(&session_id) {
-                let workspace_id = workspace_id_from_cwd(&ts.session.cwd);
+                let session_id = session.session_id.clone();
+                let workspace_id = workspace_id_from_cwd(&session.cwd);
                 let now_ms = now_millis();
 
                 let envelope = EventEnvelope {
-                    runtime_source: ts.session.runtime_source.clone(),
+                    runtime_source: session.runtime_source.clone(),
                     acquisition_mode: AcquisitionMode::Observed,
-                    event_kind: EventKind::SessionEnded,
+                    event_kind: EventKind::SessionStarted,
                     session: SessionRef {
                         host_id: "local".to_string(),
-                        workspace_id,
-                        session_id,
+                        workspace_id: workspace_id.clone(),
+                        session_id: session_id.clone(),
                     },
                     agent_id: None,
                     occurred_at_ms: now_ms,
                     capabilities: observed_capabilities(),
-                    title: "session ended".to_string(),
-                    payload: json!({}),
+                    title: "session started".to_string(),
+                    payload: json!({
+                        "runtime_source": format!("{:?}", session.runtime_source),
+                        "pid": session.pid,
+                        "cwd": session.cwd,
+                        "entrypoint": session.entrypoint,
+                        "title": session.display_title,
+                    }),
                 };
 
                 let _ = store.insert_event(&envelope);
                 broadcast_envelope(&store, &sender, &envelope);
-            }
-        }
 
-        // Re-resolve paths for tracked sessions that are missing transcript/subagent paths.
-        // This handles the case where the session file appears before the JSONL transcript.
-        for (_, ts) in &mut tracked {
-            if ts.session.transcript_path.is_none() {
-                let new_path = claude_profile.as_ref().and_then(|profile| {
-                    profile.resolve_transcript_path(
-                        &ts.session.cwd,
-                        &ts.session.session_id,
-                    )
-                });
-                if new_path.is_some() {
-                    ts.session.subagents_dir = new_path.as_ref().and_then(|tp| {
-                        tp.parent()
-                            .map(|p| p.join(&ts.session.session_id).join("subagents"))
+                tracked.insert(
+                    session_id,
+                    TrackedSession {
+                        session,
+                        file_offset: 0,
+                        codex_item_offset: 0,
+                        codex_log_offset: 0,
+                        known_subagents: Vec::new(),
+                        tool_name_map: HashMap::new(),
+                    },
+                );
+            }
+
+            // Detect removed sessions
+            let removed_ids: Vec<String> = tracked
+                .keys()
+                .filter(|id| !current_ids.contains(id))
+                .cloned()
+                .collect();
+
+            for session_id in removed_ids {
+                if let Some(ts) = tracked.remove(&session_id) {
+                    let workspace_id = workspace_id_from_cwd(&ts.session.cwd);
+                    let now_ms = now_millis();
+
+                    let envelope = EventEnvelope {
+                        runtime_source: ts.session.runtime_source.clone(),
+                        acquisition_mode: AcquisitionMode::Observed,
+                        event_kind: EventKind::SessionEnded,
+                        session: SessionRef {
+                            host_id: "local".to_string(),
+                            workspace_id,
+                            session_id,
+                        },
+                        agent_id: None,
+                        occurred_at_ms: now_ms,
+                        capabilities: observed_capabilities(),
+                        title: "session ended".to_string(),
+                        payload: json!({}),
+                    };
+
+                    let _ = store.insert_event(&envelope);
+                    broadcast_envelope(&store, &sender, &envelope);
+                }
+            }
+
+            // Re-resolve paths for tracked sessions that are missing transcript/subagent paths.
+            // This handles the case where the session file appears before the JSONL transcript.
+            for (_, ts) in &mut tracked {
+                if ts.session.transcript_path.is_none() {
+                    let new_path = claude_profile.as_ref().and_then(|profile| {
+                        profile.resolve_transcript_path(
+                            &ts.session.cwd,
+                            &ts.session.session_id,
+                        )
                     });
-                    ts.session.transcript_path = new_path;
+                    if new_path.is_some() {
+                        ts.session.subagents_dir = new_path.as_ref().and_then(|tp| {
+                            tp.parent()
+                                .map(|p| p.join(&ts.session.session_id).join("subagents"))
+                        });
+                        ts.session.transcript_path = new_path;
+                    }
                 }
             }
         }
