@@ -1,4 +1,6 @@
 import { For, Show, createSignal } from 'solid-js';
+import { Icon } from 'solid-heroicons';
+import { squares2X2, share, cpuChip, commandLine, bolt, clock } from 'solid-heroicons/solid';
 import { filteredAgents, selectedAgent, selectAgent } from '../lib/store';
 import AgentGraph from './AgentGraph';
 
@@ -38,8 +40,18 @@ export default function AgentCards() {
     <div style="border-bottom:1px solid var(--border);">
       {/* Tab bar */}
       <div style="display:flex;align-items:center;gap:4px;padding:6px 12px;border-bottom:1px solid var(--border);">
-        <button style={tabStyle('cards')} onClick={() => setViewMode('cards')}>Cards</button>
-        <button style={tabStyle('graph')} onClick={() => setViewMode('graph')}>Graph</button>
+        <button style={tabStyle('cards')} onClick={() => setViewMode('cards')}>
+          <span style="display:flex;align-items:center;gap:6px;">
+            <Icon path={squares2X2} style="width:12px;height:12px;" />
+            Cards
+          </span>
+        </button>
+        <button style={tabStyle('graph')} onClick={() => setViewMode('graph')}>
+          <span style="display:flex;align-items:center;gap:6px;">
+            <Icon path={share} style="width:12px;height:12px;" />
+            Graph
+          </span>
+        </button>
       </div>
 
       {/* Cards view */}
@@ -70,6 +82,10 @@ export default function AgentCards() {
                   {/* Status dot + name */}
                   <div style="display:flex;align-items:center;gap:6px;">
                     <span style={`width:5px;height:5px;border-radius:50%;background:${dotColor(agent)};flex-shrink:0;`} />
+                    <Icon
+                      path={agent.agentId ? cpuChip : commandLine}
+                      style="width:12px;height:12px;color:var(--text-secondary);flex-shrink:0;"
+                    />
                     <span style="font-size:12px;font-weight:500;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
                       {agent.displayName}
                     </span>
@@ -85,7 +101,10 @@ export default function AgentCards() {
                   {/* Footer: event count + status */}
                   <div style="display:flex;justify-content:space-between;align-items:center;margin-top:2px;">
                     <span style="font-size:11px;color:var(--text-tertiary);">{agent.eventCount} evts</span>
-                    <span style="font-size:11px;color:var(--text-tertiary);">{statusLabel(agent)}</span>
+                    <span style="font-size:11px;color:var(--text-tertiary);display:flex;align-items:center;gap:4px;">
+                      <Icon path={agent.isActive ? bolt : clock} style="width:11px;height:11px;" />
+                      {statusLabel(agent)}
+                    </span>
                   </div>
                 </div>
               );

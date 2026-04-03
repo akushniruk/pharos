@@ -2,7 +2,7 @@
 
 ## Architecture
 
-Rust daemon (`apps/daemon-rs`) scans `~/.claude/sessions/` for active AI agent sessions, tails their JSONL transcripts, and streams events via WebSocket to a Vue 3 dashboard (`apps/client`).
+Rust daemon (`apps/daemon-rs`) scans `~/.claude/sessions/` for active AI agent sessions, tails their JSONL transcripts, and streams events via WebSocket to a SolidJS dashboard (`apps/client-solid`).
 
 ## Key Concepts
 
@@ -15,7 +15,7 @@ Rust daemon (`apps/daemon-rs`) scans `~/.claude/sessions/` for active AI agent s
 
 ```bash
 make daemon    # start Rust daemon on port 4000
-make client    # start Vue dev server on port 5173
+make client    # start Solid dev server on port 5173
 make test      # run Rust tests
 ```
 

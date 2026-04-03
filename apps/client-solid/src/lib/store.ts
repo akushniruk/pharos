@@ -99,6 +99,7 @@ export const projects = createMemo((): Project[] => {
 
       sessions.push({
         sessionId: sid,
+        label: resolveSessionLabel(sevts, name),
         eventCount: sevts.length,
         agents: agentsArr.sort((a, b) => b.eventCount - a.eventCount),
         lastEventAt: sLastEvent,
@@ -123,11 +124,45 @@ function resolveAgentName(evts: HookEvent[], isMain: boolean): string {
   for (const e of evts) {
     if (e.display_name) return e.display_name;
     if (e.agent_name) return e.agent_name;
+    if (e.payload?.display_name) return e.payload.display_name;
+    if (e.payload?.title && isMain) return e.payload.title;
+    if (e.payload?.description) {
+      if (e.payload?.agent_type && e.payload.agent_type !== 'main') {
+        return `${e.payload.agent_type} · ${e.payload.description}`;
+      }
+      return e.payload.description;
+    }
     if (e.payload?.agent_name) return e.payload.agent_name;
+    if (e.payload?.cwd && isMain) {
+      const cwdName = workspaceNameFromCwd(e.payload.cwd);
+      if (cwdName) return cwdName;
+    }
   }
   const agentType = evts.find((e) => e.payload?.agent_type)?.payload.agent_type;
   if (agentType && agentType !== 'main') return agentType;
-  return isMain ? 'Orchestrator' : 'Agent';
+  return isMain ? 'Session' : 'Agent';
+}
+
+function resolveSessionLabel(evts: HookEvent[], workspaceName: string): string {
+  const titled = evts.find((e) => e.hook_event_type === 'SessionTitleChanged' && e.payload?.title);
+  if (titled?.payload?.title) return titled.payload.title;
+
+  const mainName = resolveAgentName(
+    evts.filter((e) => !e.agent_id),
+    true,
+  );
+  if (!isGenericName(mainName)) return mainName;
+
+  return workspaceName;
+}
+
+function workspaceNameFromCwd(cwd: string): string | null {
+  const parts = cwd.split('/').filter(Boolean);
+  return parts.length > 0 ? parts[parts.length - 1] : null;
+}
+
+function isGenericName(name: string): boolean {
+  return name === 'Session' || name === 'Agent';
 }
 
 /** Filtered agents based on selection */

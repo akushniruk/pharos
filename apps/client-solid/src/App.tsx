@@ -1,6 +1,6 @@
 import { Show, For, onMount, createSignal } from 'solid-js';
 import { Icon } from 'solid-heroicons';
-import { listBullet, share } from 'solid-heroicons/solid';
+import { listBullet, share, folder, bolt, cpuChip } from 'solid-heroicons/solid';
 import { selectedProject, selectedAgent, projects, selectProject, filteredEvents } from './lib/store';
 import { connected, connectWs, fetchAgents } from './lib/ws';
 import { initTheme } from './lib/theme';
@@ -140,6 +140,7 @@ function ProjectsHome() {
               onClick={() => selectProject(p.name)}
             >
               <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+                <Icon path={folder} style="width:16px;height:16px;color:var(--text-secondary);" />
                 <span style={`width:8px;height:8px;border-radius:50%;background:${p.isActive ? 'var(--green)' : 'var(--text-dim)'}`} />
                 <span style="font-size:15px;font-weight:600">{p.name}</span>
               </div>
@@ -160,8 +161,9 @@ function ProjectsHome() {
               <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">
                 <For each={uniqueAgentBadges(p)}>
                   {(badge) => (
-                    <span style={`font-size:11px;padding:2px 8px;border-radius:4px;border:1px solid var(--border);background:${badge.isActive ? 'var(--green-dim)' : 'var(--bg-elevated)'};color:${badge.isActive ? 'var(--green)' : 'var(--text-secondary)'}`}>
-                      {badge.name}
+                    <span style={`font-size:11px;padding:2px 8px;border-radius:4px;border:1px solid var(--border);background:${badge.isActive ? 'var(--green-dim)' : 'var(--bg-elevated)'};color:${badge.isActive ? 'var(--green)' : 'var(--text-secondary)'};display:inline-flex;align-items:center;gap:5px;`}>
+                      <Icon path={badge.isActive ? bolt : cpuChip} style="width:11px;height:11px;" />
+                      <span>{badge.name}</span>
                     </span>
                   )}
                 </For>

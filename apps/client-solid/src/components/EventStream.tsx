@@ -1,4 +1,6 @@
 import { For, createSignal, createMemo, createEffect } from 'solid-js';
+import { Icon } from 'solid-heroicons';
+import { bars_3BottomLeft, queueList, signal, pauseCircle } from 'solid-heroicons/solid';
 import { filteredEvents } from '../lib/store';
 import SearchBar, { searchQuery } from './SearchBar';
 import EventRow from './EventRow';
@@ -48,8 +50,18 @@ export default function EventStream() {
     <div style="display:flex;flex-direction:column;flex:1;overflow:hidden;">
       {/* Toolbar */}
       <div style="display:flex;align-items:center;gap:8px;padding:8px 16px;border-bottom:1px solid var(--border);flex-shrink:0;">
-        <button style={tabStyle(!detailed())} onClick={() => setDetailed(false)}>Simple</button>
-        <button style={tabStyle(detailed())} onClick={() => setDetailed(true)}>Detailed</button>
+        <button style={tabStyle(!detailed())} onClick={() => setDetailed(false)}>
+          <span style="display:flex;align-items:center;gap:6px;">
+            <Icon path={queueList} style="width:12px;height:12px;" />
+            Simple
+          </span>
+        </button>
+        <button style={tabStyle(detailed())} onClick={() => setDetailed(true)}>
+          <span style="display:flex;align-items:center;gap:6px;">
+            <Icon path={bars_3BottomLeft} style="width:12px;height:12px;" />
+            Detailed
+          </span>
+        </button>
         <SearchBar />
         <button
           onClick={() => setStick(s => !s)}
@@ -62,7 +74,10 @@ export default function EventStream() {
               : 'background:transparent;color:var(--text-dim);',
           ].join('')}
         >
-          {stick() ? '⬇ Live' : '⬇ Paused'}
+          <span style="display:flex;align-items:center;gap:6px;">
+            <Icon path={stick() ? signal : pauseCircle} style="width:12px;height:12px;" />
+            {stick() ? 'Live' : 'Paused'}
+          </span>
         </button>
       </div>
 

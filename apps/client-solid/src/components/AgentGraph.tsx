@@ -2,7 +2,7 @@ import { For, createMemo } from 'solid-js';
 import { filteredAgents, filteredEvents, selectAgent, selectedAgent } from '../lib/store';
 import type { AgentInfo } from '../lib/types';
 
-const NODE_W = 140;
+const NODE_W = 180;
 const NODE_H = 50;
 const V_GAP = 80;
 const H_GAP = 20;
@@ -116,11 +116,12 @@ export default function AgentGraph() {
               if (node.agent.isActive) return 'var(--green)';
               return 'var(--border)';
             };
-            const truncated = node.agent.displayName.length > 16
-              ? node.agent.displayName.slice(0, 15) + '…'
+            const truncated = node.agent.displayName.length > 23
+              ? node.agent.displayName.slice(0, 22) + '…'
               : node.agent.displayName;
             const model = node.agent.modelName?.replace('claude-', '') ?? '';
             const modelTrunc = model.length > 18 ? model.slice(0, 17) + '…' : model;
+            const typeLabel = node.agent.agentType ?? (node.agent.agentId ? 'subagent' : 'session');
 
             return (
               <g
@@ -156,10 +157,19 @@ export default function AgentGraph() {
                 >
                   {truncated}
                 </text>
+                <text
+                  x={node.x + 10}
+                  y={node.y + 33}
+                  font-size="9"
+                  fill="var(--text-secondary)"
+                  font-family="inherit"
+                >
+                  {typeLabel}
+                </text>
                 {/* Model name */}
                 <text
                   x={node.x + 10}
-                  y={node.y + 36}
+                  y={node.y + 44}
                   font-size="10"
                   fill="var(--text-dim)"
                   font-family="var(--font-mono)"

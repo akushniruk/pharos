@@ -85,6 +85,8 @@ pub struct LegacyHookEvent {
     pub agent_id: Option<String>,
     pub agent_type: Option<String>,
     pub model_name: Option<String>,
+    pub display_name: Option<String>,
+    pub agent_name: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

@@ -146,6 +146,8 @@ pub fn discovered_session_events(
             agent_id: None,
             agent_type: None,
             model_name: None,
+            display_name: Some("Observed session".to_string()),
+            agent_name: None,
         });
     }
 

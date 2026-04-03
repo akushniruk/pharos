@@ -41,6 +41,7 @@ export interface Project {
 /** Session within a project */
 export interface SessionInfo {
   sessionId: string;
+  label: string;
   eventCount: number;
   agents: AgentInfo[];
   lastEventAt: number;

@@ -4,6 +4,7 @@ use rusqlite::{params, Connection};
 use thiserror::Error;
 
 use std::collections::BTreeSet;
+use std::collections::HashMap;
 
 use crate::model::{
     AgentRegistryEntry, EventEnvelope, EventKind, FilterOptions, LegacyHookEvent, SessionSummary,
@@ -97,36 +98,60 @@ impl Store {
 
     pub fn list_agent_registry(&self) -> Result<Vec<AgentRegistryEntry>, StoreError> {
         let events = self.list_events()?;
-        let mut entries: Vec<AgentRegistryEntry> = Vec::new();
+        let mut entries = HashMap::<String, AgentRegistryAccumulator>::new();
 
         for event in events {
             let agent_id = event.agent_id.clone();
             let entry_id = build_registry_id(&event.session.workspace_id, &event.session.session_id, agent_id.as_deref());
+            let display_name = display_name_candidate_for_event(&event);
 
-            if let Some(existing) = entries.iter_mut().find(|entry| entry.id == entry_id) {
-                existing.last_seen_at = existing.last_seen_at.max(event.occurred_at_ms);
-                existing.event_count += 1;
-                existing.lifecycle_status = resolve_lifecycle_status(&event.event_kind).to_string();
-                continue;
+            let accumulator = entries
+                .entry(entry_id.clone())
+                .or_insert_with(|| AgentRegistryAccumulator {
+                    id: entry_id.clone(),
+                    source_app: event.session.workspace_id.clone(),
+                    session_id: event.session.session_id.clone(),
+                    agent_id: agent_id.clone(),
+                    display_name: display_name.value.clone(),
+                    display_name_score: display_name.score,
+                    agent_type: payload_string(&event.payload, "agent_type"),
+                    model_name: payload_string(&event.payload, "model"),
+                    parent_id: payload_string(&event.payload, "parent_agent_id"),
+                    team_name: payload_string(&event.payload, "team_name"),
+                    lifecycle_status: resolve_lifecycle_status(&event.event_kind).to_string(),
+                    first_seen_at: event.occurred_at_ms,
+                    last_seen_at: event.occurred_at_ms,
+                    event_count: 0,
+                });
+
+            accumulator.last_seen_at = accumulator.last_seen_at.max(event.occurred_at_ms);
+            accumulator.first_seen_at = accumulator.first_seen_at.min(event.occurred_at_ms);
+            accumulator.event_count += 1;
+            accumulator.lifecycle_status = resolve_lifecycle_status(&event.event_kind).to_string();
+
+            if display_name.score >= accumulator.display_name_score {
+                accumulator.display_name = display_name.value;
+                accumulator.display_name_score = display_name.score;
             }
 
-            entries.push(AgentRegistryEntry {
-                id: entry_id,
-                source_app: event.session.workspace_id.clone(),
-                session_id: event.session.session_id.clone(),
-                agent_id,
-                display_name: display_name_for_event(&event),
-                agent_type: payload_string(&event.payload, "agent_type"),
-                model_name: payload_string(&event.payload, "model"),
-                parent_id: None,
-                team_name: payload_string(&event.payload, "team_name"),
-                lifecycle_status: resolve_lifecycle_status(&event.event_kind).to_string(),
-                first_seen_at: event.occurred_at_ms,
-                last_seen_at: event.occurred_at_ms,
-                event_count: 1,
-            });
+            if let Some(agent_type) = payload_string(&event.payload, "agent_type") {
+                accumulator.agent_type = Some(agent_type);
+            }
+            if let Some(model_name) = payload_string(&event.payload, "model") {
+                accumulator.model_name = Some(model_name);
+            }
+            if let Some(parent_id) = payload_string(&event.payload, "parent_agent_id") {
+                accumulator.parent_id = Some(parent_id);
+            }
+            if let Some(team_name) = payload_string(&event.payload, "team_name") {
+                accumulator.team_name = Some(team_name);
+            }
         }
 
+        let mut entries: Vec<AgentRegistryEntry> = entries
+            .into_values()
+            .map(AgentRegistryAccumulator::into_entry)
+            .collect();
         entries.sort_by(|left, right| right.last_seen_at.cmp(&left.last_seen_at));
         Ok(entries)
     }
@@ -221,19 +246,135 @@ fn resolve_lifecycle_status(event_kind: &EventKind) -> &'static str {
     }
 }
 
-fn display_name_for_event(event: &EventEnvelope) -> String {
-    if let Some(agent_name) = payload_string(&event.payload, "agent_name") {
-        return agent_name;
-    }
-    if let Some(agent_type) = payload_string(&event.payload, "agent_type") {
-        if agent_type != "main" {
-            return agent_type;
+struct AgentRegistryAccumulator {
+    id: String,
+    source_app: String,
+    session_id: String,
+    agent_id: Option<String>,
+    display_name: String,
+    display_name_score: u8,
+    agent_type: Option<String>,
+    model_name: Option<String>,
+    parent_id: Option<String>,
+    team_name: Option<String>,
+    lifecycle_status: String,
+    first_seen_at: i64,
+    last_seen_at: i64,
+    event_count: usize,
+}
+
+impl AgentRegistryAccumulator {
+    fn into_entry(self) -> AgentRegistryEntry {
+        AgentRegistryEntry {
+            id: self.id,
+            source_app: self.source_app,
+            session_id: self.session_id,
+            agent_id: self.agent_id,
+            display_name: self.display_name,
+            agent_type: self.agent_type,
+            model_name: self.model_name,
+            parent_id: self.parent_id,
+            team_name: self.team_name,
+            lifecycle_status: self.lifecycle_status,
+            first_seen_at: self.first_seen_at,
+            last_seen_at: self.last_seen_at,
+            event_count: self.event_count,
         }
     }
-    if event.agent_id.is_none() {
-        return "Orchestrator".to_string();
+}
+
+struct DisplayNameCandidate {
+    value: String,
+    score: u8,
+}
+
+fn display_name_candidate_for_event(event: &EventEnvelope) -> DisplayNameCandidate {
+    if let Some(display_name) = payload_string(&event.payload, "display_name") {
+        return DisplayNameCandidate {
+            value: display_name,
+            score: 7,
+        };
     }
-    "Agent".to_string()
+
+    if event.agent_id.is_none() {
+        if let Some(title) = payload_string(&event.payload, "title") {
+            return DisplayNameCandidate {
+                value: title,
+                score: 6,
+            };
+        }
+    }
+
+    if let Some(description) = payload_string(&event.payload, "description") {
+        let trimmed = description.trim();
+        if !trimmed.is_empty() {
+            let label = match payload_string(&event.payload, "agent_type") {
+                Some(agent_type)
+                    if !agent_type.eq_ignore_ascii_case("main")
+                        && !trimmed
+                            .to_ascii_lowercase()
+                            .starts_with(&agent_type.to_ascii_lowercase()) =>
+                {
+                    format!("{agent_type} · {trimmed}")
+                }
+                _ => trimmed.to_string(),
+            };
+
+            return DisplayNameCandidate {
+                value: label,
+                score: 5,
+            };
+        }
+    }
+
+    if let Some(agent_name) = payload_string(&event.payload, "agent_name") {
+        return DisplayNameCandidate {
+            value: agent_name,
+            score: 4,
+        };
+    }
+
+    if let Some(agent_type) = payload_string(&event.payload, "agent_type") {
+        if agent_type != "main" {
+            return DisplayNameCandidate {
+                value: agent_type,
+                score: 3,
+            };
+        }
+    }
+
+    if let Some(cwd) = payload_string(&event.payload, "cwd") {
+        if let Some(workspace_name) = workspace_name_from_cwd(&cwd) {
+            return DisplayNameCandidate {
+                value: workspace_name,
+                score: 2,
+            };
+        }
+    }
+
+    if event.agent_id.is_none() {
+        DisplayNameCandidate {
+            value: event.session.workspace_id.clone(),
+            score: 1,
+        }
+    } else {
+        DisplayNameCandidate {
+            value: "Agent".to_string(),
+            score: 0,
+        }
+    }
+}
+
+fn workspace_name_from_cwd(cwd: &str) -> Option<String> {
+    let trimmed = cwd.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    std::path::Path::new(trimmed)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .map(ToString::to_string)
 }
 
 fn payload_string(payload: &serde_json::Value, key: &str) -> Option<String> {
@@ -241,6 +382,7 @@ fn payload_string(payload: &serde_json::Value, key: &str) -> Option<String> {
 }
 
 pub fn legacy_event_from_envelope(event: &EventEnvelope) -> Result<LegacyHookEvent, StoreError> {
+    let display_name = display_name_candidate_for_event(event);
     Ok(LegacyHookEvent {
         source_app: event.session.workspace_id.clone(),
         session_id: event.session.session_id.clone(),
@@ -250,6 +392,8 @@ pub fn legacy_event_from_envelope(event: &EventEnvelope) -> Result<LegacyHookEve
         agent_id: event.agent_id.clone(),
         agent_type: payload_string(&event.payload, "agent_type"),
         model_name: payload_string(&event.payload, "model"),
+        display_name: Some(display_name.value),
+        agent_name: payload_string(&event.payload, "agent_name"),
     })
 }
 

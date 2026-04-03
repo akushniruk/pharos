@@ -374,7 +374,7 @@ async fn lists_agent_registry_entries_from_stored_events() {
     let first = &array[0];
     assert_eq!(first["source_app"], "demo-project");
     assert_eq!(first["session_id"], "sess-1234");
-    assert_eq!(first["display_name"], "Orchestrator");
+    assert_eq!(first["display_name"], "demo-project");
     assert_eq!(first["lifecycle_status"], "active");
 }
 
