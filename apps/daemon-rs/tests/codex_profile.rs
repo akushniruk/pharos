@@ -222,6 +222,93 @@ fn codex_live_log_body_parses_tool_use_and_workdir() {
 }
 
 #[test]
+fn codex_live_log_body_parses_prompt_submission() {
+    let temp_dir = tempdir().expect("tempdir");
+    let profile = CodexProfile::new(temp_dir.path().to_path_buf());
+    let db_path = temp_dir.path().join("logs_1.sqlite");
+    let connection = rusqlite::Connection::open(db_path).expect("open sqlite");
+    connection
+        .execute_batch(
+            "CREATE TABLE logs (
+                id INTEGER PRIMARY KEY,
+                ts INTEGER NOT NULL,
+                level TEXT,
+                target TEXT,
+                feedback_log_body TEXT,
+                thread_id TEXT
+            );",
+        )
+        .expect("create logs");
+    connection
+        .execute(
+            "INSERT INTO logs (id, ts, level, target, feedback_log_body, thread_id)
+             VALUES (?1, ?2, 'INFO', 'codex_core::codex', ?3, ?4)",
+            rusqlite::params![
+                2_i64,
+                1_775_231_713_i64,
+                "session_loop{thread_id=thread-2}: Submission sub=Submission { id: \"sub-1\", op: UserInput { items: [Text { text: \"read about this project\" }] } }",
+                "thread-2",
+            ],
+        )
+        .expect("insert log");
+
+    let events = profile.read_live_events("thread-2", 0);
+    assert_eq!(events.len(), 1);
+    assert_eq!(
+        events[0].event,
+        CodexSessionEvent::UserPrompt {
+            text: "read about this project".to_string(),
+        }
+    );
+}
+
+#[test]
+fn codex_live_log_body_parses_spawn_agent_as_subagent_start() {
+    let temp_dir = tempdir().expect("tempdir");
+    let profile = CodexProfile::new(temp_dir.path().to_path_buf());
+    let db_path = temp_dir.path().join("logs_1.sqlite");
+    let connection = rusqlite::Connection::open(db_path).expect("open sqlite");
+    connection
+        .execute_batch(
+            "CREATE TABLE logs (
+                id INTEGER PRIMARY KEY,
+                ts INTEGER NOT NULL,
+                level TEXT,
+                target TEXT,
+                feedback_log_body TEXT,
+                thread_id TEXT
+            );",
+        )
+        .expect("create logs");
+    connection
+        .execute(
+            "INSERT INTO logs (id, ts, level, target, feedback_log_body, thread_id)
+             VALUES (?1, ?2, 'INFO', 'codex_core::stream_events_utils', ?3, ?4)",
+            rusqlite::params![
+                3_i64,
+                1_775_231_743_i64,
+                "session_loop{thread_id=thread-3}:turn{turn.id=turn-3 model=gpt-5.4}: ToolCall: spawn_agent {\"agent_type\":\"explorer\",\"model\":\"gpt-5.4-mini\",\"reasoning_effort\":\"medium\",\"message\":\"You are exploring /repo. Task: inspect the daemon and identify the payload fields.\"}",
+                "thread-3",
+            ],
+        )
+        .expect("insert log");
+
+    let events = profile.read_live_events("thread-3", 0);
+    assert_eq!(events.len(), 1);
+    assert_eq!(
+        events[0].event,
+        CodexSessionEvent::SubagentStart {
+            agent_type: "explorer".to_string(),
+            display_name: "Explorer".to_string(),
+            description: Some("inspect the daemon and identify the payload fields.".to_string()),
+            model: Some("gpt-5.4-mini".to_string()),
+            reasoning_effort: Some("medium".to_string()),
+            agent_id: "turn-3".to_string(),
+        }
+    );
+}
+
+#[test]
 fn codex_enrichment_assigns_distinct_live_threads_to_distinct_projects() {
     let mut sessions = vec![
         DetectedSession {

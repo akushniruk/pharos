@@ -8,8 +8,9 @@ export function describeEvent(event: HookEvent): string {
 
   switch (type) {
     case 'PreToolUse': {
-      if (toolName === 'Bash' && p.tool_input?.command) {
-        return `Running ${truncate(p.tool_input.command, 72)}`;
+      if ((toolName === 'Bash' && p.tool_input?.command) || (toolName === 'exec_command' && p.tool_input?.cmd)) {
+        const command = p.tool_input?.command || p.tool_input?.cmd;
+        return `Running ${truncate(command, 72)}`;
       }
       if (['Read', 'Edit', 'Write'].includes(toolName) && p.tool_input?.file_path) {
         const verb = toolName === 'Read' ? 'Reading' : toolName === 'Edit' ? 'Editing' : 'Writing';
@@ -22,6 +23,12 @@ export function describeEvent(event: HookEvent): string {
       if (toolName === 'Agent') {
         const description = p.tool_input?.description;
         return description ? `Delegating: ${truncate(description, 72)}` : 'Delegating work';
+      }
+      if (toolName === 'send_input' && p.tool_input?.message) {
+        return `Sending: ${truncate(p.tool_input.message, 72)}`;
+      }
+      if (toolName === 'wait_agent') {
+        return 'Waiting for subagent';
       }
       return `Using ${toolName}`;
     }

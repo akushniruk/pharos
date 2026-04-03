@@ -173,3 +173,25 @@ fn converts_codex_tool_result_failure_to_envelope() {
     assert_eq!(envelope.payload["is_error"], true);
     assert_eq!(envelope.payload["content"], "permission denied");
 }
+
+#[test]
+fn converts_codex_spawn_agent_to_subagent_start_envelope() {
+    let event = CodexSessionEvent::SubagentStart {
+        agent_type: "explorer".to_string(),
+        display_name: "Explorer".to_string(),
+        description: Some("inspect the daemon".to_string()),
+        model: Some("gpt-5.4-mini".to_string()),
+        reasoning_effort: Some("medium".to_string()),
+        agent_id: "turn-3".to_string(),
+    };
+
+    let envelope = codex_event_to_envelope(&event, "pharos", "proc-42", 1_711_234_567_000);
+
+    assert_eq!(envelope.runtime_source, RuntimeSource::CodexCli);
+    assert_eq!(envelope.event_kind, EventKind::SubagentStarted);
+    assert_eq!(envelope.agent_id.as_deref(), Some("turn-3"));
+    assert_eq!(envelope.payload["agent_type"], "explorer");
+    assert_eq!(envelope.payload["agent_name"], "Explorer");
+    assert_eq!(envelope.payload["description"], "inspect the daemon");
+    assert_eq!(envelope.payload["parent_agent_id"], "main");
+}

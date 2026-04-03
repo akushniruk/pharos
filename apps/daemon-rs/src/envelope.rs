@@ -108,12 +108,32 @@ pub fn codex_event_to_envelope(
         CodexSessionEvent::UserPrompt { text } => (
             EventKind::UserPromptSubmitted,
             "user prompt".to_string(),
-            json!({ "prompt": text }),
+            json!({ "prompt": truncate(text, 500) }),
         ),
         CodexSessionEvent::AssistantText { text } => (
             EventKind::AssistantResponse,
             "assistant response".to_string(),
             json!({ "text": truncate(text, 200), "model": "codex" }),
+        ),
+        CodexSessionEvent::SubagentStart {
+            agent_type,
+            display_name,
+            description,
+            model,
+            reasoning_effort,
+            agent_id: _,
+        } => (
+            EventKind::SubagentStarted,
+            format!("subagent started: {display_name}"),
+            json!({
+                "agent_type": agent_type,
+                "agent_name": display_name,
+                "display_name": display_name,
+                "description": description,
+                "model": model,
+                "reasoning_effort": reasoning_effort,
+                "parent_agent_id": "main",
+            }),
         ),
         CodexSessionEvent::ToolUse {
             tool_name,
@@ -168,7 +188,10 @@ pub fn codex_event_to_envelope(
             workspace_id: workspace_id.to_string(),
             session_id: session_id.to_string(),
         },
-        agent_id: None,
+        agent_id: match event {
+            CodexSessionEvent::SubagentStart { agent_id, .. } => Some(agent_id.clone()),
+            _ => None,
+        },
         occurred_at_ms,
         capabilities: CapabilitySet {
             can_observe: true,

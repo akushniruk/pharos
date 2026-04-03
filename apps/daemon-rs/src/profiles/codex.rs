@@ -43,6 +43,14 @@ pub enum CodexSessionEvent {
     AssistantText {
         text: String,
     },
+    SubagentStart {
+        agent_type: String,
+        display_name: String,
+        description: Option<String>,
+        model: Option<String>,
+        reasoning_effort: Option<String>,
+        agent_id: String,
+    },
     ToolUse {
         tool_name: String,
         tool_use_id: String,
@@ -556,7 +564,8 @@ fn extract_title_from_log_body(body: &str) -> Option<String> {
         return Some(trimmed_preview(&cmd));
     }
 
-    extract_quoted_value(body, "Prompt: ")
+    parse_submission_user_prompt(body)
+        .or_else(|| extract_quoted_value(body, "Prompt: "))
         .or_else(|| extract_quoted_value(body, "UserPrompt: "))
         .map(|text| trimmed_preview(&text))
 }
@@ -597,6 +606,10 @@ fn extract_quoted_value(body: &str, marker: &str) -> Option<String> {
 }
 
 fn parse_live_log_event(body: &str) -> Option<CodexSessionEvent> {
+    if let Some(prompt) = parse_submission_user_prompt(body) {
+        return Some(CodexSessionEvent::UserPrompt { text: prompt });
+    }
+
     let tool_marker = ": ToolCall: ";
     let start = body.find(tool_marker)? + tool_marker.len();
     let rest = body.get(start..)?.trim();
@@ -612,11 +625,83 @@ fn parse_live_log_event(body: &str) -> Option<CodexSessionEvent> {
     let tool_use_id = extract_turn_id(body)
         .unwrap_or_else(|| format!("log-{}", stable_hash(body)));
 
+    if tool_name == "spawn_agent" {
+        return Some(parse_spawn_agent_event(&input, &tool_use_id));
+    }
+
     Some(CodexSessionEvent::ToolUse {
         tool_name: tool_name.to_string(),
         tool_use_id,
         input,
     })
+}
+
+fn parse_spawn_agent_event(input: &Value, tool_use_id: &str) -> CodexSessionEvent {
+    let agent_type = input
+        .get("agent_type")
+        .and_then(Value::as_str)
+        .unwrap_or("worker")
+        .to_string();
+    let display_name = title_case(&agent_type);
+    let description = input
+        .get("message")
+        .and_then(Value::as_str)
+        .and_then(extract_task_description)
+        .or_else(|| {
+            input
+                .get("description")
+                .and_then(Value::as_str)
+                .map(ToString::to_string)
+        });
+
+    CodexSessionEvent::SubagentStart {
+        agent_type,
+        display_name,
+        description,
+        model: input
+            .get("model")
+            .and_then(Value::as_str)
+            .map(ToString::to_string),
+        reasoning_effort: input
+            .get("reasoning_effort")
+            .and_then(Value::as_str)
+            .map(ToString::to_string),
+        agent_id: tool_use_id.to_string(),
+    }
+}
+
+fn extract_task_description(message: &str) -> Option<String> {
+    if let Some(start) = message.find("Task:") {
+        let task = message.get(start + "Task:".len()..)?.trim();
+        if !task.is_empty() {
+            return Some(trimmed_preview(task));
+        }
+    }
+
+    for line in message.lines() {
+        let trimmed = line.trim();
+        if let Some(task) = trimmed.strip_prefix("Task:") {
+            let task = task.trim();
+            if !task.is_empty() {
+                return Some(trimmed_preview(task));
+            }
+        }
+    }
+
+    let trimmed = message.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed_preview(trimmed))
+    }
+}
+
+fn parse_submission_user_prompt(body: &str) -> Option<String> {
+    if !body.contains("op: UserInput") {
+        return None;
+    }
+
+    extract_quoted_value(body, "Text { text: \"")
 }
 
 fn extract_turn_id(body: &str) -> Option<String> {
@@ -643,6 +728,18 @@ fn stable_hash(body: &str) -> u64 {
     let mut hasher = builder.build_hasher();
     hasher.write(body.as_bytes());
     hasher.finish()
+}
+
+fn title_case(value: &str) -> String {
+    let mut chars = value.chars();
+    match chars.next() {
+        Some(first) => {
+            let mut label = first.to_uppercase().collect::<String>();
+            label.push_str(chars.as_str());
+            label
+        }
+        None => "Worker".to_string(),
+    }
 }
 
 fn now_millis() -> i64 {
