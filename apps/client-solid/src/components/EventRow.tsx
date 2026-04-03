@@ -1,7 +1,7 @@
 import { Show, createSignal } from 'solid-js';
 import type { HookEvent } from '../lib/types';
 import { formatTime, timeAgo } from '../lib/time';
-import { describeEvent, describeEventDetail } from '../lib/describe';
+import { describeEvent, describeEventDetail, formatRuntimeLabel } from '../lib/describe';
 import { getEventTypeLabel, getEventTypeBgColor, getEventTypeTextColor } from '../lib/colors';
 
 interface Props {
@@ -14,6 +14,10 @@ function resolveAgentName(e: HookEvent): string {
     return e.agent_name || e.payload?.agent_name || e.agent_type || e.payload?.agent_type || 'Agent';
   }
   return e.display_name || e.agent_name || e.payload?.agent_name || e.agent_type || e.source_app || 'Agent';
+}
+
+function resolveRuntimeDisplay(e: HookEvent): string | undefined {
+  return formatRuntimeLabel(resolveRuntimeLabel(e));
 }
 
 function resolveProjectName(e: HookEvent): string {
@@ -46,6 +50,7 @@ export default function EventRow(props: Props) {
   const [expanded, setExpanded] = createSignal(false);
   const e = () => props.event;
   const isTool = () => e().hook_event_type.includes('Tool');
+  const runtimeDisplay = () => resolveRuntimeDisplay(e());
   const description = () => describeEvent(e());
   const descriptionDetail = () => {
     const detail = describeEventDetail(e());
@@ -78,9 +83,9 @@ export default function EventRow(props: Props) {
           <span style="font-size:11px;font-weight:600;color:var(--text-primary);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:0;">
             {resolveAgentName(e())}
           </span>
-          <Show when={resolveRuntimeLabel(e())}>
-            <span style="font-size:9px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;flex-shrink:0;max-width:64px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-              {resolveRuntimeLabel(e())}
+          <Show when={runtimeDisplay()}>
+            <span style="font-size:9px;color:var(--text-dim);flex-shrink:0;max-width:64px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+              {runtimeDisplay()}
             </span>
           </Show>
           <span style={[

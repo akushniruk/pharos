@@ -5,6 +5,22 @@ export interface EventDescription {
   secondary?: string;
 }
 
+export function formatRuntimeLabel(label?: string | null): string | undefined {
+  if (typeof label !== 'string') return undefined;
+  const normalized = label.trim().toLowerCase().replace(/[_-]+/g, ' ');
+  if (!normalized) return undefined;
+
+  if (normalized.includes('claude')) return 'Claude';
+  if (normalized.includes('codex')) return 'Codex';
+  if (normalized.includes('gemini')) return 'Gemini';
+
+  return normalized
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((part) => part[0].toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
 /** One-line description of an event, optimized for operator scanning */
 export function describeEvent(event: HookEvent): string {
   return describeEventDescription(event).primary;
@@ -19,6 +35,7 @@ export function describeEventDetail(event: HookEvent): string | undefined {
 export function describeEventDescription(event: HookEvent): EventDescription {
   const type = event.hook_event_type;
   const p = event.payload || {};
+  const runtime = formatRuntimeLabel(p.runtime_label);
   const toolName = p.tool_name || 'unknown';
   const toolInput = p.tool_input || {};
 
@@ -30,12 +47,12 @@ export function describeEventDescription(event: HookEvent): EventDescription {
         if (workdir) {
           return {
             primary: `Running a command in ${workdir}`,
-            secondary: command,
+            secondary: composeRuntimeDetail(runtime, command),
           };
         }
         return {
           primary: 'Running a command',
-          secondary: command,
+          secondary: composeRuntimeDetail(runtime, command),
         };
       }
       const fileTarget = extractFileTarget(toolInput);
@@ -43,7 +60,7 @@ export function describeEventDescription(event: HookEvent): EventDescription {
         const verb = toolName === 'Read' ? 'Reading a file' : toolName === 'Edit' ? 'Editing a file' : 'Writing a file';
         return {
           primary: verb,
-          secondary: fileTarget,
+          secondary: composeRuntimeDetail(runtime, fileTarget),
         };
       }
       if (toolName === 'apply_patch') {
@@ -55,36 +72,37 @@ export function describeEventDescription(event: HookEvent): EventDescription {
         const target = extractPatchedFile(patch);
         return {
           primary: 'Updating files',
-          secondary: target ?? undefined,
+          secondary: composeRuntimeDetail(runtime, target),
         };
       }
       if (['Grep', 'Glob'].includes(toolName) && toolInput?.pattern) {
         return {
           primary: 'Searching for matches',
-          secondary: toolInput.pattern,
+          secondary: composeRuntimeDetail(runtime, toolInput.pattern),
         };
       }
       if (toolName === 'Agent') {
         const description = toolInput?.description;
         return {
           primary: 'Handing off work to another agent',
-          secondary: description ? truncate(description, 80) : undefined,
+          secondary: composeRuntimeDetail(runtime, description ? truncate(description, 80) : undefined),
         };
       }
       if (toolName === 'send_input' && toolInput?.message) {
         return {
           primary: 'Sending a message',
-          secondary: truncate(toolInput.message, 80),
+          secondary: composeRuntimeDetail(runtime, truncate(toolInput.message, 80)),
         };
       }
       if (toolName === 'wait_agent') {
         return {
           primary: 'Waiting for a helper agent to finish',
+          secondary: composeRuntimeDetail(runtime),
         };
       }
       return {
         primary: 'Using a tool',
-        secondary: toolName !== 'unknown' ? toolName : undefined,
+        secondary: composeRuntimeDetail(runtime, toolName !== 'unknown' ? toolName : undefined),
       };
     }
     case 'PostToolUse': {
@@ -92,18 +110,18 @@ export function describeEventDescription(event: HookEvent): EventDescription {
       if (toolName === 'exec_command' && contentPreview) {
         return {
           primary: 'Finished the command',
-          secondary: truncate(contentPreview, 80),
+          secondary: composeRuntimeDetail(runtime, truncate(contentPreview, 80)),
         };
       }
       if (contentPreview) {
         return {
           primary: 'Finished using a tool',
-          secondary: truncate(contentPreview, 80),
+          secondary: composeRuntimeDetail(runtime, truncate(contentPreview, 80)),
         };
       }
       return {
         primary: 'Finished using a tool',
-        secondary: toolName !== 'unknown' ? toolName : undefined,
+        secondary: composeRuntimeDetail(runtime, toolName !== 'unknown' ? toolName : undefined),
       };
     }
     case 'PostToolUseFailure': {
@@ -111,27 +129,23 @@ export function describeEventDescription(event: HookEvent): EventDescription {
       if (contentPreview) {
         return {
           primary: toolName === 'exec_command' ? 'Command failed' : 'A tool call failed',
-          secondary: truncate(contentPreview, 80),
+          secondary: composeRuntimeDetail(runtime, truncate(contentPreview, 80)),
         };
       }
       return {
         primary: toolName === 'exec_command' ? 'Command failed' : 'A tool call failed',
-        secondary: toolName !== 'unknown' ? toolName : undefined,
+        secondary: composeRuntimeDetail(runtime, toolName !== 'unknown' ? toolName : undefined),
       };
     }
     case 'SessionStart':
       return {
         primary: p.title ? `Watching ${truncate(p.title, 80)}` : 'Watching the session',
-        secondary: typeof p.runtime_label === 'string' && p.runtime_label.trim()
-          ? `${p.runtime_label.trim()} runtime`
-          : undefined,
+        secondary: composeRuntimeDetail(runtime),
       };
     case 'SessionEnd':
       return {
         primary: 'Session ended',
-        secondary: typeof p.runtime_label === 'string' && p.runtime_label.trim()
-          ? `${p.runtime_label.trim()} runtime`
-          : undefined,
+        secondary: composeRuntimeDetail(runtime),
       };
     case 'SubagentStart': {
       const rawAgentLabel =
@@ -140,40 +154,42 @@ export function describeEventDescription(event: HookEvent): EventDescription {
       if (p.description) {
         return {
           primary: `Started ${agentLabel}`,
-          secondary: truncate(p.description, 80),
+          secondary: composeRuntimeDetail(runtime, truncate(p.description, 80)),
         };
       }
       return {
         primary: `Started ${agentLabel}`,
+        secondary: composeRuntimeDetail(runtime),
       };
     }
     case 'SubagentStop':
       return {
         primary: 'Helper agent finished',
+        secondary: composeRuntimeDetail(runtime),
       };
     case 'UserPromptSubmit': {
       const prompt = p.prompt || p.message || '';
       return {
         primary: 'Captured a request',
-        secondary: prompt ? truncate(prompt, 80) : undefined,
+        secondary: composeRuntimeDetail(runtime, prompt ? truncate(prompt, 80) : undefined),
       };
     }
     case 'AssistantResponse': {
       const text = p.text || '';
       return {
         primary: 'Shared an update',
-        secondary: text ? truncate(text, 80) : undefined,
+        secondary: composeRuntimeDetail(runtime, text ? truncate(text, 80) : undefined),
       };
     }
     case 'SessionTitleChanged':
       return {
         primary: p.title ? `Renamed the session to ${truncate(p.title, 80)}` : 'Renamed the session',
-        secondary: p.title ? p.title : undefined,
+        secondary: composeRuntimeDetail(runtime, p.title ? p.title : undefined),
       };
     default:
       return {
         primary: 'Observed an event',
-        secondary: type || undefined,
+        secondary: composeRuntimeDetail(runtime, type || undefined),
       };
   }
 }
@@ -228,4 +244,15 @@ function extractContentPreview(content: unknown): string | null {
 function basename(path: string): string | null {
   const parts = path.split('/').filter(Boolean);
   return parts.length > 0 ? parts[parts.length - 1] : null;
+}
+
+function composeRuntimeDetail(runtime: string | undefined, detail?: string | null): string | undefined {
+  const trimmedDetail = detail?.trim();
+  if (runtime && trimmedDetail) {
+    return `${runtime} runtime · ${trimmedDetail}`;
+  }
+  if (runtime) {
+    return `${runtime} runtime`;
+  }
+  return trimmedDetail || undefined;
 }
