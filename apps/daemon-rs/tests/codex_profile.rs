@@ -220,3 +220,59 @@ fn codex_live_log_body_parses_tool_use_and_workdir() {
         }
     );
 }
+
+#[test]
+fn codex_enrichment_assigns_distinct_live_threads_to_distinct_projects() {
+    let mut sessions = vec![
+        DetectedSession {
+            runtime_source: RuntimeSource::CodexCli,
+            session_id: "proc-1".to_string(),
+            native_session_id: None,
+            pid: Some(1),
+            cwd: "/Users/tester/home_projects/pharos".to_string(),
+            started_at_ms: 1,
+            entrypoint: "codex".to_string(),
+            display_title: None,
+            history_path: None,
+            transcript_path: None,
+            subagents_dir: None,
+        },
+        DetectedSession {
+            runtime_source: RuntimeSource::CodexCli,
+            session_id: "proc-2".to_string(),
+            native_session_id: None,
+            pid: Some(2),
+            cwd: "/Users/tester/work/demo/signal".to_string(),
+            started_at_ms: 2,
+            entrypoint: "codex".to_string(),
+            display_title: None,
+            history_path: None,
+            transcript_path: None,
+            subagents_dir: None,
+        },
+    ];
+
+    let native_sessions = vec![
+        pharos_daemon::profiles::codex::NativeCodexSession {
+            native_session_id: "thread-pharos".to_string(),
+            title: Some("Fix pharos bug".to_string()),
+            updated_at_ms: 100,
+            project_root: Some("/Users/tester/home_projects/pharos".to_string()),
+            history_path: None,
+        },
+        pharos_daemon::profiles::codex::NativeCodexSession {
+            native_session_id: "thread-signal".to_string(),
+            title: Some("Read signal repo".to_string()),
+            updated_at_ms: 200,
+            project_root: Some("/Users/tester/work/demo/signal".to_string()),
+            history_path: None,
+        },
+    ];
+
+    enrich_detected_sessions(&mut sessions, &native_sessions);
+
+    assert_eq!(sessions[0].native_session_id.as_deref(), Some("thread-pharos"));
+    assert_eq!(sessions[1].native_session_id.as_deref(), Some("thread-signal"));
+    assert_eq!(sessions[0].display_title.as_deref(), Some("Fix pharos bug"));
+    assert_eq!(sessions[1].display_title.as_deref(), Some("Read signal repo"));
+}

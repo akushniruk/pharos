@@ -423,55 +423,75 @@ pub fn enrich_detected_sessions(
     sessions: &mut [DetectedSession],
     native_sessions: &[NativeCodexSession],
 ) {
-    let live_codex_count = sessions
+    let codex_indices: Vec<usize> = sessions
         .iter()
-        .filter(|session| session.runtime_source == RuntimeSource::CodexCli)
-        .count();
+        .enumerate()
+        .filter(|(_, session)| session.runtime_source == RuntimeSource::CodexCli)
+        .map(|(index, _)| index)
+        .collect();
 
-    for session in sessions {
-        if session.runtime_source != RuntimeSource::CodexCli {
-            continue;
-        }
-
-        if let Some(native_session) = best_native_match(session, native_sessions, live_codex_count) {
-            if session.display_title.is_none() {
-                session.display_title = native_session.title.clone();
-            }
-            if session.native_session_id.is_none() {
-                session.native_session_id = Some(native_session.native_session_id.clone());
-            }
-            if session.history_path.is_none() {
-                session.history_path = native_session.history_path.clone();
+    let live_codex_count = codex_indices.len();
+    let mut candidates = Vec::<(i64, usize, usize)>::new();
+    for &session_index in &codex_indices {
+        for (native_index, native_session) in native_sessions.iter().enumerate() {
+            let score = match_score(
+                &sessions[session_index],
+                native_session,
+                live_codex_count,
+            );
+            if score > 0 {
+                candidates.push((score, session_index, native_index));
             }
         }
     }
+
+    candidates.sort_by(|left, right| right.cmp(left));
+
+    let mut assigned_sessions = std::collections::HashSet::<usize>::new();
+    let mut assigned_natives = std::collections::HashSet::<usize>::new();
+
+    for (_, session_index, native_index) in candidates {
+        if assigned_sessions.contains(&session_index) || assigned_natives.contains(&native_index) {
+            continue;
+        }
+
+        let session = &mut sessions[session_index];
+        let native_session = &native_sessions[native_index];
+        if session.display_title.is_none() {
+            session.display_title = native_session.title.clone();
+        }
+        if session.native_session_id.is_none() {
+            session.native_session_id = Some(native_session.native_session_id.clone());
+        }
+        if session.history_path.is_none() {
+            session.history_path = native_session.history_path.clone();
+        }
+        assigned_sessions.insert(session_index);
+        assigned_natives.insert(native_index);
+    }
 }
 
-fn best_native_match<'a>(
+fn match_score(
     session: &DetectedSession,
-    native_sessions: &'a [NativeCodexSession],
+    native_session: &NativeCodexSession,
     live_codex_count: usize,
-) -> Option<&'a NativeCodexSession> {
+) -> i64 {
     let session_workspace_name = workspace_name(&session.cwd);
-    native_sessions
-        .iter()
-        .max_by_key(|native_session| {
-            let mut score = 0_i64;
+    let mut score = 0_i64;
 
-            if let Some(project_root) = &native_session.project_root {
-                if project_root == &session.cwd {
-                    score += 10_000;
-                } else if session_workspace_name == workspace_name(project_root) {
-                    score += 5_000;
-                }
-            }
+    if let Some(project_root) = &native_session.project_root {
+        if project_root == &session.cwd {
+            score += 100_000;
+        } else if session_workspace_name == workspace_name(project_root) {
+            score += 50_000;
+        }
+    }
 
-            if live_codex_count == 1 {
-                score += 1_000;
-            }
+    if live_codex_count == 1 {
+        score += 1_000;
+    }
 
-            score + native_session.updated_at_ms
-        })
+    score + native_session.updated_at_ms
 }
 
 fn latest_user_prompt(items: &[Value]) -> Option<String> {
