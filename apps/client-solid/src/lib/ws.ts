@@ -20,12 +20,10 @@ let ws: WebSocket | null = null;
 
 export function resolveApiHost(hostname?: string): string {
   const normalized = hostname?.trim().toLowerCase() ?? '';
-  if (!normalized) return '127.0.0.1';
-  if (normalized === 'localhost' || normalized === '::1' || normalized === '[::1]') {
-    return '127.0.0.1';
-  }
+  if (!normalized) return 'localhost';
+  if (normalized === '::1' || normalized === '[::1]') return 'localhost';
   if (normalized !== 'localhost' && normalized.endsWith('.localhost')) {
-    return '127.0.0.1';
+    return 'localhost';
   }
   return hostname!;
 }
