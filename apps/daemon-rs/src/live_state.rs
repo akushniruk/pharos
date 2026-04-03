@@ -5,7 +5,7 @@ use crate::model::{
     AgentRegistryEntry, AgentSnapshot, EventEnvelope, EventKind, FilterOptions, LegacyHookEvent,
     ProjectSnapshot, SessionSnapshot, SessionSummary,
 };
-use crate::store::{legacy_event_from_envelope, Store, StoreError};
+use crate::store::{Store, StoreError, legacy_event_from_envelope};
 
 #[derive(Clone, Default)]
 pub struct LiveState {
@@ -179,7 +179,8 @@ impl LiveStateData {
             }
 
             session_snaps.sort_by(|left, right| right.last_event_at.cmp(&left.last_event_at));
-            let summary = resolve_project_summary(&session_snaps, &runtime_labels, active_session_count);
+            let summary =
+                resolve_project_summary(&session_snaps, &runtime_labels, active_session_count);
             projects.push(ProjectSnapshot {
                 name,
                 runtime_labels: runtime_labels.into_iter().collect(),
@@ -199,11 +200,15 @@ impl LiveStateData {
 
     fn build_session_snapshot(&self, session_id: &str) -> Option<SessionSnapshot> {
         let session = self.sessions.get(session_id)?;
-        let events = self.session_events.get(session_id).cloned().unwrap_or_default();
-        let agents = self.build_agents(&events);
+        let events = self
+            .session_events
+            .get(session_id)
+            .cloned()
+            .unwrap_or_default();
+        let is_active = session.summary.is_active;
+        let agents = self.build_agents(&events, is_active);
         let active_agent_count = agents.iter().filter(|agent| agent.is_active).count();
         let runtime_label = resolve_runtime_label(&events);
-        let is_active = session.summary.is_active || active_agent_count > 0;
 
         Some(SessionSnapshot {
             session_id: session.summary.session_id.clone(),
@@ -219,10 +224,17 @@ impl LiveStateData {
         })
     }
 
-    fn build_agents(&self, events: &[LegacyHookEvent]) -> Vec<AgentSnapshot> {
+    fn build_agents(
+        &self,
+        events: &[LegacyHookEvent],
+        session_is_active: bool,
+    ) -> Vec<AgentSnapshot> {
         let mut grouped = HashMap::<String, Vec<&LegacyHookEvent>>::new();
         for event in events {
-            let key = event.agent_id.clone().unwrap_or_else(|| "__main__".to_string());
+            let key = event
+                .agent_id
+                .clone()
+                .unwrap_or_else(|| "__main__".to_string());
             grouped.entry(key).or_default().push(event);
         }
 
@@ -234,9 +246,15 @@ impl LiveStateData {
                 .max()
                 .unwrap_or(0);
             let sample = grouped_events[0];
-            let runtime_label = grouped_events.iter().find_map(|event| payload_string(&event.payload, "runtime_label"));
+            let runtime_label = grouped_events
+                .iter()
+                .find_map(|event| payload_string(&event.payload, "runtime_label"));
             agents.push(AgentSnapshot {
-                agent_id: if agent_key == "__main__" { None } else { Some(agent_key.clone()) },
+                agent_id: if agent_key == "__main__" {
+                    None
+                } else {
+                    Some(agent_key.clone())
+                },
                 display_name: resolve_agent_name(&grouped_events, agent_key == "__main__"),
                 runtime_label,
                 assignment: resolve_assignment(&grouped_events),
@@ -245,8 +263,19 @@ impl LiveStateData {
                 model_name: sample.model_name.clone(),
                 event_count: grouped_events.len(),
                 last_event_at: latest_at,
-                is_active: resolve_agent_active(&sample.session_id, if agent_key == "__main__" { None } else { Some(&agent_key) }, &self.registry),
-                parent_id: grouped_events.iter().find_map(|event| payload_string(&event.payload, "parent_agent_id")),
+                is_active: session_is_active
+                    && resolve_agent_active(
+                        &sample.session_id,
+                        if agent_key == "__main__" {
+                            None
+                        } else {
+                            Some(&agent_key)
+                        },
+                        &self.registry,
+                    ),
+                parent_id: grouped_events
+                    .iter()
+                    .find_map(|event| payload_string(&event.payload, "parent_agent_id")),
             });
         }
 
@@ -256,31 +285,30 @@ impl LiveStateData {
 
     fn update_registry(&mut self, event: &LegacyHookEvent) {
         let agent_id = event.agent_id.clone();
-        let entry_id = build_registry_id(
-            &event.source_app,
-            &event.session_id,
-            agent_id.as_deref(),
-        );
+        let entry_id = build_registry_id(&event.source_app, &event.session_id, agent_id.as_deref());
         let display_name = display_name_candidate_for_legacy_event(event);
 
-        let state = self.registry.entry(entry_id.clone()).or_insert_with(|| RegistryState {
-            entry: AgentRegistryEntry {
-                id: entry_id,
-                source_app: event.source_app.clone(),
-                session_id: event.session_id.clone(),
-                agent_id: agent_id.clone(),
-                display_name: display_name.value.clone(),
-                agent_type: event.agent_type.clone(),
-                model_name: event.model_name.clone(),
-                parent_id: payload_string(&event.payload, "parent_agent_id"),
-                team_name: payload_string(&event.payload, "team_name"),
-                lifecycle_status: resolve_lifecycle_status(&event.hook_event_type).to_string(),
-                first_seen_at: event.timestamp,
-                last_seen_at: event.timestamp,
-                event_count: 0,
-            },
-            display_name_score: display_name.score,
-        });
+        let state = self
+            .registry
+            .entry(entry_id.clone())
+            .or_insert_with(|| RegistryState {
+                entry: AgentRegistryEntry {
+                    id: entry_id,
+                    source_app: event.source_app.clone(),
+                    session_id: event.session_id.clone(),
+                    agent_id: agent_id.clone(),
+                    display_name: display_name.value.clone(),
+                    agent_type: event.agent_type.clone(),
+                    model_name: event.model_name.clone(),
+                    parent_id: payload_string(&event.payload, "parent_agent_id"),
+                    team_name: payload_string(&event.payload, "team_name"),
+                    lifecycle_status: resolve_lifecycle_status(&event.hook_event_type).to_string(),
+                    first_seen_at: event.timestamp,
+                    last_seen_at: event.timestamp,
+                    event_count: 0,
+                },
+                display_name_score: display_name.score,
+            });
 
         state.entry.last_seen_at = state.entry.last_seen_at.max(event.timestamp);
         state.entry.first_seen_at = state.entry.first_seen_at.min(event.timestamp);
@@ -408,7 +436,10 @@ fn resolve_session_label(events: &[LegacyHookEvent], workspace_name: &str) -> St
         return title;
     }
 
-    let main_events: Vec<_> = events.iter().filter(|event| event.agent_id.is_none()).collect();
+    let main_events: Vec<_> = events
+        .iter()
+        .filter(|event| event.agent_id.is_none())
+        .collect();
     let main_name = resolve_agent_name(&main_events, true);
     if main_name != "Session" && main_name != "Agent" {
         return main_name;
@@ -434,7 +465,8 @@ fn resolve_assignment(events: &[&LegacyHookEvent]) -> Option<String> {
                 && payload_string(&event.payload, "tool_name").as_deref() == Some("Agent")
         })
         .and_then(|event| {
-            event.payload
+            event
+                .payload
                 .get("tool_input")
                 .and_then(|value| value.get("description"))
                 .and_then(serde_json::Value::as_str)
@@ -448,7 +480,10 @@ fn resolve_assignment(events: &[&LegacyHookEvent]) -> Option<String> {
         .iter()
         .rev()
         .find(|event| event.hook_event_type == "UserPromptSubmit")
-        .and_then(|event| payload_string(&event.payload, "prompt").or_else(|| payload_string(&event.payload, "message")));
+        .and_then(|event| {
+            payload_string(&event.payload, "prompt")
+                .or_else(|| payload_string(&event.payload, "message"))
+        });
     prompt.map(|value| truncate(&value, 100))
 }
 
@@ -458,21 +493,19 @@ fn resolve_current_action(events: &[LegacyHookEvent]) -> Option<String> {
 }
 
 fn resolve_current_action_from_refs(events: &[&LegacyHookEvent]) -> Option<String> {
-    let latest = events
-        .iter()
-        .rev()
-        .find(|event| !matches!(event.hook_event_type.as_str(), "SessionStart" | "SessionEnd" | "SessionTitleChanged"))
-        ?;
+    let latest = events.iter().rev().find(|event| {
+        !matches!(
+            event.hook_event_type.as_str(),
+            "SessionStart" | "SessionEnd" | "SessionTitleChanged"
+        )
+    })?;
     if latest.hook_event_type == "SubagentStart" {
         return None;
     }
     Some(describe_legacy_event(latest))
 }
 
-fn resolve_session_summary(
-    events: &[LegacyHookEvent],
-    agents: &[AgentSnapshot],
-) -> Option<String> {
+fn resolve_session_summary(events: &[LegacyHookEvent], agents: &[AgentSnapshot]) -> Option<String> {
     let active_workers: Vec<_> = agents
         .iter()
         .filter(|agent| agent.agent_id.is_some() && agent.is_active)
@@ -508,7 +541,11 @@ fn resolve_project_summary(
     runtime_labels: &BTreeSet<String>,
     active_session_count: usize,
 ) -> Option<String> {
-    if let Some(summary) = sessions.iter().find(|session| session.is_active).and_then(|session| session.summary.clone()) {
+    if let Some(summary) = sessions
+        .iter()
+        .find(|session| session.is_active)
+        .and_then(|session| session.summary.clone())
+    {
         return Some(summary);
     }
     if let Some(summary) = sessions.iter().find_map(|session| session.summary.clone()) {
@@ -517,11 +554,21 @@ fn resolve_project_summary(
     if active_session_count > 0 && !runtime_labels.is_empty() {
         return Some(format!(
             "{} active",
-            runtime_labels.iter().cloned().collect::<Vec<_>>().join(", ")
+            runtime_labels
+                .iter()
+                .cloned()
+                .collect::<Vec<_>>()
+                .join(", ")
         ));
     }
     if !runtime_labels.is_empty() {
-        return Some(runtime_labels.iter().cloned().collect::<Vec<_>>().join(", "));
+        return Some(
+            runtime_labels
+                .iter()
+                .cloned()
+                .collect::<Vec<_>>()
+                .join(", "),
+        );
     }
     None
 }
@@ -575,12 +622,15 @@ fn latest_useful_event_summary(events: &[LegacyHookEvent]) -> Option<String> {
 }
 
 fn active_runtime_summary(events: &[LegacyHookEvent]) -> Option<String> {
-    let latest = events.iter().rev().find(|event| event.hook_event_type == "SessionStart")?;
+    let latest = events
+        .iter()
+        .rev()
+        .find(|event| event.hook_event_type == "SessionStart")?;
     let runtime = payload_string(&latest.payload, "runtime_label")
         .or_else(|| payload_string(&latest.payload, "runtime_source"))
         .unwrap_or_else(|| "Agent".to_string());
-    let cwd = payload_string(&latest.payload, "cwd")
-        .and_then(|value| workspace_name_from_cwd(&value));
+    let cwd =
+        payload_string(&latest.payload, "cwd").and_then(|value| workspace_name_from_cwd(&value));
     match cwd {
         Some(workspace) => Some(format!("{runtime} active in {workspace}")),
         None => Some(format!("{runtime} active")),
@@ -588,7 +638,8 @@ fn active_runtime_summary(events: &[LegacyHookEvent]) -> Option<String> {
 }
 
 fn describe_legacy_event(event: &LegacyHookEvent) -> String {
-    let tool_name = payload_string(&event.payload, "tool_name").unwrap_or_else(|| "unknown".to_string());
+    let tool_name =
+        payload_string(&event.payload, "tool_name").unwrap_or_else(|| "unknown".to_string());
     match event.hook_event_type.as_str() {
         "PreToolUse" => {
             if let Some(tool_input) = event.payload.get("tool_input") {
@@ -678,7 +729,9 @@ fn describe_legacy_event(event: &LegacyHookEvent) -> String {
         "AssistantResponse" => payload_string(&event.payload, "text")
             .map(|text| format!("Responded: {}", truncate(&text, 72)))
             .unwrap_or_else(|| "Response".to_string()),
-        "SessionTitleChanged" => payload_string(&event.payload, "title").unwrap_or_else(|| "Title changed".to_string()),
+        "SessionTitleChanged" => {
+            payload_string(&event.payload, "title").unwrap_or_else(|| "Title changed".to_string())
+        }
         _ => event.hook_event_type.clone(),
     }
 }
@@ -690,13 +743,19 @@ fn extract_command(tool_input: &serde_json::Value) -> Option<String> {
             return Some(trimmed.to_string());
         }
     }
-    if let Some(command) = tool_input.get("command").and_then(serde_json::Value::as_str) {
+    if let Some(command) = tool_input
+        .get("command")
+        .and_then(serde_json::Value::as_str)
+    {
         let trimmed = command.trim();
         if !trimmed.is_empty() {
             return Some(trimmed.to_string());
         }
     }
-    if let Some(parts) = tool_input.get("command").and_then(serde_json::Value::as_array) {
+    if let Some(parts) = tool_input
+        .get("command")
+        .and_then(serde_json::Value::as_array)
+    {
         let joined = parts
             .iter()
             .filter_map(serde_json::Value::as_str)
@@ -737,11 +796,24 @@ fn content_preview(content: &str) -> Option<String> {
 }
 
 fn short_path(path: &str) -> Option<String> {
-    let parts = path.split('/').filter(|part| !part.is_empty()).collect::<Vec<_>>();
+    let parts = path
+        .split('/')
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>();
     if parts.is_empty() {
         None
     } else {
-        Some(parts.into_iter().rev().take(3).collect::<Vec<_>>().into_iter().rev().collect::<Vec<_>>().join("/"))
+        Some(
+            parts
+                .into_iter()
+                .rev()
+                .take(3)
+                .collect::<Vec<_>>()
+                .into_iter()
+                .rev()
+                .collect::<Vec<_>>()
+                .join("/"),
+        )
     }
 }
 
@@ -761,7 +833,10 @@ fn truncate(text: &str, max: usize) -> String {
 }
 
 fn workspace_name_from_cwd(cwd: &str) -> Option<String> {
-    cwd.split('/').filter(|part| !part.is_empty()).next_back().map(ToString::to_string)
+    cwd.split('/')
+        .filter(|part| !part.is_empty())
+        .next_back()
+        .map(ToString::to_string)
 }
 
 struct DisplayNameCandidate {
@@ -824,7 +899,9 @@ fn display_name_candidate_for_legacy_event(event: &LegacyHookEvent) -> DisplayNa
 fn build_registry_id(source_app: &str, session_id: &str, agent_id: Option<&str>) -> String {
     let session_prefix: String = session_id.chars().take(8).collect();
     match agent_id {
-        Some(agent_id) if !agent_id.is_empty() => format!("{source_app}:{session_prefix}:{agent_id}"),
+        Some(agent_id) if !agent_id.is_empty() => {
+            format!("{source_app}:{session_prefix}:{agent_id}")
+        }
         _ => format!("{source_app}:{session_prefix}"),
     }
 }
@@ -840,7 +917,7 @@ fn resolve_lifecycle_status(hook_event_type: &str) -> &'static str {
 mod tests {
     use serde_json::json;
 
-    use super::{resolve_session_summary, AgentSnapshot};
+    use super::{AgentSnapshot, resolve_session_summary};
     use crate::model::LegacyHookEvent;
 
     #[test]
@@ -902,19 +979,22 @@ mod tests {
             agent_name: None,
         }];
 
-        let summary = resolve_session_summary(&events, &[AgentSnapshot {
-            agent_id: None,
-            display_name: "signal".to_string(),
-            runtime_label: Some("Codex".to_string()),
-            assignment: None,
-            current_action: None,
-            agent_type: None,
-            model_name: None,
-            event_count: 1,
-            last_event_at: 10,
-            is_active: true,
-            parent_id: None,
-        }]);
+        let summary = resolve_session_summary(
+            &events,
+            &[AgentSnapshot {
+                agent_id: None,
+                display_name: "signal".to_string(),
+                runtime_label: Some("Codex".to_string()),
+                assignment: None,
+                current_action: None,
+                agent_type: None,
+                model_name: None,
+                event_count: 1,
+                last_event_at: 10,
+                is_active: true,
+                parent_id: None,
+            }],
+        );
         assert_eq!(summary.as_deref(), Some("Codex active in signal"));
     }
 }

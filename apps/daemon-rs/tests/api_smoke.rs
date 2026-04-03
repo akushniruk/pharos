@@ -1,12 +1,12 @@
 use std::collections::BTreeMap;
 
 use axum::body::Body;
-use axum::http::{header, Request, StatusCode};
-use pharos_daemon::api::{build_router, build_router_with_options, AppOptions};
+use axum::http::{Request, StatusCode, header};
+use futures_util::StreamExt;
+use pharos_daemon::api::{AppOptions, build_router, build_router_with_options};
 use pharos_daemon::config::{Config, ConfigError};
 use pharos_daemon::model::EventEnvelope;
 use pharos_daemon::store::Store;
-use futures_util::StreamExt;
 use serde_json::json;
 use tempfile::tempdir;
 use tokio_tungstenite::connect_async;
@@ -212,8 +212,7 @@ async fn merges_discovered_sessions_into_session_history_and_replay() {
     let body = axum::body::to_bytes(response.into_body(), usize::MAX)
         .await
         .expect("response body");
-    let sessions: serde_json::Value =
-        serde_json::from_slice(&body).expect("session summary json");
+    let sessions: serde_json::Value = serde_json::from_slice(&body).expect("session summary json");
     let array = sessions.as_array().expect("session summary array");
     assert_eq!(array.len(), 1);
     assert_eq!(array[0]["session_id"], "session-observed");
@@ -485,6 +484,136 @@ async fn returns_project_and_session_snapshots_from_live_state() {
 }
 
 #[tokio::test]
+async fn ended_sessions_stop_appearing_as_active_in_snapshots() {
+    let store = Store::open_in_memory().expect("in-memory sqlite");
+    let app = build_router(store);
+
+    let session_start = json!({
+        "runtime_source": "codex_cli",
+        "acquisition_mode": "observed",
+        "event_kind": "session_started",
+        "session": {
+            "host_id": "local",
+            "workspace_id": "signal",
+            "session_id": "sess-ended"
+        },
+        "agent_id": null,
+        "occurred_at_ms": 1711234567000_i64,
+        "capabilities": {
+            "can_observe": true,
+            "can_start": false,
+            "can_stop": false,
+            "can_retry": false,
+            "can_respond": false
+        },
+        "title": "session started",
+        "payload": {
+            "runtime_label": "Codex",
+            "cwd": "/Users/test/work/signal"
+        }
+    });
+
+    let subagent_start = json!({
+        "runtime_source": "codex_cli",
+        "acquisition_mode": "observed",
+        "event_kind": "subagent_started",
+        "session": {
+            "host_id": "local",
+            "workspace_id": "signal",
+            "session_id": "sess-ended"
+        },
+        "agent_id": "worker-1",
+        "occurred_at_ms": 1711234568000_i64,
+        "capabilities": {
+            "can_observe": true,
+            "can_start": false,
+            "can_stop": false,
+            "can_retry": false,
+            "can_respond": false
+        },
+        "title": "subagent started",
+        "payload": {
+            "display_name": "worker",
+            "description": "research the issue"
+        }
+    });
+
+    let session_end = json!({
+        "runtime_source": "codex_cli",
+        "acquisition_mode": "observed",
+        "event_kind": "session_ended",
+        "session": {
+            "host_id": "local",
+            "workspace_id": "signal",
+            "session_id": "sess-ended"
+        },
+        "agent_id": null,
+        "occurred_at_ms": 1711234569000_i64,
+        "capabilities": {
+            "can_observe": true,
+            "can_start": false,
+            "can_stop": false,
+            "can_retry": false,
+            "can_respond": false
+        },
+        "title": "session ended",
+        "payload": {
+            "runtime_label": "Codex",
+            "cwd": "/Users/test/work/signal"
+        }
+    });
+
+    for event in [session_start, subagent_start, session_end] {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::post("/api/events")
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(event.to_string()))
+                    .expect("request"),
+            )
+            .await
+            .expect("post response");
+        assert_eq!(response.status(), StatusCode::CREATED);
+    }
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::get("/api/sessions/sess-ended/snapshot")
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("session snapshot response");
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("response body");
+    let session: serde_json::Value = serde_json::from_slice(&body).expect("session json");
+    assert_eq!(session["is_active"], false);
+    assert_eq!(session["active_agent_count"], 0);
+
+    let response = app
+        .oneshot(
+            Request::get("/api/projects/signal")
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("project response");
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("response body");
+    let project: serde_json::Value = serde_json::from_slice(&body).expect("project json");
+    assert_eq!(project["is_active"], false);
+    assert_eq!(project["active_session_count"], 0);
+}
+
+#[tokio::test]
 async fn websocket_stream_sends_initial_event_list() {
     let store = Store::open_in_memory().expect("in-memory sqlite");
     let app = build_router(store.clone());
@@ -536,9 +665,7 @@ async fn websocket_stream_sends_initial_event_list() {
         serde_json::from_str(registry_message.to_text().expect("text frame"))
             .expect("json payload");
     assert_eq!(registry_payload["type"], "agent_registry");
-    let registry_data = registry_payload["data"]
-        .as_array()
-        .expect("registry array");
+    let registry_data = registry_payload["data"].as_array().expect("registry array");
     assert_eq!(registry_data.len(), 1);
     assert_eq!(registry_data[0]["source_app"], "demo-project");
 
@@ -551,9 +678,7 @@ async fn websocket_stream_sends_initial_event_list() {
         serde_json::from_str(projects_message.to_text().expect("text frame"))
             .expect("json payload");
     assert_eq!(projects_payload["type"], "projects");
-    let projects_data = projects_payload["data"]
-        .as_array()
-        .expect("projects array");
+    let projects_data = projects_payload["data"].as_array().expect("projects array");
     assert_eq!(projects_data.len(), 1);
     assert_eq!(projects_data[0]["name"], "demo-project");
 
