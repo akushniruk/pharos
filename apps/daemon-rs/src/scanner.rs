@@ -484,14 +484,8 @@ fn broadcast_envelope(
     let Ok(compat_event) = legacy_event_from_envelope(envelope) else {
         return;
     };
-    let Ok(registry) = store.list_agent_registry() else {
-        return;
-    };
 
     let Ok(event_payload) = serde_json::to_value(compat_event) else {
-        return;
-    };
-    let Ok(registry_payload) = serde_json::to_value(registry) else {
         return;
     };
 
@@ -499,10 +493,32 @@ fn broadcast_envelope(
         message_type: "event",
         payload: event_payload,
     });
+
+    if !should_broadcast_registry(&envelope.event_kind) {
+        return;
+    }
+
+    let Ok(registry) = store.list_agent_registry() else {
+        return;
+    };
+    let Ok(registry_payload) = serde_json::to_value(registry) else {
+        return;
+    };
     let _ = sender.send(OutboundWsMessage {
         message_type: "agent_registry",
         payload: registry_payload,
     });
+}
+
+fn should_broadcast_registry(event_kind: &EventKind) -> bool {
+    matches!(
+        event_kind,
+        EventKind::SessionStarted
+            | EventKind::SessionEnded
+            | EventKind::SubagentStarted
+            | EventKind::SubagentStopped
+            | EventKind::SessionTitleChanged
+    )
 }
 
 fn workspace_id_from_cwd(cwd: &str) -> String {
