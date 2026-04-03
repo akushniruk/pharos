@@ -51,6 +51,9 @@ export interface SessionInfo {
   runtimeLabel?: string;
   summary?: string;
   summaryDetail?: string;
+  statusLabel?: string;
+  statusTone?: ActivityTone;
+  statusDetail?: string;
   currentProgress?: string;
   currentProgressDetail?: string;
   currentAction?: string;
@@ -71,6 +74,9 @@ export interface AgentInfo {
   runtimeLabel?: string;
   assignment?: string;
   assignmentDetail?: string;
+  statusLabel?: string;
+  statusTone?: ActivityTone;
+  statusDetail?: string;
   currentProgress?: string;
   currentProgressDetail?: string;
   currentAction?: string;
@@ -83,6 +89,20 @@ export interface AgentInfo {
   lastEventAt: number;
   isActive: boolean;
   parentId?: string;
+}
+
+/** Lightweight viewed-state snapshot for the selected scope */
+export interface ViewedChangesSnapshot {
+  scopeKey: string;
+  scopeLabel: string;
+  scopeDetail: string;
+  headline: string;
+  body: string;
+  lastViewedAt: number | null;
+  latestEventAt: number;
+  unreadCount: number;
+  hasUnreadChanges: boolean;
+  items: RecentChangeItem[];
 }
 
 /** Navigation state */

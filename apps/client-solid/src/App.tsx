@@ -5,16 +5,18 @@ import {
   selectedProject,
   selectedProjectSnapshot,
   selectedProjectFocusSnapshot,
-  selectedRecentChangesSnapshot,
+  selectedViewedChangesSnapshot,
   selectedSession,
   selectedAgent,
   helpVisible,
   toggleHelpVisible,
   initHelpState,
+  initViewedScopeState,
   projects,
   selectProject,
   selectSession,
   selectAgent,
+  acknowledgeSelectedScope,
   filteredEvents,
 } from './lib/store';
 import { connectWs, connectionState, hasStreamData } from './lib/ws';
@@ -45,6 +47,7 @@ export default function App() {
     connectWs();
     initTheme();
     initHelpState();
+    initViewedScopeState();
   });
 
   return (
@@ -129,6 +132,9 @@ export default function App() {
         <span>
           {filteredEvents().length} events
           {selectedProject() ? ` · ${selectedProject()}` : ''}
+          {selectedViewedChangesSnapshot()?.hasUnreadChanges
+            ? ` · ${selectedViewedChangesSnapshot()?.unreadCount} new`
+            : ''}
         </span>
       </div>
     </div>
@@ -300,7 +306,7 @@ function ProjectTimeline() {
 }
 
 function RecentChangesStrip() {
-  const recentChanges = createMemo(() => selectedRecentChangesSnapshot());
+  const recentChanges = createMemo(() => selectedViewedChangesSnapshot());
 
   return (
     <Show when={recentChanges()}>
@@ -311,43 +317,60 @@ function RecentChangesStrip() {
           <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:8px;">
             <div style="min-width:0;">
               <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);">
-                Recent changes
+                Since last viewed
               </div>
               <div style="font-size:13px;font-weight:600;color:var(--text-primary);line-height:1.35;">
                 {currentChanges().headline}
               </div>
               <div style="font-size:11px;color:var(--text-dim);line-height:1.45;">
-                {currentChanges().scopeDetail}
+                {currentChanges().body}
               </div>
             </div>
-            <span
-              style="font-size:10px;padding:2px 8px;border-radius:9999px;border:1px solid var(--border);background:var(--bg-elevated);color:var(--text-secondary);flex-shrink:0;"
-            >
-              {currentChanges().eventCount} events
-            </span>
+            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0;">
+              <span
+                style={[
+                  'font-size:10px;padding:2px 8px;border-radius:9999px;border:1px solid var(--border);',
+                  currentChanges().hasUnreadChanges
+                    ? 'background:var(--green-dim);color:var(--green);'
+                    : 'background:var(--bg-elevated);color:var(--text-secondary);',
+                ].join('')}
+              >
+                {currentChanges().hasUnreadChanges
+                  ? `${currentChanges().unreadCount} new`
+                  : 'Up to date'}
+              </span>
+              <button
+                onClick={acknowledgeSelectedScope}
+                style="font-size:10px;padding:4px 8px;border-radius:9999px;border:1px solid var(--border);background:var(--bg-card);color:var(--text-secondary);cursor:pointer;"
+              >
+                Mark viewed
+              </button>
+            </div>
           </div>
 
-          <div style="display:flex;flex-wrap:wrap;gap:6px;">
-            <For each={currentChanges().items}>
-              {(item) => (
-                <div
-                  style="display:flex;align-items:center;gap:6px;max-width:100%;padding:5px 8px;border-radius:9999px;border:1px solid var(--border);background:var(--bg-card);color:var(--text-secondary);font-size:10px;line-height:1.3;"
-                >
-                  <span style="font-weight:600;color:var(--text-primary);">
-                    {item.label}
-                  </span>
-                  <Show when={item.detail}>
-                    <span style="color:var(--text-dim);">
-                      {item.detail}
+          <Show when={currentChanges().items.length > 0}>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;">
+              <For each={currentChanges().items}>
+                {(item) => (
+                  <div
+                    style="display:flex;align-items:center;gap:6px;max-width:100%;padding:5px 8px;border-radius:9999px;border:1px solid var(--border);background:var(--bg-card);color:var(--text-secondary);font-size:10px;line-height:1.3;"
+                  >
+                    <span style="font-weight:600;color:var(--text-primary);">
+                      {item.label}
                     </span>
-                  </Show>
-                  <span style="color:var(--text-dim);white-space:nowrap;">
-                    {timeAgo(item.timestamp)}
-                  </span>
-                </div>
-              )}
-            </For>
-          </div>
+                    <Show when={item.detail}>
+                      <span style="color:var(--text-dim);">
+                        {item.detail}
+                      </span>
+                    </Show>
+                    <span style="color:var(--text-dim);white-space:nowrap;">
+                      {timeAgo(item.timestamp)}
+                    </span>
+                  </div>
+                )}
+              </For>
+            </div>
+          </Show>
         </div>
       )}
     </Show>

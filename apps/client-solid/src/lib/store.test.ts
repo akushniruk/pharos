@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildProjectFocusSnapshot, buildRecentChangesSnapshot, resolveActivityState } from './store';
+import {
+  buildProjectFocusSnapshot,
+  buildRecentChangesSnapshot,
+  buildViewedChangesSnapshot,
+  resolveActivityState,
+  resolveConservativeStatusDetail,
+} from './store';
 import type { AgentInfo, HookEvent, Project, SessionInfo } from './types';
 
 describe('buildProjectFocusSnapshot', () => {
@@ -68,6 +74,44 @@ describe('buildProjectFocusSnapshot', () => {
       agentCount: 3,
       hasSessionFocus: true,
       hasAgentFocus: true,
+    });
+  });
+
+  it('surfaces the runtime label before a generic project summary fallback', () => {
+    const project = {
+      name: 'pharos',
+      runtimeLabels: ['claude'],
+      eventCount: 2,
+      agentCount: 1,
+      activeSessionCount: 0,
+      lastEventAt: 1_000,
+      isActive: false,
+      summary: 'Coordinating a handoff',
+      sessions: [],
+    } satisfies Project;
+
+    expect(buildProjectFocusSnapshot(project, null, null)).toEqual({
+      projectName: 'pharos',
+      projectSummary: 'Coordinating a handoff',
+      sessionId: null,
+      sessionLabel: null,
+      sessionSummary: null,
+      currentProgress: null,
+      currentProgressDetail: null,
+      nextAction: null,
+      nextActionDetail: null,
+      agentId: null,
+      agentLabel: null,
+      agentSummary: null,
+      scopeLabel: 'Project overview',
+      breadcrumb: 'pharos',
+      headline: 'pharos is coordinating a handoff',
+      subheadline: 'Runtime: Claude',
+      eventCount: 2,
+      sessionCount: 0,
+      agentCount: 1,
+      hasSessionFocus: false,
+      hasAgentFocus: false,
     });
   });
 });
@@ -169,6 +213,82 @@ describe('buildRecentChangesSnapshot', () => {
   });
 });
 
+describe('buildViewedChangesSnapshot', () => {
+  it('highlights only changes that landed after the last acknowledgement', () => {
+    const project = {
+      name: 'pharos',
+      runtimeLabels: ['codex'],
+      eventCount: 4,
+      agentCount: 1,
+      activeSessionCount: 1,
+      lastEventAt: 400,
+      isActive: true,
+      sessions: [],
+    } satisfies Project;
+
+    const session = {
+      sessionId: 'session-123',
+      label: 'Deploy review',
+      summary: 'Waiting on final validation',
+      eventCount: 4,
+      agents: [],
+      activeAgentCount: 0,
+      lastEventAt: 400,
+      isActive: true,
+    } satisfies SessionInfo;
+
+    project.sessions = [session];
+
+    const events = [
+      {
+        source_app: 'pharos',
+        session_id: 'session-123',
+        hook_event_type: 'PreToolUse',
+        payload: {
+          tool_name: 'Edit',
+          tool_input: {
+            file_path: 'apps/client-solid/src/lib/store.ts',
+          },
+        },
+        timestamp: 200,
+      },
+      {
+        source_app: 'pharos',
+        session_id: 'session-123',
+        hook_event_type: 'AssistantResponse',
+        payload: {
+          text: 'Updated the digest strip.',
+        },
+        timestamp: 400,
+      },
+    ] satisfies HookEvent[];
+
+    expect(buildViewedChangesSnapshot(project, session, events, 150)).toEqual({
+      scopeKey: 'session:pharos:session-123',
+      scopeLabel: 'Deploy review',
+      scopeDetail: '4 events in this session',
+      headline: 'New changes in Deploy review',
+      body: '2 changes landed since your last acknowledgement.',
+      lastViewedAt: 150,
+      latestEventAt: 400,
+      unreadCount: 2,
+      hasUnreadChanges: true,
+      items: [
+        {
+          label: 'Shared an update',
+          detail: 'Updated the digest strip.',
+          timestamp: 400,
+        },
+        {
+          label: 'Editing a file',
+          detail: 'src/lib/store.ts',
+          timestamp: 200,
+        },
+      ],
+    });
+  });
+});
+
 describe('resolveActivityState', () => {
   it('marks explicit failures as needs attention even if later events exist', () => {
     const now = 20_000;
@@ -256,5 +376,32 @@ describe('resolveActivityState', () => {
       tone: 'attention',
       detail: 'No progress for 15m after Running a command',
     });
+  });
+});
+
+describe('resolveConservativeStatusDetail', () => {
+  it('uses a soft fallback reason when blocked or attention states lack an explicit detail', () => {
+    const events = [
+      {
+        source_app: 'pharos',
+        session_id: 'session-1',
+        hook_event_type: 'PreToolUse',
+        payload: {
+          tool_name: 'Bash',
+          tool_input: {
+            command: 'pnpm build',
+          },
+        },
+        timestamp: 10_000,
+        agent_id: 'agent-1',
+      },
+    ] satisfies HookEvent[];
+
+    expect(resolveConservativeStatusDetail('blocked', undefined, events)).toBe(
+      'Waiting on the last step to finish after Running a command',
+    );
+    expect(resolveConservativeStatusDetail('attention', undefined, events)).toBe(
+      'No new progress after Running a command',
+    );
   });
 });

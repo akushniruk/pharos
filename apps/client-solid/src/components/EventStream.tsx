@@ -5,6 +5,8 @@ import {
   filteredEvents,
   selectedProjectFocusSnapshot,
   selectedProjectSnapshot,
+  selectedViewedChangesSnapshot,
+  acknowledgeSelectedScope,
   selectAgent,
   selectSession,
 } from '../lib/store';
@@ -28,6 +30,7 @@ export default function EventStream() {
   const [hiddenTypes, setHiddenTypes] = createSignal<Set<string>>(new Set(SIMPLE_HIDDEN));
   const focus = createMemo(() => selectedProjectFocusSnapshot());
   const project = createMemo(() => selectedProjectSnapshot());
+  const viewedChanges = createMemo(() => selectedViewedChangesSnapshot());
 
   const switchToDetailed = () => {
     setDetailed(true);
@@ -231,12 +234,37 @@ export default function EventStream() {
             <span style="font-size:10px;color:var(--text-dim);">
               Context: {currentFocus().subheadline}
             </span>
-            <button
-              onClick={() => selectSession(null)}
-              style="font-size:10px;padding:4px 8px;border-radius:9999px;border:1px solid var(--border);background:var(--bg-card);color:var(--text-dim);cursor:pointer;margin-left:auto;"
-            >
-              Show all events
-            </button>
+            <div style="display:flex;align-items:center;gap:6px;margin-left:auto;">
+              <Show when={viewedChanges()}>
+                {(currentViewed) => (
+                  <span
+                    style={[
+                      'font-size:10px;padding:3px 8px;border-radius:9999px;border:1px solid var(--border);',
+                      currentViewed().hasUnreadChanges
+                        ? 'background:var(--green-dim);color:var(--green);'
+                        : 'background:var(--bg-elevated);color:var(--text-secondary);',
+                    ].join('')}
+                    title={currentViewed().body}
+                  >
+                    {currentViewed().hasUnreadChanges
+                      ? `${currentViewed().unreadCount} new since viewed`
+                      : 'Up to date'}
+                  </span>
+                )}
+              </Show>
+              <button
+                onClick={acknowledgeSelectedScope}
+                style="font-size:10px;padding:4px 8px;border-radius:9999px;border:1px solid var(--border);background:var(--bg-card);color:var(--text-secondary);cursor:pointer;"
+              >
+                Mark viewed
+              </button>
+              <button
+                onClick={() => selectSession(null)}
+                style="font-size:10px;padding:4px 8px;border-radius:9999px;border:1px solid var(--border);background:var(--bg-card);color:var(--text-dim);cursor:pointer;"
+              >
+                Show all events
+              </button>
+            </div>
           </div>
         )}
       </Show>

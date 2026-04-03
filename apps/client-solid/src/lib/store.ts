@@ -1,7 +1,14 @@
 import { createSignal, createMemo, createEffect } from 'solid-js';
-import type { View, Project, SessionInfo, AgentInfo, HookEvent } from './types';
+import type {
+  View,
+  Project,
+  SessionInfo,
+  AgentInfo,
+  HookEvent,
+  ViewedChangesSnapshot,
+} from './types';
 import { agents, events, projectSnapshots } from './ws';
-import { describeEvent, describeEventDetail } from './describe';
+import { describeEvent, describeEventDetail, formatRuntimeLabel } from './describe';
 
 /** Navigation state (legacy, kept for compatibility) */
 export const [view, setView] = createSignal<View>({ page: 'projects' });
@@ -20,6 +27,10 @@ export const [selectedAgent, setSelectedAgent] = createSignal<string | null>(nul
 const HELP_STORAGE_KEY = 'pharos-help-visible';
 export const [helpVisible, setHelpVisible] = createSignal(true);
 
+const VIEWED_STORAGE_KEY = 'pharos-viewed-scopes-v1';
+type ViewedScopeMap = Record<string, number>;
+export const [viewedScopes, setViewedScopes] = createSignal<ViewedScopeMap>(loadViewedScopes());
+
 export function initHelpState() {
   if (typeof localStorage !== 'undefined') {
     const saved = localStorage.getItem(HELP_STORAGE_KEY);
@@ -37,6 +48,29 @@ export function initHelpState() {
 
 export function toggleHelpVisible() {
   setHelpVisible((current) => !current);
+}
+
+export function initViewedScopeState() {
+  createEffect(() => {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(VIEWED_STORAGE_KEY, JSON.stringify(viewedScopes()));
+    }
+  });
+}
+
+export function acknowledgeSelectedScope() {
+  const project = selectedProjectSnapshot();
+  if (!project) return;
+
+  const session = selectedSessionSnapshot();
+  const scopeKey = getScopeKey(project.name, session?.sessionId ?? null);
+  const latestEventAt = getScopeLatestEventAt(project.name, session?.sessionId ?? null);
+  const acknowledgedAt = latestEventAt || Date.now();
+
+  setViewedScopes((current) => ({
+    ...current,
+    [scopeKey]: acknowledgedAt,
+  }));
 }
 
 /** Toggle project selection (deselect if already selected) */
@@ -76,15 +110,99 @@ const registryBySessionAgent = createMemo(() => {
   return map;
 });
 
+export function resolveConservativeStatusDetail(
+  tone: ActivityTone,
+  detail: string | undefined,
+  evts: HookEvent[],
+): string | undefined {
+  const trimmedDetail = detail?.trim();
+  if (trimmedDetail) {
+    return trimmedDetail;
+  }
+
+  if (tone !== 'blocked' && tone !== 'attention') {
+    return trimmedDetail || undefined;
+  }
+
+  const latestMeaningful = latestMeaningfulEvent(evts);
+  const latestSummary = latestMeaningful ? describeEvent(latestMeaningful).trim() : undefined;
+
+  if (tone === 'blocked') {
+    return latestSummary
+      ? `Waiting on the last step to finish after ${latestSummary}`
+      : 'Waiting on the last step to finish';
+  }
+
+  return latestSummary
+    ? `No new progress after ${latestSummary}`
+    : 'No new progress after recent activity';
+}
+
+function activityStateForEvents(evts: HookEvent[], isActive: boolean): ActivityState {
+  const status = resolveActivityState(evts, { isActive });
+  return {
+    ...status,
+    detail: resolveConservativeStatusDetail(status.tone, status.detail, evts),
+  };
+}
+
+function enrichProjectsWithActivityState(
+  snapshotProjects: Project[],
+  registry: Map<string, string>,
+  evts: HookEvent[],
+): Project[] {
+  return snapshotProjects.map((project) => {
+    const projectEvents = evts.filter((event) => event.source_app === project.name);
+
+    const sessions = project.sessions.map((session) => {
+      const sessionEvents = projectEvents.filter((event) => event.session_id === session.sessionId);
+
+      const agentsArr = session.agents.map((agent) => {
+        const agentEvents = sessionEvents.filter((event) =>
+          (event.agent_id || MAIN_AGENT_KEY) === (agent.agentId || MAIN_AGENT_KEY));
+        const agentIsActive =
+          isRegistryActive(registry, session.sessionId, agent.agentId)
+          || agent.isActive;
+        const status = activityStateForEvents(agentEvents, agentIsActive);
+
+        return {
+          ...agent,
+          statusLabel: status.label,
+          statusTone: status.tone,
+          statusDetail: status.detail,
+        };
+      });
+
+      const sessionIsActive =
+        isRegistryActive(registry, session.sessionId, MAIN_AGENT_KEY)
+        || agentsArr.some((agent) => agent.isActive);
+      const status = activityStateForEvents(sessionEvents, sessionIsActive);
+
+      return {
+        ...session,
+        agents: agentsArr,
+        statusLabel: status.label,
+        statusTone: status.tone,
+        statusDetail: status.detail,
+      };
+    });
+
+    return {
+      ...project,
+      sessions: sessions.sort((a, b) => b.lastEventAt - a.lastEventAt),
+    };
+  });
+}
+
 /** Derive projects from the event stream */
 export const projects = createMemo((): Project[] => {
   const snapshots = projectSnapshots();
-  if (snapshots.length > 0) {
-    return snapshots;
-  }
-
   const evts = events();
   const registry = registryBySessionAgent();
+  if (snapshots.length > 0) {
+    return enrichProjectsWithActivityState(snapshots, registry, evts);
+  }
+
   const map = new Map<string, { events: HookEvent[]; sessions: Map<string, HookEvent[]> }>();
 
   for (const e of evts) {
@@ -131,12 +249,16 @@ export const projects = createMemo((): Project[] => {
         const nextAction = resolveNextAction(aevts);
         const nextActionDetail = resolveNextActionDetail(aevts);
         const agentIsActive = isRegistryActive(registry, sid, aid);
+        const agentStatus = activityStateForEvents(aevts, agentIsActive);
         agentsArr.push({
           agentId: aid === '__main__' ? null : aid,
           displayName,
           runtimeLabel,
           assignment: nextAction,
           assignmentDetail: nextActionDetail,
+          statusLabel: agentStatus.label,
+          statusTone: agentStatus.tone,
+          statusDetail: agentStatus.detail,
           currentProgress,
           currentProgressDetail,
           currentAction: currentProgress,
@@ -156,12 +278,16 @@ export const projects = createMemo((): Project[] => {
       const sessionIsActive =
         isRegistryActive(registry, sid, MAIN_AGENT_KEY)
         || agentsArr.some((agent) => agent.isActive);
+      const sessionStatus = activityStateForEvents(sevts, sessionIsActive);
       sessions.push({
         sessionId: sid,
         label: resolveSessionLabel(sevts, name),
         runtimeLabel,
         summary: sessionSummary.label,
         summaryDetail: sessionSummary.detail,
+        statusLabel: sessionStatus.label,
+        statusTone: sessionStatus.tone,
+        statusDetail: sessionStatus.detail,
         currentProgress: sessionSummary.label,
         currentProgressDetail: sessionSummary.detail,
         currentAction: sessionSummary.nextAction,
@@ -331,10 +457,10 @@ export function buildProjectFocusSnapshot(
         ? formatContextLabel('Current progress', agentProgressDetail)
         : sessionProgressDetail
           ? formatContextLabel('Current progress', sessionProgressDetail)
-          : projectSummary
-            ? formatContextLabel('Project summary', projectSummary)
-            : project.runtimeLabels[0]
-              ? formatContextLabel('Runtime', project.runtimeLabels[0])
+          : project.runtimeLabels[0]
+            ? formatContextLabel('Runtime', formatRuntimeLabel(project.runtimeLabels[0]))
+            : projectSummary
+              ? formatContextLabel('Project summary', projectSummary)
               : 'Watching recent activity';
   const currentProgress = agentProgress || sessionProgress || null;
   const currentProgressDetail = agentProgressDetail || sessionProgressDetail || null;
@@ -377,28 +503,76 @@ const RECENT_CHANGE_TYPES = new Set([
   'SessionTitleChanged',
 ]);
 
-export function buildRecentChangesSnapshot(
-  project: Project | null,
+function loadViewedScopes(): ViewedScopeMap {
+  if (typeof localStorage === 'undefined') {
+    return {};
+  }
+
+  try {
+    const raw = localStorage.getItem(VIEWED_STORAGE_KEY);
+    if (!raw) return {};
+
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const result: ViewedScopeMap = {};
+    for (const [key, value] of Object.entries(parsed)) {
+      if (typeof value === 'number' && Number.isFinite(value)) {
+        result[key] = value;
+      }
+    }
+    return result;
+  } catch {
+    return {};
+  }
+}
+
+function getScopeKey(projectName: string, sessionId: string | null): string {
+  return sessionId ? `session:${projectName}:${sessionId}` : `project:${projectName}`;
+}
+
+function getScopeLabel(project: Project, session: SessionInfo | null): string {
+  return session?.label || session?.sessionId || project.name;
+}
+
+function getScopeDetail(project: Project, session: SessionInfo | null): string {
+  return session
+    ? `${session.eventCount} event${session.eventCount === 1 ? '' : 's'} in this session`
+    : `${project.sessions.length} session${project.sessions.length === 1 ? '' : 's'} in this project`;
+}
+
+function getScopedEvents(
+  project: Project,
   session: SessionInfo | null,
   evts: HookEvent[],
-): RecentChangesSnapshot | null {
-  if (!project) return null;
-
-  const scopedEvents = evts
+): HookEvent[] {
+  return evts
     .filter((event) => event.source_app === project.name)
     .filter((event) => !session || event.session_id === session.sessionId);
+}
 
-  if (scopedEvents.length === 0) return null;
+function getScopeLatestEventAt(projectName: string, sessionId: string | null): number {
+  const project = selectedProjectSnapshot();
+  if (!project || project.name !== projectName) {
+    return 0;
+  }
 
-  const recentEvents = [...scopedEvents]
-    .sort((left, right) => (right.timestamp || 0) - (left.timestamp || 0))
-    .filter((event) => RECENT_CHANGE_TYPES.has(event.hook_event_type));
+  const session = sessionId
+    ? project.sessions.find((entry) => entry.sessionId === sessionId) ?? null
+    : null;
+  const scopedEvents = getScopedEvents(project, session, events());
+  return scopedEvents.reduce((max, event) => Math.max(max, event.timestamp || 0), 0);
+}
 
-  const selectedEvents = (recentEvents.length > 0 ? recentEvents : [...scopedEvents]
-    .sort((left, right) => (right.timestamp || 0) - (left.timestamp || 0)))
+function buildChangeItems(eventsForScope: HookEvent[]): RecentChangeItem[] {
+  const sorted = [...eventsForScope].sort((left, right) => (right.timestamp || 0) - (left.timestamp || 0));
+  const selectedEvents = sorted
+    .filter((event) => RECENT_CHANGE_TYPES.has(event.hook_event_type))
     .slice(0, 3);
 
-  const items = selectedEvents
+  const eventsToSummarize = selectedEvents.length > 0
+    ? selectedEvents
+    : sorted.slice(0, 3);
+
+  return eventsToSummarize
     .map((event) => {
       const label = describeEvent(event).trim();
       const detail = describeEventDetail(event)?.trim() || undefined;
@@ -410,13 +584,25 @@ export function buildRecentChangesSnapshot(
       };
     })
     .filter((item): item is RecentChangeItem => Boolean(item));
+}
+
+export function buildRecentChangesSnapshot(
+  project: Project | null,
+  session: SessionInfo | null,
+  evts: HookEvent[],
+): RecentChangesSnapshot | null {
+  if (!project) return null;
+
+  const scopedEvents = getScopedEvents(project, session, evts);
+
+  if (scopedEvents.length === 0) return null;
+
+  const items = buildChangeItems(scopedEvents);
 
   if (items.length === 0) return null;
 
-  const scopeLabel = session?.label || session?.sessionId || project.name;
-  const scopeDetail = session
-    ? `${session.eventCount} event${session.eventCount === 1 ? '' : 's'} in this session`
-    : `${project.sessions.length} session${project.sessions.length === 1 ? '' : 's'} in this project`;
+  const scopeLabel = getScopeLabel(project, session);
+  const scopeDetail = getScopeDetail(project, session);
 
   return {
     scopeLabel,
@@ -426,6 +612,51 @@ export function buildRecentChangesSnapshot(
       : `Recent changes in ${project.name}`,
     eventCount: scopedEvents.length,
     lastEventAt: items[0]?.timestamp ?? 0,
+    items,
+  };
+}
+
+export function buildViewedChangesSnapshot(
+  project: Project | null,
+  session: SessionInfo | null,
+  evts: HookEvent[],
+  viewedAt: number | null,
+): ViewedChangesSnapshot | null {
+  if (!project) return null;
+
+  const scopedEvents = getScopedEvents(project, session, evts);
+  if (scopedEvents.length === 0) return null;
+
+  const scopeLabel = getScopeLabel(project, session);
+  const scopeDetail = getScopeDetail(project, session);
+  const scopeKey = getScopeKey(project.name, session?.sessionId ?? null);
+  const normalizedViewedAt = typeof viewedAt === 'number' && Number.isFinite(viewedAt)
+    ? viewedAt
+    : null;
+  const unreadEvents = normalizedViewedAt === null
+    ? scopedEvents
+    : scopedEvents.filter((event) => (event.timestamp || 0) > normalizedViewedAt);
+  const latestEventAt = scopedEvents.reduce((max, event) => Math.max(max, event.timestamp || 0), 0);
+  const items = buildChangeItems(unreadEvents);
+  const hasUnreadChanges = unreadEvents.length > 0;
+  const unreadCount = unreadEvents.length;
+
+  return {
+    scopeKey,
+    scopeLabel,
+    scopeDetail,
+    headline: hasUnreadChanges
+      ? `New changes in ${scopeLabel}`
+      : `Up to date in ${scopeLabel}`,
+    body: hasUnreadChanges
+      ? `${unreadCount} change${unreadCount === 1 ? '' : 's'} landed since your last acknowledgement.`
+      : normalizedViewedAt
+        ? 'Nothing has changed since your last acknowledgement.'
+        : 'This scope has not been acknowledged yet.',
+    lastViewedAt: normalizedViewedAt,
+    latestEventAt,
+    unreadCount,
+    hasUnreadChanges,
     items,
   };
 }
@@ -458,7 +689,7 @@ export const selectedAgentDetailSnapshot = createMemo((): SelectedAgentDetailSna
   const focus = buildProjectFocusSnapshot(project, session, agent);
   const scopedEvents = selectedAgentEvents(session, project, agent.agentId);
   const lastUsefulResult = resolveLastUsefulResult(scopedEvents);
-  const status = resolveActivityState(scopedEvents, { isActive: agent.isActive });
+  const status = activityStateForEvents(scopedEvents, agent.isActive);
 
   return {
     agent,
@@ -739,14 +970,14 @@ function resolveProjectSummary(
   if (activeSessionCount > 0 && runtimeLabels.length > 0) {
     return {
       label: `${activeSessionCount} session${activeSessionCount === 1 ? '' : 's'} active`,
-      detail: `${runtimeLabels.join(', ')} runtime`,
+      detail: `${formatRuntimeList(runtimeLabels)} runtime activity`,
     };
   }
 
   if (runtimeLabels.length > 0) {
     return {
       label: 'Watching recent activity',
-      detail: `${runtimeLabels.join(', ')} runtime`,
+      detail: `${formatRuntimeList(runtimeLabels)} runtime activity`,
     };
   }
 
@@ -923,6 +1154,23 @@ function formatContextLabel(label: string, value?: string | null): string | unde
   return trimmed ? `${label}: ${trimmed}` : undefined;
 }
 
+function formatRuntimeList(runtimeLabels: string[]): string {
+  const formatted = runtimeLabels
+    .map((label) => formatRuntimeLabel(label))
+    .filter((label): label is string => Boolean(label));
+
+  if (formatted.length === 0) {
+    return 'Recent';
+  }
+  if (formatted.length === 1) {
+    return formatted[0];
+  }
+  if (formatted.length === 2) {
+    return `${formatted[0]} and ${formatted[1]}`;
+  }
+  return `${formatted.slice(0, -1).join(', ')}, and ${formatted[formatted.length - 1]}`;
+}
+
 /** Filtered agents based on selection */
 export const filteredAgents = createMemo((): AgentInfo[] => {
   const project = selectedProjectSnapshot();
@@ -944,6 +1192,17 @@ export const selectedRecentChangesSnapshot = createMemo((): RecentChangesSnapsho
   const project = selectedProjectSnapshot();
   if (!project) return null;
   return buildRecentChangesSnapshot(project, selectedSessionSnapshot(), events());
+});
+
+export const selectedViewedChangesSnapshot = createMemo((): ViewedChangesSnapshot | null => {
+  const project = selectedProjectSnapshot();
+  if (!project) return null;
+
+  const session = selectedSessionSnapshot();
+  const scopeKey = getScopeKey(project.name, session?.sessionId ?? null);
+  const viewedAt = viewedScopes()[scopeKey] ?? null;
+
+  return buildViewedChangesSnapshot(project, session, events(), viewedAt);
 });
 
 /** Get events filtered by selection signals */
