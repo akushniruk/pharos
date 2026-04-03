@@ -2,8 +2,14 @@ import { createSignal } from 'solid-js';
 import type { HookEvent, AgentEntry } from './types';
 
 const SERVER_PORT = import.meta.env.VITE_API_PORT || '4000';
-const API_BASE = import.meta.env.VITE_API_URL || `http://localhost:${SERVER_PORT}`;
-const WS_URL = import.meta.env.VITE_WS_URL || `ws://localhost:${SERVER_PORT}/stream`;
+const DEFAULT_HOST =
+  typeof window !== 'undefined' && window.location.hostname
+    ? window.location.hostname
+    : '127.0.0.1';
+const API_BASE =
+  import.meta.env.VITE_API_URL || `http://${DEFAULT_HOST}:${SERVER_PORT}`;
+const WS_URL =
+  import.meta.env.VITE_WS_URL || `ws://${DEFAULT_HOST}:${SERVER_PORT}/stream`;
 
 export const [events, setEvents] = createSignal<HookEvent[]>([]);
 export const [agents, setAgents] = createSignal<AgentEntry[]>([]);
