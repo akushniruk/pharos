@@ -8,11 +8,16 @@ use tokio::sync::broadcast;
 use tokio::time::interval;
 
 use crate::api::OutboundWsMessage;
-use crate::envelope::transcript_event_to_envelope;
+use crate::envelope::{codex_event_to_envelope, transcript_event_to_envelope};
 use crate::model::{
-    AcquisitionMode, CapabilitySet, EventEnvelope, EventKind, SessionRef,
+    AcquisitionMode, CapabilitySet, EventEnvelope, EventKind, RuntimeSource, SessionRef,
 };
-use crate::profiles::{claude::ClaudeProfile, discover_all_sessions, DiscoveryOptions};
+use crate::profiles::{
+    claude::ClaudeProfile,
+    codex::CodexProfile,
+    discover_all_sessions,
+    DiscoveryOptions,
+};
 use crate::store::{legacy_event_from_envelope, Store};
 use crate::tailer::parse_jsonl_line;
 
@@ -26,6 +31,7 @@ struct TrackedSubagent {
 struct TrackedSession {
     session: crate::profiles::DetectedSession,
     file_offset: u64,
+    codex_item_offset: usize,
     known_subagents: Vec<TrackedSubagent>,
     /// Maps tool_use_id → tool_name so ToolResult events can inherit the tool name.
     tool_name_map: HashMap<String, String>,
@@ -37,7 +43,8 @@ pub async fn run_scanner(
     discovery_options: DiscoveryOptions,
 ) {
     let claude_home = discovery_options.claude_home.clone();
-    let profile = claude_home.clone().map(ClaudeProfile::new);
+    let claude_profile = claude_home.clone().map(ClaudeProfile::new);
+    let codex_profile = discovery_options.codex_home.clone().map(CodexProfile::new);
     let mut tracked: HashMap<String, TrackedSession> = HashMap::new();
     let mut tick = interval(Duration::from_secs(2));
 
@@ -112,6 +119,7 @@ pub async fn run_scanner(
                 TrackedSession {
                     session,
                     file_offset: 0,
+                    codex_item_offset: 0,
                     known_subagents: Vec::new(),
                     tool_name_map: HashMap::new(),
                 },
@@ -156,7 +164,7 @@ pub async fn run_scanner(
         // This handles the case where the session file appears before the JSONL transcript.
         for (_, ts) in &mut tracked {
             if ts.session.transcript_path.is_none() {
-                let new_path = profile.as_ref().and_then(|profile| {
+                let new_path = claude_profile.as_ref().and_then(|profile| {
                     profile.resolve_transcript_path(
                         &ts.session.cwd,
                         &ts.session.session_id,
@@ -176,11 +184,52 @@ pub async fn run_scanner(
         let session_ids: Vec<String> = tracked.keys().cloned().collect();
         for session_id in session_ids {
             if let Some(ts) = tracked.get_mut(&session_id) {
-                tail_transcript(ts, &store, &sender);
-                scan_subagents(ts, &store, &sender);
+                match ts.session.runtime_source {
+                    RuntimeSource::ClaudeCode => {
+                        tail_transcript(ts, &store, &sender);
+                        scan_subagents(ts, &store, &sender);
+                    }
+                    RuntimeSource::CodexCli => {
+                        if let Some(profile) = codex_profile.as_ref() {
+                            tail_codex_history(ts, profile, &store, &sender);
+                        }
+                    }
+                    _ => {}
+                }
             }
         }
     }
+}
+
+fn tail_codex_history(
+    ts: &mut TrackedSession,
+    profile: &CodexProfile,
+    store: &Store,
+    sender: &broadcast::Sender<OutboundWsMessage>,
+) {
+    let Some(history_path) = &ts.session.history_path else {
+        return;
+    };
+
+    let workspace_id = workspace_id_from_cwd(&ts.session.cwd);
+    let now_ms = now_millis();
+    let events = profile.read_session_events(history_path);
+    if ts.codex_item_offset >= events.len() {
+        return;
+    }
+
+    for event in &events[ts.codex_item_offset..] {
+        let envelope = codex_event_to_envelope(
+            event,
+            &workspace_id,
+            &ts.session.session_id,
+            now_ms,
+        );
+        let _ = store.insert_event(&envelope);
+        broadcast_envelope(store, sender, &envelope);
+    }
+
+    ts.codex_item_offset = events.len();
 }
 
 fn tail_transcript(

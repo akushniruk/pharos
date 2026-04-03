@@ -79,11 +79,13 @@ pub fn detected_session_from_snapshot(
     Some(DetectedSession {
         runtime_source: classification.runtime_source,
         session_id: format!("proc-{}", snapshot.pid),
+        native_session_id: None,
         pid: Some(snapshot.pid),
         cwd,
         started_at_ms: snapshot.started_at_ms,
         entrypoint: classification.entrypoint,
         display_title: None,
+        history_path: None,
         transcript_path: None,
         subagents_dir: None,
     })

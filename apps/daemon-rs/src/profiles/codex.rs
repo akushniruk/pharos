@@ -15,6 +15,7 @@ pub struct NativeCodexSession {
     pub title: Option<String>,
     pub updated_at_ms: i64,
     pub project_root: Option<String>,
+    pub history_path: Option<PathBuf>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -31,6 +32,27 @@ struct CodexSessionFile {
     session: CodexSessionHeader,
     #[serde(default)]
     items: Vec<Value>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum CodexSessionEvent {
+    UserPrompt {
+        text: String,
+    },
+    AssistantText {
+        text: String,
+    },
+    ToolUse {
+        tool_name: String,
+        tool_use_id: String,
+        input: Value,
+    },
+    ToolResult {
+        tool_use_id: String,
+        tool_name: Option<String>,
+        is_error: bool,
+        content: String,
+    },
 }
 
 #[derive(Debug, Deserialize)]
@@ -93,6 +115,7 @@ impl CodexProfile {
                         title: non_empty_string(entry.thread_name),
                         updated_at_ms: parse_rfc3339_ms(&entry.updated_at).unwrap_or(0),
                         project_root: None,
+                        history_path: None,
                     },
                 );
             }
@@ -109,7 +132,7 @@ impl CodexProfile {
                 continue;
             }
 
-            let Ok(content) = std::fs::read_to_string(path) else {
+            let Ok(content) = std::fs::read_to_string(&path) else {
                 continue;
             };
             let Ok(parsed) = serde_json::from_str::<CodexSessionFile>(&content) else {
@@ -133,6 +156,7 @@ impl CodexProfile {
                     title,
                     updated_at_ms,
                     project_root,
+                    history_path: Some(path),
                 },
             );
         }
@@ -151,6 +175,19 @@ impl CodexProfile {
         }
 
         sessions
+    }
+
+    pub fn read_session_events(
+        &self,
+        history_path: &std::path::Path,
+    ) -> Vec<CodexSessionEvent> {
+        let Ok(content) = std::fs::read_to_string(history_path) else {
+            return Vec::new();
+        };
+        let Ok(parsed) = serde_json::from_str::<CodexSessionFile>(&content) else {
+            return Vec::new();
+        };
+        parse_codex_items(&parsed.items)
     }
 
     fn discovery_fingerprint(&self) -> CodexDiscoveryFingerprint {
@@ -178,6 +215,102 @@ impl CodexProfile {
     }
 }
 
+pub fn parse_codex_items(items: &[Value]) -> Vec<CodexSessionEvent> {
+    let mut events = Vec::new();
+    let mut tool_names = HashMap::<String, String>::new();
+
+    for item in items {
+        let Some(item_type) = item.get("type").and_then(Value::as_str) else {
+            continue;
+        };
+        match item_type {
+            "message" => {
+                let role = item.get("role").and_then(Value::as_str).unwrap_or("");
+                let Some(content) = item.get("content").and_then(Value::as_array) else {
+                    continue;
+                };
+
+                for block in content {
+                    match (
+                        role,
+                        block.get("type").and_then(Value::as_str),
+                    ) {
+                        ("user", Some("input_text")) => {
+                            if let Some(text) = block.get("text").and_then(Value::as_str) {
+                                events.push(CodexSessionEvent::UserPrompt {
+                                    text: text.to_string(),
+                                });
+                            }
+                        }
+                        ("assistant", Some("output_text")) => {
+                            if let Some(text) = block.get("text").and_then(Value::as_str) {
+                                events.push(CodexSessionEvent::AssistantText {
+                                    text: text.to_string(),
+                                });
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            "function_call" => {
+                let Some(tool_name) = item.get("name").and_then(Value::as_str) else {
+                    continue;
+                };
+                let Some(tool_use_id) = item.get("call_id").and_then(Value::as_str) else {
+                    continue;
+                };
+                let input = item
+                    .get("arguments")
+                    .and_then(Value::as_str)
+                    .and_then(|raw| serde_json::from_str::<Value>(raw).ok())
+                    .unwrap_or(Value::Null);
+                tool_names.insert(tool_use_id.to_string(), tool_name.to_string());
+                events.push(CodexSessionEvent::ToolUse {
+                    tool_name: tool_name.to_string(),
+                    tool_use_id: tool_use_id.to_string(),
+                    input,
+                });
+            }
+            "function_call_output" => {
+                let Some(tool_use_id) = item.get("call_id").and_then(Value::as_str) else {
+                    continue;
+                };
+                let parsed_output = item
+                    .get("output")
+                    .and_then(Value::as_str)
+                    .and_then(|raw| serde_json::from_str::<Value>(raw).ok());
+                let is_error = parsed_output
+                    .as_ref()
+                    .and_then(|output| output.get("metadata"))
+                    .and_then(|metadata| metadata.get("exit_code"))
+                    .and_then(Value::as_i64)
+                    .is_some_and(|exit_code| exit_code != 0);
+                let content = parsed_output
+                    .as_ref()
+                    .and_then(|output| output.get("output"))
+                    .and_then(Value::as_str)
+                    .map(ToString::to_string)
+                    .or_else(|| {
+                        item.get("output")
+                            .and_then(Value::as_str)
+                            .map(ToString::to_string)
+                    })
+                    .unwrap_or_default();
+                events.push(CodexSessionEvent::ToolResult {
+                    tool_use_id: tool_use_id.to_string(),
+                    tool_name: tool_names.get(tool_use_id).cloned(),
+                    is_error,
+                    content,
+                });
+            }
+            _ => {}
+        }
+    }
+
+    events
+}
+
 pub fn enrich_detected_sessions(
     sessions: &mut [DetectedSession],
     native_sessions: &[NativeCodexSession],
@@ -195,6 +328,12 @@ pub fn enrich_detected_sessions(
         if let Some(native_session) = best_native_match(session, native_sessions, live_codex_count) {
             if session.display_title.is_none() {
                 session.display_title = native_session.title.clone();
+            }
+            if session.native_session_id.is_none() {
+                session.native_session_id = Some(native_session.native_session_id.clone());
+            }
+            if session.history_path.is_none() {
+                session.history_path = native_session.history_path.clone();
             }
         }
     }

@@ -43,11 +43,13 @@ fn gemini_native_session_enrichment_uses_workspace_hint() {
     let mut sessions = vec![DetectedSession {
         runtime_source: RuntimeSource::GeminiCli,
         session_id: "proc-99".to_string(),
+        native_session_id: None,
         pid: Some(99),
         cwd: "/Users/tester/workspace/pharos".to_string(),
         started_at_ms: 1_711_234_567_000,
         entrypoint: "gemini".to_string(),
         display_title: None,
+        history_path: None,
         transcript_path: None,
         subagents_dir: None,
     }];

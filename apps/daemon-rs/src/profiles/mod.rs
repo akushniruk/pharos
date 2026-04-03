@@ -13,11 +13,13 @@ use crate::model::RuntimeSource;
 pub struct DetectedSession {
     pub runtime_source: RuntimeSource,
     pub session_id: String,
+    pub native_session_id: Option<String>,
     pub pid: Option<u32>,
     pub cwd: String,
     pub started_at_ms: i64,
     pub entrypoint: String,
     pub display_title: Option<String>,
+    pub history_path: Option<PathBuf>,
     pub transcript_path: Option<PathBuf>,
     pub subagents_dir: Option<PathBuf>,
 }

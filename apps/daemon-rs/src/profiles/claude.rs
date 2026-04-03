@@ -57,6 +57,7 @@ impl ClaudeProfile {
             sessions.push(DetectedSession {
                 runtime_source: RuntimeSource::ClaudeCode,
                 session_id: parsed.session_id,
+                native_session_id: None,
                 pid: Some(parsed.pid),
                 cwd: parsed.cwd,
                 started_at_ms: parsed.started_at,
@@ -66,6 +67,7 @@ impl ClaudeProfile {
                     parsed.entrypoint
                 },
                 display_title: None,
+                history_path: None,
                 transcript_path,
                 subagents_dir,
             });

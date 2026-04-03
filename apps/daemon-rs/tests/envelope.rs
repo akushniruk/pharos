@@ -1,5 +1,6 @@
-use pharos_daemon::envelope::transcript_event_to_envelope;
+use pharos_daemon::envelope::{codex_event_to_envelope, transcript_event_to_envelope};
 use pharos_daemon::model::{AcquisitionMode, EventKind, RuntimeSource};
+use pharos_daemon::profiles::codex::CodexSessionEvent;
 use pharos_daemon::tailer::TranscriptEvent;
 use serde_json::json;
 
@@ -132,4 +133,43 @@ fn includes_agent_id_when_provided() {
     );
 
     assert_eq!(envelope.agent_id, Some("agent-abc".to_string()));
+}
+
+#[test]
+fn converts_codex_tool_use_to_envelope() {
+    let event = CodexSessionEvent::ToolUse {
+        tool_name: "exec_command".to_string(),
+        tool_use_id: "call_123".to_string(),
+        input: json!({"command": ["ls"]}),
+    };
+
+    let envelope = codex_event_to_envelope(&event, "pharos", "proc-42", 1_711_234_567_000);
+
+    assert_eq!(envelope.runtime_source, RuntimeSource::CodexCli);
+    assert_eq!(envelope.acquisition_mode, AcquisitionMode::Observed);
+    assert_eq!(envelope.event_kind, EventKind::ToolCallStarted);
+    assert_eq!(envelope.title, "tool call started: exec_command");
+    assert_eq!(envelope.session.workspace_id, "pharos");
+    assert_eq!(envelope.session.session_id, "proc-42");
+    assert_eq!(envelope.payload["tool_name"], "exec_command");
+    assert_eq!(envelope.payload["tool_use_id"], "call_123");
+}
+
+#[test]
+fn converts_codex_tool_result_failure_to_envelope() {
+    let event = CodexSessionEvent::ToolResult {
+        tool_use_id: "call_123".to_string(),
+        tool_name: Some("exec_command".to_string()),
+        is_error: true,
+        content: "permission denied".to_string(),
+    };
+
+    let envelope = codex_event_to_envelope(&event, "pharos", "proc-42", 1_711_234_567_000);
+
+    assert_eq!(envelope.runtime_source, RuntimeSource::CodexCli);
+    assert_eq!(envelope.event_kind, EventKind::ToolCallFailed);
+    assert_eq!(envelope.title, "tool call failed: exec_command");
+    assert_eq!(envelope.payload["tool_name"], "exec_command");
+    assert_eq!(envelope.payload["is_error"], true);
+    assert_eq!(envelope.payload["content"], "permission denied");
 }
