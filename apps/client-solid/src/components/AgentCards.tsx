@@ -102,7 +102,12 @@ export default function AgentCards() {
                       {agent.runtimeLabel}
                     </span>
                   </Show>
-                  <Show when={agent.currentAction}>
+                  <Show when={agent.assignment}>
+                    <span style="font-size:10px;color:var(--text-primary);min-height:28px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">
+                      {agent.assignment}
+                    </span>
+                  </Show>
+                  <Show when={agent.currentAction && agent.currentAction !== agent.assignment}>
                     <span style="font-size:10px;color:var(--text-secondary);min-height:28px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">
                       {agent.currentAction}
                     </span>

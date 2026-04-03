@@ -1,6 +1,14 @@
 import { For, Show, createMemo, createSignal } from 'solid-js';
 import { Icon } from 'solid-heroicons';
-import { chevronLeft, chevronRight, commandLine, folder, folderOpen, bolt, clock } from 'solid-heroicons/solid';
+import {
+  chevronLeft,
+  chevronRight,
+  commandLine,
+  folder,
+  folderOpen,
+  bolt,
+  clock,
+} from 'solid-heroicons/solid';
 import { projects, selectedProject, selectedSession, selectProject, selectSession } from '../lib/store';
 import { getAgentColor } from '../lib/colors';
 import { timeAgo } from '../lib/time';
@@ -142,9 +150,11 @@ export default function Sidebar(props: SidebarProps) {
                         {p.name}
                       </span>
                       <span style="font-size:10px;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-                        {p.isActive
-                          ? `${p.activeSessionCount} active · ${p.sessions.length} sessions`
-                          : `${p.sessions.length} sessions · ${timeAgo(p.lastEventAt)}`}
+                        {p.summary
+                          ? p.summary
+                          : p.isActive
+                            ? `${p.activeSessionCount} active · ${p.sessions.length} sessions`
+                            : `${p.sessions.length} sessions · ${timeAgo(p.lastEventAt)}`}
                       </span>
                     </div>
                     <Show when={p.isActive}>
@@ -207,7 +217,12 @@ export default function Sidebar(props: SidebarProps) {
                         {s.label}
                       </span>
                       <span style="font-size:10px;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-                        {[s.runtimeLabel, `${s.activeAgentCount}/${s.agents.length} agents`, s.currentAction, shortId]
+                        [
+                          s.summary,
+                          s.runtimeLabel ? `${s.runtimeLabel} runtime` : undefined,
+                          `${s.activeAgentCount}/${s.agents.length} agents`,
+                          shortId,
+                        ]
                           .filter(Boolean)
                           .join(' · ')}
                       </span>

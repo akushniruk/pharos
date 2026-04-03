@@ -119,7 +119,11 @@ export default function AgentGraph() {
             const truncated = node.agent.displayName.length > 23
               ? node.agent.displayName.slice(0, 22) + '…'
               : node.agent.displayName;
-            const meta = node.agent.currentAction ?? node.agent.modelName?.replace('claude-', '') ?? '';
+            const meta =
+              node.agent.assignment
+              ?? node.agent.currentAction
+              ?? node.agent.modelName?.replace('claude-', '')
+              ?? '';
             const metaTrunc = meta.length > 24 ? meta.slice(0, 23) + '…' : meta;
             const typeLabel = node.agent.agentType ?? (node.agent.agentId ? 'subagent' : 'session');
 

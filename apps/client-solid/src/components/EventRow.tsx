@@ -10,6 +10,9 @@ interface Props {
 }
 
 function resolveAgentName(e: HookEvent): string {
+  if (e.hook_event_type === 'SubagentStart') {
+    return e.agent_name || e.payload?.agent_name || e.agent_type || e.payload?.agent_type || 'Agent';
+  }
   return e.display_name || e.agent_name || e.payload?.agent_name || e.agent_type || e.source_app || 'Agent';
 }
 
@@ -21,7 +24,7 @@ function resolveActionSummary(e: HookEvent): string {
   const summary = describeEvent(e);
   const runtimeLabel = resolveRuntimeLabel(e);
   if (runtimeLabel && e.hook_event_type === 'SessionStart') {
-    return `${runtimeLabel} started`;
+    return `${runtimeLabel} detected`;
   }
   if (runtimeLabel && e.hook_event_type === 'SessionEnd') {
     return `${runtimeLabel} ended`;

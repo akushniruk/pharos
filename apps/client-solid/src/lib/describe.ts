@@ -9,7 +9,7 @@ export function describeEvent(event: HookEvent): string {
   switch (type) {
     case 'PreToolUse': {
       if (toolName === 'Bash' && p.tool_input?.command) {
-        return truncate(p.tool_input.command, 80);
+        return `Running ${truncate(p.tool_input.command, 72)}`;
       }
       if (['Read', 'Edit', 'Write'].includes(toolName) && p.tool_input?.file_path) {
         const verb = toolName === 'Read' ? 'Reading' : toolName === 'Edit' ? 'Editing' : 'Writing';
@@ -20,34 +20,36 @@ export function describeEvent(event: HookEvent): string {
         return `Searching: ${p.tool_input.pattern}`;
       }
       if (toolName === 'Agent') {
-        return p.tool_input?.description || 'Spawning agent';
+        const description = p.tool_input?.description;
+        return description ? `Delegating: ${truncate(description, 72)}` : 'Delegating work';
       }
       return `Using ${toolName}`;
     }
     case 'PostToolUse':
-      return `${toolName} done`;
+      return `${toolName} completed`;
     case 'PostToolUseFailure':
       return `${toolName} failed`;
     case 'SessionStart':
-      return p.title ? `Opened ${truncate(p.title, 80)}` : 'Session started';
+      return p.title ? `Watching ${truncate(p.title, 80)}` : 'Session observed';
     case 'SessionEnd':
       return 'Session ended';
     case 'SubagentStart': {
-      const agentType = p.agent_type || event.agent_type || '';
+      const agentLabel =
+        p.display_name || p.agent_name || p.agent_type || event.agent_name || event.agent_type || 'Agent';
       if (p.description) {
-        return `${agentType || 'Agent'} · ${truncate(p.description, 80)}`;
+        return `Spawned ${agentLabel} to ${truncate(p.description, 72)}`;
       }
-      return agentType ? `Spawned ${agentType}` : 'Spawned agent';
+      return `Spawned ${agentLabel}`;
     }
     case 'SubagentStop':
-      return 'Agent finished';
+      return 'Subagent finished';
     case 'UserPromptSubmit': {
       const prompt = p.prompt || p.message || '';
-      return prompt ? `"${truncate(prompt, 80)}"` : 'User prompt';
+      return prompt ? `Prompted: ${truncate(prompt, 72)}` : 'User prompt';
     }
     case 'AssistantResponse': {
       const text = p.text || '';
-      return text ? truncate(text, 80) : 'Response';
+      return text ? `Responded: ${truncate(text, 72)}` : 'Response';
     }
     case 'SessionTitleChanged':
       return p.title || 'Title changed';

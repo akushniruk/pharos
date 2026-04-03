@@ -169,7 +169,11 @@ function ProjectsHome() {
                 </For>
               </div>
               <div style="font-size:12px;color:var(--text-tertiary)">
-                {p.isActive ? 'Active now' : `Last activity ${Math.floor((Date.now() - p.lastEventAt) / 60000)}m ago`}
+                {p.summary
+                  ? p.summary
+                  : p.isActive
+                    ? 'Active now'
+                    : `Last activity ${Math.floor((Date.now() - p.lastEventAt) / 60000)}m ago`}
               </div>
             </div>
           )}

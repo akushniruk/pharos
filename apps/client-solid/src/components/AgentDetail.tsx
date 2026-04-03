@@ -78,7 +78,15 @@ export default function AgentDetail() {
               </span>
             </div>
           </Show>
-          <Show when={agent()!.currentAction}>
+          <Show when={agent()!.assignment}>
+            <div style="display:flex;flex-direction:column;gap:4px;">
+              <span style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;">Task</span>
+              <span style="font-size:11px;color:var(--text-primary);line-height:1.4;">
+                {agent()!.assignment}
+              </span>
+            </div>
+          </Show>
+          <Show when={agent()!.currentAction && agent()!.currentAction !== agent()!.assignment}>
             <div style="display:flex;flex-direction:column;gap:4px;">
               <span style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;">Current</span>
               <span style="font-size:11px;color:var(--text-primary);line-height:1.4;">

@@ -22,7 +22,9 @@ export default function EventStream() {
     const query = searchQuery();
     let evts = filteredEvents();
     if (!detailed()) {
-      evts = evts.filter((event) => !['SessionStart', 'SessionEnd'].includes(event.hook_event_type));
+      evts = evts.filter(
+        (event) => !['SessionStart', 'SessionEnd', 'SessionTitleChanged'].includes(event.hook_event_type),
+      );
     }
     if (query) {
       try {

@@ -33,6 +33,7 @@ export interface Project {
   name: string;
   runtimeLabels: string[];
   sessions: SessionInfo[];
+  summary?: string;
   eventCount: number;
   agentCount: number;
   activeSessionCount: number;
@@ -45,6 +46,7 @@ export interface SessionInfo {
   sessionId: string;
   label: string;
   runtimeLabel?: string;
+  summary?: string;
   currentAction?: string;
   eventCount: number;
   agents: AgentInfo[];
@@ -58,6 +60,7 @@ export interface AgentInfo {
   agentId: string | null;
   displayName: string;
   runtimeLabel?: string;
+  assignment?: string;
   currentAction?: string;
   agentType?: string;
   modelName?: string;
