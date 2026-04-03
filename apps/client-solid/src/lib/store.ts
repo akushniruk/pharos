@@ -238,7 +238,13 @@ export const selectedAgentSnapshot = createMemo((): AgentInfo | null => {
     .find((agent) => (agent.agentId || MAIN_AGENT_KEY) === agentId) ?? null;
 });
 
-type AgentStatusTone = 'active' | 'idle' | 'muted';
+export type ActivityTone = 'active' | 'blocked' | 'attention' | 'idle' | 'done';
+
+export interface ActivityState {
+  label: string;
+  tone: ActivityTone;
+  detail?: string;
+}
 
 export interface ProjectFocusSnapshot {
   projectName: string;
@@ -431,7 +437,8 @@ interface SelectedAgentDetailSnapshot {
   focus: ProjectFocusSnapshot | null;
   runtimeLabel: string;
   statusLabel: string;
-  statusTone: AgentStatusTone;
+  statusTone: ActivityTone;
+  statusDetail?: string;
   assignmentLabel: string;
   assignmentDetail?: string;
   currentActionLabel: string;
@@ -451,6 +458,7 @@ export const selectedAgentDetailSnapshot = createMemo((): SelectedAgentDetailSna
   const focus = buildProjectFocusSnapshot(project, session, agent);
   const scopedEvents = selectedAgentEvents(session, project, agent.agentId);
   const lastUsefulResult = resolveLastUsefulResult(scopedEvents);
+  const status = resolveActivityState(scopedEvents, { isActive: agent.isActive });
 
   return {
     agent,
@@ -458,8 +466,9 @@ export const selectedAgentDetailSnapshot = createMemo((): SelectedAgentDetailSna
     projectName: project?.name ?? null,
     focus,
     runtimeLabel: agent.runtimeLabel || session?.runtimeLabel || 'Runtime unavailable',
-    statusLabel: resolveAgentStatusLabel(agent),
-    statusTone: resolveAgentStatusTone(agent),
+    statusLabel: status.label,
+    statusTone: status.tone,
+    statusDetail: status.detail,
     assignmentLabel: agent.nextAction?.trim() || agent.assignment?.trim() || 'No next action captured yet',
     assignmentDetail: agent.nextActionDetail?.trim() || agent.assignmentDetail?.trim() || undefined,
     currentActionLabel: agent.currentProgress?.trim() || agent.currentAction?.trim() || 'No current progress captured yet',
@@ -762,16 +771,59 @@ function summarizeAgent(agent: AgentInfo): string | undefined {
   return `${agent.displayName}: ${truncate(action, 72)}`;
 }
 
-function resolveAgentStatusLabel(agent: AgentInfo): string {
-  if (agent.isActive) return 'Active';
-  if (agent.eventCount > 0) return 'Idle';
-  return 'Completed';
-}
+export function resolveActivityState(
+  evts: HookEvent[],
+  options: { isActive: boolean; now?: number },
+): ActivityState {
+  const now = options.now ?? Date.now();
+  const latestFailure = latestEventOfType(evts, 'PostToolUseFailure');
+  if (latestFailure) {
+    return {
+      label: 'Needs attention',
+      tone: 'attention',
+      detail: describeEvent(latestFailure),
+    };
+  }
 
-function resolveAgentStatusTone(agent: AgentInfo): AgentStatusTone {
-  if (agent.isActive) return 'active';
-  if (agent.eventCount > 0) return 'idle';
-  return 'muted';
+  const explicitWait = latestExplicitWaitEvent(evts);
+  if (explicitWait) {
+    return {
+      label: 'Blocked',
+      tone: 'blocked',
+      detail: describeEvent(explicitWait),
+    };
+  }
+
+  if (options.isActive) {
+    return {
+      label: 'Active',
+      tone: 'active',
+    };
+  }
+
+  const latestMeaningful = latestMeaningfulEvent(evts);
+  if (latestMeaningful && isInFlightEvent(latestMeaningful)) {
+    const age = Math.max(0, now - (latestMeaningful.timestamp || 0));
+    if (age >= STALL_THRESHOLD_MS) {
+      return {
+        label: 'Needs attention',
+        tone: 'attention',
+        detail: `No progress for ${formatDuration(age)} after ${describeEvent(latestMeaningful)}`,
+      };
+    }
+  }
+
+  if (evts.length > 0) {
+    return {
+      label: 'Idle',
+      tone: 'idle',
+    };
+  }
+
+  return {
+    label: 'Done',
+    tone: 'done',
+  };
 }
 
 function selectedAgentEvents(
@@ -827,6 +879,33 @@ function latestEventOfType(evts: HookEvent[], type: string): HookEvent | undefin
   return [...evts]
     .sort((left, right) => (right.timestamp || 0) - (left.timestamp || 0))
     .find((event) => event.hook_event_type === type);
+}
+
+function latestExplicitWaitEvent(evts: HookEvent[]): HookEvent | undefined {
+  return [...evts]
+    .sort((left, right) => (right.timestamp || 0) - (left.timestamp || 0))
+    .find((event) => event.hook_event_type === 'PreToolUse' && event.payload?.tool_name === 'wait_agent');
+}
+
+function isInFlightEvent(event: HookEvent): boolean {
+  if (event.hook_event_type === 'SubagentStart') {
+    return true;
+  }
+  if (event.hook_event_type !== 'PreToolUse') {
+    return false;
+  }
+  return event.payload?.tool_name !== 'wait_agent';
+}
+
+const STALL_THRESHOLD_MS = 10 * 60_000;
+
+function formatDuration(ms: number): string {
+  const minutes = Math.floor(ms / 60_000);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.floor(hours / 24);
+  return `${days}d`;
 }
 
 function truncate(text: string, max: number): string {

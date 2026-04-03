@@ -12,6 +12,8 @@ export interface HookEvent {
   agent_name?: string;
 }
 
+export type ActivityTone = 'active' | 'blocked' | 'attention' | 'idle' | 'done';
+
 /** Agent from the registry endpoint */
 export interface AgentEntry {
   id: string;

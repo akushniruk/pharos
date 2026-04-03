@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildProjectFocusSnapshot, buildRecentChangesSnapshot } from './store';
+import { buildProjectFocusSnapshot, buildRecentChangesSnapshot, resolveActivityState } from './store';
 import type { AgentInfo, HookEvent, Project, SessionInfo } from './types';
 
 describe('buildProjectFocusSnapshot', () => {
@@ -165,6 +165,96 @@ describe('buildRecentChangesSnapshot', () => {
           timestamp: 200,
         },
       ],
+    });
+  });
+});
+
+describe('resolveActivityState', () => {
+  it('marks explicit failures as needs attention even if later events exist', () => {
+    const now = 20_000;
+
+    expect(resolveActivityState([
+      {
+        source_app: 'pharos',
+        session_id: 'session-1',
+        hook_event_type: 'PostToolUseFailure',
+        payload: {
+          tool_name: 'exec_command',
+          content: 'pnpm build failed',
+        },
+        timestamp: 10_000,
+        agent_id: 'agent-1',
+      },
+      {
+        source_app: 'pharos',
+        session_id: 'session-1',
+        hook_event_type: 'PostToolUse',
+        payload: {
+          tool_name: 'exec_command',
+          content: 'pnpm build finished',
+        },
+        timestamp: 15_000,
+        agent_id: 'agent-1',
+      },
+    ], { isActive: false, now })).toEqual({
+      label: 'Needs attention',
+      tone: 'attention',
+      detail: 'Command failed',
+    });
+  });
+
+  it('marks explicit waits as blocked even if other progress happened', () => {
+    const now = 20_000;
+
+    expect(resolveActivityState([
+      {
+        source_app: 'pharos',
+        session_id: 'session-1',
+        hook_event_type: 'PreToolUse',
+        payload: {
+          tool_name: 'wait_agent',
+        },
+        timestamp: 9_000,
+        agent_id: 'agent-1',
+      },
+      {
+        source_app: 'pharos',
+        session_id: 'session-1',
+        hook_event_type: 'AssistantResponse',
+        payload: {
+          text: 'Still working on it',
+        },
+        timestamp: 15_000,
+        agent_id: 'agent-1',
+      },
+    ], { isActive: false, now })).toEqual({
+      label: 'Blocked',
+      tone: 'blocked',
+      detail: 'Waiting for a helper agent to finish',
+    });
+  });
+
+  it('marks stale in-flight work as needs attention after a quiet gap', () => {
+    const now = 1_200_000;
+
+    expect(resolveActivityState([
+      {
+        source_app: 'pharos',
+        session_id: 'session-1',
+        hook_event_type: 'PreToolUse',
+        payload: {
+          tool_name: 'exec_command',
+          tool_input: {
+            command: 'pnpm build',
+          },
+        },
+        timestamp: 300_000,
+        agent_id: 'agent-1',
+      },
+    ], { isActive: false, now })).toEqual({
+      label: 'Needs attention',
+      tone: 'attention',
+      detail: 'No progress for 15m after Running a command',
     });
   });
 });

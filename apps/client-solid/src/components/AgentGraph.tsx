@@ -8,7 +8,7 @@ import {
   selectedSessionSnapshot,
 } from '../lib/store';
 import { connectionState, hasStreamData } from '../lib/ws';
-import type { AgentInfo, SessionInfo } from '../lib/types';
+import type { ActivityTone, AgentInfo, SessionInfo } from '../lib/types';
 
 const NODE_W = 180;
 const NODE_H = 76;
@@ -17,13 +17,49 @@ const V_GAP = 20;
 const LANE_HEADER_W = 238;
 const LANE_ROW_H = 126;
 
+function statusPalette(tone: ActivityTone) {
+  switch (tone) {
+    case 'active':
+      return { background: 'var(--green-dim)', text: 'var(--green)', dot: 'var(--green)' };
+    case 'blocked':
+      return { background: 'rgba(245, 158, 11, 0.16)', text: 'var(--yellow)', dot: 'var(--yellow)' };
+    case 'attention':
+      return { background: 'rgba(239, 68, 68, 0.16)', text: 'var(--red)', dot: 'var(--red)' };
+    case 'idle':
+      return { background: 'var(--bg-elevated)', text: 'var(--text-dim)', dot: 'var(--text-dim)' };
+    case 'done':
+    default:
+      return { background: 'var(--bg-elevated)', text: 'var(--text-dim)', dot: 'var(--text-dim)' };
+  }
+}
+
+function resolveTone(entity: { statusTone?: ActivityTone; isActive: boolean; eventCount: number }): ActivityTone {
+  return entity.statusTone || (entity.isActive ? 'active' : entity.eventCount > 0 ? 'idle' : 'done');
+}
+
+function statusLabel(tone: ActivityTone): string {
+  switch (tone) {
+    case 'active':
+      return 'Active';
+    case 'blocked':
+      return 'Blocked';
+    case 'attention':
+      return 'Needs attention';
+    case 'idle':
+      return 'Idle';
+    case 'done':
+    default:
+      return 'Done';
+  }
+}
+
 export default function AgentGraph() {
   let containerRef: HTMLDivElement | undefined;
   const [zoom, setZoom] = createSignal(1);
   const [pan, setPan] = createSignal({ x: 0, y: 0 });
   const [dragging, setDragging] = createSignal(false);
   const [dragStart, setDragStart] = createSignal({ x: 0, y: 0 });
-  const [filter, setFilter] = createSignal<'active' | 'idle' | 'all'>('active');
+  const [filter, setFilter] = createSignal<'active' | 'inactive' | 'all'>('active');
 
   const visibleSessions = createMemo(() => {
     const project = selectedProjectSnapshot();
@@ -42,8 +78,8 @@ export default function AgentGraph() {
       .filter((session) => session.agents.length > 0 || session.isActive);
   });
 
-  const activeCount = createMemo(() => filteredAgents().filter((agent) => agent.isActive).length);
-  const idleCount = createMemo(() => filteredAgents().filter((agent) => !agent.isActive && agent.eventCount > 0).length);
+  const activeCount = createMemo(() => filteredAgents().filter((agent) => resolveTone(agent) === 'active').length);
+  const inactiveCount = createMemo(() => filteredAgents().filter((agent) => resolveTone(agent) !== 'active').length);
   const totalCount = createMemo(() => filteredAgents().length);
   const focus = createMemo(() => selectedProjectFocusSnapshot());
   const emptyState = createMemo(() => {
@@ -200,11 +236,11 @@ export default function AgentGraph() {
           Active ({activeCount()})
         </button>
         <button
-          onClick={() => setFilter('idle')}
+          onClick={() => setFilter('inactive')}
           class="graph-zoom-btn"
-          style={`font-size:10px;width:auto;padding:0 10px;${filter() === 'idle' ? 'background:var(--yellow-dim);color:var(--yellow);border-color:var(--yellow);' : ''}`}
+          style={`font-size:10px;width:auto;padding:0 10px;${filter() === 'inactive' ? 'background:var(--yellow-dim);color:var(--yellow);border-color:var(--yellow);' : ''}`}
         >
-          Idle ({idleCount()})
+          Inactive ({inactiveCount()})
         </button>
         <button
           onClick={() => setFilter('all')}
@@ -264,11 +300,13 @@ export default function AgentGraph() {
           <For each={layout().lanes}>
             {(lane) => {
               const isSelectedLane = () => selectedSessionSnapshot()?.sessionId === lane.session.sessionId;
-              const isActiveLane = lane.session.isActive;
+              const laneTone = resolveTone(lane.session);
+              const lanePalette = statusPalette(laneTone);
               const laneWidth = layout().width - 24;
               const headerFill = isSelectedLane() ? 'var(--bg-elevated)' : 'var(--bg-card)';
               const headerStroke = isSelectedLane() ? 'var(--accent)' : 'var(--border)';
-              const laneSummary = lane.session.currentAction
+              const laneSummary = lane.session.currentProgress
+                || lane.session.currentAction
                 || lane.session.summary
                 || `${lane.session.activeAgentCount}/${lane.session.agents.length} agents`;
               const laneRuntime = lane.session.runtimeLabel || 'Runtime unavailable';
@@ -300,13 +338,13 @@ export default function AgentGraph() {
                     width="3"
                     height={LANE_ROW_H - 8}
                     rx="1.5"
-                    fill={isActiveLane ? 'var(--green)' : 'var(--border-hover)'}
+                    fill={lanePalette.dot}
                   />
                   <circle
                     cx="36"
                     cy={lane.y + 20}
                     r="4"
-                    fill={isActiveLane ? 'var(--green)' : lane.session.eventCount > 0 ? 'var(--yellow)' : 'var(--text-dim)'}
+                    fill={lanePalette.dot}
                   />
                   <text
                     x="46"
@@ -342,7 +380,7 @@ export default function AgentGraph() {
                     width="66"
                     height="16"
                     rx="8"
-                    fill={isActiveLane ? 'var(--green-dim)' : 'var(--bg-elevated)'}
+                    fill={lanePalette.background}
                   />
                   <text
                     x="59"
@@ -350,10 +388,10 @@ export default function AgentGraph() {
                     textAnchor="middle"
                     font-size="9"
                     font-weight="600"
-                    fill={isActiveLane ? 'var(--green)' : 'var(--text-dim)'}
+                    fill={lanePalette.text}
                     font-family="var(--font-sans)"
                   >
-                    {isActiveLane ? 'Active' : 'Idle'}
+                    {statusLabel(laneTone)}
                   </text>
                   {!lane.session.agents.length && (
                     <text
@@ -390,9 +428,10 @@ export default function AgentGraph() {
             {(node) => {
               const id = node.agent.agentId || '__main__';
               const isSelected = () => selectedAgent() === id;
-              const isActive = node.agent.isActive;
+              const tone = resolveTone(node.agent);
+              const palette = statusPalette(tone);
               const runtimeText = node.agent.runtimeLabel || node.session.runtimeLabel || 'Runtime unavailable';
-              const statusText = isActive ? 'Online' : node.agent.eventCount > 0 ? 'Idle' : 'Done';
+              const statusText = statusLabel(tone);
               const actionText = node.agent.currentAction
                 || node.agent.assignment
                 || node.agent.modelName
@@ -413,10 +452,10 @@ export default function AgentGraph() {
                     height={NODE_H}
                     rx="10"
                     fill="var(--bg-card)"
-                    stroke={isSelected() ? 'var(--accent)' : isActive ? 'var(--green)' : 'var(--border)'}
+                    stroke={isSelected() ? 'var(--accent)' : palette.dot}
                     stroke-width={isSelected() ? 2 : 1}
                   />
-                  {isActive && (
+                  {tone === 'active' && (
                     <rect
                       x={node.x}
                       y={node.y + 4}
@@ -430,7 +469,7 @@ export default function AgentGraph() {
                     cx={node.x + NODE_W - 14}
                     cy={node.y + 14}
                     r="4"
-                    fill={isActive ? 'var(--green)' : node.agent.eventCount > 0 ? 'var(--yellow)' : 'var(--text-dim)'}
+                    fill={palette.dot}
                   />
                   <text
                     x={node.x + 12}
@@ -446,7 +485,7 @@ export default function AgentGraph() {
                     x={node.x + 12}
                     y={node.y + 34}
                     font-size="10"
-                    fill={isActive ? 'var(--green)' : 'var(--text-secondary)'}
+                    fill={palette.text}
                     font-family="var(--font-sans)"
                   >
                     {statusText} · {node.agent.eventCount} events
@@ -479,12 +518,12 @@ export default function AgentGraph() {
   );
 }
 
-function filterAgents(agents: AgentInfo[], mode: 'active' | 'idle' | 'all'): AgentInfo[] {
+function filterAgents(agents: AgentInfo[], mode: 'active' | 'inactive' | 'all'): AgentInfo[] {
   if (mode === 'all') return agents;
   if (mode === 'active') {
-    return agents.filter((agent) => agent.agentId === null || agent.isActive);
+    return agents.filter((agent) => agent.agentId === null || resolveTone(agent) === 'active');
   }
-  return agents.filter((agent) => agent.agentId === null || (!agent.isActive && agent.eventCount > 0));
+  return agents.filter((agent) => agent.agentId === null || resolveTone(agent) !== 'active');
 }
 
 function timeLabel(ms: number): string {

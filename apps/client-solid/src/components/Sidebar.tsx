@@ -17,6 +17,34 @@ interface SidebarProps {
   onToggle: () => void;
 }
 
+type ActivityTone = 'active' | 'blocked' | 'attention' | 'idle' | 'done';
+
+function statusPalette(tone: ActivityTone) {
+  switch (tone) {
+    case 'active':
+      return { background: 'var(--green-dim)', text: 'var(--green)', dot: 'var(--green)' };
+    case 'blocked':
+      return { background: 'rgba(245, 158, 11, 0.16)', text: 'var(--yellow)', dot: 'var(--yellow)' };
+    case 'attention':
+      return { background: 'rgba(239, 68, 68, 0.16)', text: 'var(--red)', dot: 'var(--red)' };
+    case 'idle':
+      return { background: 'var(--bg-elevated)', text: 'var(--text-dim)', dot: 'var(--text-dim)' };
+    case 'done':
+    default:
+      return { background: 'var(--bg-elevated)', text: 'var(--text-dim)', dot: 'var(--text-dim)' };
+  }
+}
+
+function resolveProjectTone(project: ReturnType<typeof projects>[number]): ActivityTone {
+  const tones = project.sessions.map((session) =>
+    session.statusTone || (session.isActive ? 'active' : session.eventCount > 0 ? 'idle' : 'done'));
+  if (tones.includes('attention')) return 'attention';
+  if (tones.includes('blocked')) return 'blocked';
+  if (tones.includes('active')) return 'active';
+  if (tones.includes('idle')) return 'idle';
+  return 'done';
+}
+
 export default function Sidebar(props: SidebarProps) {
   const [activityFilter, setActivityFilter] = createSignal<'all' | 'active'>('all');
 
@@ -77,13 +105,16 @@ export default function Sidebar(props: SidebarProps) {
             <Icon path={chevronRight} style="width:12px;height:12px;" />
           </button>
           <For each={visibleProjects()}>
-            {(p) => (
-              <span
-                title={p.name}
-                style={`width:6px;height:6px;border-radius:50%;display:block;flex-shrink:0;background:${p.isActive ? 'var(--green)' : 'var(--text-dim)'};${p.isActive ? 'box-shadow:0 0 6px var(--green);' : ''}cursor:pointer;`}
-                onClick={() => selectProject(p.name)}
-              />
-            )}
+            {(p) => {
+              const palette = statusPalette(resolveProjectTone(p));
+              return (
+                <span
+                  title={p.name}
+                  style={`width:6px;height:6px;border-radius:50%;display:block;flex-shrink:0;background:${palette.dot};${p.isActive ? 'box-shadow:0 0 6px var(--green);' : ''}cursor:pointer;`}
+                  onClick={() => selectProject(p.name)}
+                />
+              );
+            }}
           </For>
         </div>
       }
@@ -119,6 +150,8 @@ export default function Sidebar(props: SidebarProps) {
           <For each={visibleProjects()}>
             {(p) => {
               const isSelected = () => selectedProject() === p.name;
+              const projectTone = () => resolveProjectTone(p);
+              const projectPalette = () => statusPalette(projectTone());
               const primarySummary = () =>
                 p.summary
                 || (p.isActive
@@ -156,7 +189,7 @@ export default function Sidebar(props: SidebarProps) {
                       style="width:13px;height:13px;color:var(--text-secondary);flex-shrink:0;"
                     />
                     {/* Active dot */}
-                    <span style={`width:6px;height:6px;border-radius:50%;flex-shrink:0;background:${p.isActive ? 'var(--green)' : 'var(--text-dim)'};${p.isActive ? 'box-shadow:0 0 6px var(--green);' : ''}`} />
+                    <span style={`width:6px;height:6px;border-radius:50%;flex-shrink:0;background:${projectPalette().dot};${projectTone() === 'active' ? 'box-shadow:0 0 6px var(--green);' : ''}`} />
                     {/* Name */}
                     <div style="display:flex;flex-direction:column;min-width:0;flex:1;gap:2px;">
                       <span style="font-size:12px;font-weight:500;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
@@ -171,12 +204,24 @@ export default function Sidebar(props: SidebarProps) {
                         </span>
                       </Show>
                     </div>
-                    <Show when={p.isActive}>
-                      <div style="display:flex;align-items:center;gap:4px;font-size:9px;padding:1px 5px;border-radius:9999px;font-weight:500;flex-shrink:0;background:var(--green-dim);color:var(--green);">
-                        <Icon path={bolt} style="width:10px;height:10px;" />
-                        <span>Active</span>
-                      </div>
-                    </Show>
+                    <div style={[
+                      'display:flex;align-items:center;gap:4px;font-size:9px;padding:1px 5px;border-radius:9999px;font-weight:500;flex-shrink:0;',
+                      `background:${projectPalette().background};`,
+                      `color:${projectPalette().text};`,
+                    ].join('')}>
+                      <Icon path={projectTone() === 'active' ? bolt : clock} style="width:10px;height:10px;" />
+                      <span>
+                        {projectTone() === 'active'
+                          ? 'Active'
+                          : projectTone() === 'blocked'
+                            ? 'Blocked'
+                            : projectTone() === 'attention'
+                              ? 'Needs attention'
+                              : projectTone() === 'idle'
+                                ? 'Idle'
+                                : 'Done'}
+                      </span>
+                    </div>
                   </div>
 
                   {/* Agent type badges (only under selected project) */}
@@ -209,8 +254,24 @@ export default function Sidebar(props: SidebarProps) {
                 const sessionId = () => (s.sessionId && s.sessionId.trim() ? s.sessionId : null);
                 const isSelected = () => selectedSession() === sessionId();
                 const shortId = () => sessionId()?.slice(0, 8) ?? 'pending';
-                const statusIcon = () => (s.isActive ? bolt : clock);
-                const primarySummary = () => s.summary || s.currentAction || 'Waiting for the next action';
+                const statusTone = () => s.statusTone || (s.isActive ? 'active' : s.eventCount > 0 ? 'idle' : 'done');
+                const statusPaletteForSession = () => statusPalette(statusTone());
+                const statusLabel = () =>
+                  s.statusLabel
+                  || (statusTone() === 'active'
+                    ? 'Active'
+                    : statusTone() === 'blocked'
+                      ? 'Blocked'
+                      : statusTone() === 'attention'
+                        ? 'Needs attention'
+                        : statusTone() === 'idle'
+                          ? 'Idle'
+                          : 'Done');
+                const statusIcon = () => (statusTone() === 'active' ? bolt : clock);
+                const primarySummary = () =>
+                  statusTone() === 'blocked' || statusTone() === 'attention'
+                    ? s.statusDetail || s.summary || s.currentAction || 'Waiting for the next action'
+                    : s.summary || s.currentAction || 'Waiting for the next action';
                 const secondarySummary = () =>
                   [
                     s.summaryDetail,
@@ -255,15 +316,14 @@ export default function Sidebar(props: SidebarProps) {
                         </span>
                       </Show>
                     </div>
-                    {/* Active/Idle badge */}
+                    {/* Status badge */}
                     <div style={[
                       'display:flex;align-items:center;gap:4px;font-size:9px;padding:1px 5px;border-radius:9999px;font-weight:500;flex-shrink:0;',
-                      s.isActive
-                        ? 'background:var(--green-dim);color:var(--green);'
-                        : 'background:var(--bg-elevated);color:var(--text-dim);',
+                      `background:${statusPaletteForSession().background};`,
+                      `color:${statusPaletteForSession().text};`,
                     ].join('')}>
                       <Icon path={statusIcon()} style="width:10px;height:10px;" />
-                      <span>{s.isActive ? 'Active' : 'Idle'}</span>
+                      <span>{statusLabel()}</span>
                     </div>
                   </div>
                 );
