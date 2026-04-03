@@ -1,7 +1,12 @@
 import { For, Show, createSignal, createMemo, createEffect } from 'solid-js';
 import { Icon } from 'solid-heroicons';
 import { bars_3BottomLeft, queueList, signal, pauseCircle, funnel } from 'solid-heroicons/solid';
-import { filteredEvents } from '../lib/store';
+import {
+  filteredEvents,
+  selectedProjectFocusSnapshot,
+  selectAgent,
+  selectSession,
+} from '../lib/store';
 import { getEventTypeLabel, getEventTypeBgColor, getEventTypeTextColor } from '../lib/colors';
 import SearchBar, { searchQuery } from './SearchBar';
 import EventRow from './EventRow';
@@ -19,6 +24,7 @@ export default function EventStream() {
   const [stick, setStick] = createSignal(true);
   const [showFilters, setShowFilters] = createSignal(false);
   const [hiddenTypes, setHiddenTypes] = createSignal<Set<string>>(new Set(SIMPLE_HIDDEN));
+  const focus = createMemo(() => selectedProjectFocusSnapshot());
 
   const switchToDetailed = () => {
     setDetailed(true);
@@ -128,6 +134,47 @@ export default function EventStream() {
           </span>
         </button>
       </div>
+
+      <Show when={focus()}>
+        {(currentFocus) => (
+          <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:8px 16px;border-bottom:1px solid var(--border);flex-shrink:0;">
+            <span style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);padding-right:4px;">
+              {currentFocus().scopeLabel}
+            </span>
+            <button
+              onClick={() => {
+                if (currentFocus().sessionId) {
+                  selectSession(currentFocus().sessionId);
+                }
+              }}
+              style="font-size:10px;padding:4px 8px;border-radius:9999px;border:1px solid var(--border);background:var(--bg-elevated);color:var(--text-secondary);cursor:pointer;"
+            >
+              Session {currentFocus().sessionLabel ?? 'n/a'}
+            </button>
+            <Show when={currentFocus().agentId}>
+              <button
+                onClick={() => {
+                  if (currentFocus().agentId) {
+                    selectAgent(currentFocus().agentId);
+                  }
+                }}
+                style="font-size:10px;padding:4px 8px;border-radius:9999px;border:1px solid var(--border);background:var(--bg-elevated);color:var(--text-secondary);cursor:pointer;"
+              >
+                Agent {currentFocus().agentLabel ?? 'n/a'}
+              </button>
+            </Show>
+            <span style="font-size:10px;color:var(--text-dim);">
+              {currentFocus().headline}
+            </span>
+            <button
+              onClick={() => selectSession(null)}
+              style="font-size:10px;padding:4px 8px;border-radius:9999px;border:1px solid var(--border);background:var(--bg-card);color:var(--text-dim);cursor:pointer;margin-left:auto;"
+            >
+              Clear focus
+            </button>
+          </div>
+        )}
+      </Show>
 
       {/* Filter chips */}
       <Show when={showFilters()}>

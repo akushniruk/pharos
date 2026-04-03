@@ -4,11 +4,13 @@ import { listBullet, share, folder, bolt, cpuChip } from 'solid-heroicons/solid'
 import {
   selectedProject,
   selectedProjectSnapshot,
+  selectedProjectFocusSnapshot,
   selectedSession,
   selectedAgent,
   projects,
   selectProject,
   selectSession,
+  selectAgent,
   filteredEvents,
 } from './lib/store';
 import { connected, connectWs } from './lib/ws';
@@ -116,6 +118,7 @@ export default function App() {
 function ProjectTimeline() {
   const project = createMemo(() => selectedProjectSnapshot());
   const sessions = createMemo(() => project()?.sessions ?? []);
+  const focus = createMemo(() => selectedProjectFocusSnapshot());
 
   return (
     <Show when={project()}>
@@ -151,6 +154,65 @@ function ProjectTimeline() {
               </For>
             </div>
           </div>
+
+          <Show when={focus()}>
+            {(currentFocus) => (
+              <div style="min-width:240px;max-width:360px;flex:0 1 340px;display:flex;flex-direction:column;gap:8px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.01));">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+                  <div style="display:flex;flex-direction:column;gap:2px;min-width:0;">
+                    <span style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);">
+                      {currentFocus().scopeLabel}
+                    </span>
+                    <span style="font-size:11px;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                      {currentFocus().breadcrumb}
+                    </span>
+                  </div>
+                  <span style="font-size:10px;padding:2px 8px;border-radius:9999px;border:1px solid var(--border);background:var(--bg-elevated);color:var(--text-secondary);flex-shrink:0;">
+                    {currentFocus().eventCount} events
+                  </span>
+                </div>
+                <span style="font-size:13px;font-weight:600;color:var(--text-primary);line-height:1.35;">
+                  {currentFocus().headline}
+                </span>
+                <span style="font-size:11px;color:var(--text-secondary);line-height:1.45;">
+                  {currentFocus().subheadline}
+                </span>
+                <div style="display:flex;flex-wrap:wrap;gap:6px;">
+                  <button
+                    onClick={() => {
+                      if (currentFocus().sessionId) {
+                        selectSession(currentFocus().sessionId);
+                      }
+                    }}
+                    style="font-size:10px;padding:4px 8px;border-radius:9999px;border:1px solid var(--border);background:var(--bg-elevated);color:var(--text-secondary);cursor:pointer;"
+                    title="Focus session"
+                  >
+                    Session {currentFocus().sessionLabel ?? 'n/a'}
+                  </button>
+                  <Show when={currentFocus().agentId}>
+                    <button
+                      onClick={() => {
+                        if (currentFocus().agentId) {
+                          selectAgent(currentFocus().agentId);
+                        }
+                      }}
+                      style="font-size:10px;padding:4px 8px;border-radius:9999px;border:1px solid var(--border);background:var(--bg-elevated);color:var(--text-secondary);cursor:pointer;"
+                      title="Focus agent"
+                    >
+                      Agent {currentFocus().agentLabel ?? 'n/a'}
+                    </button>
+                  </Show>
+                  <button
+                    onClick={() => selectSession(null)}
+                    style="font-size:10px;padding:4px 8px;border-radius:9999px;border:1px solid var(--border);background:var(--bg-card);color:var(--text-dim);cursor:pointer;"
+                    title="Clear session and agent focus"
+                  >
+                    Clear focus
+                  </button>
+                </div>
+              </div>
+            )}
+          </Show>
 
           <div style="flex:1;overflow-x:auto;padding-bottom:2px;">
             <div style="display:flex;gap:8px;min-width:max-content;">

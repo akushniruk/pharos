@@ -1,5 +1,12 @@
-import { For, createMemo, createSignal, onMount } from 'solid-js';
-import { filteredAgents, selectAgent, selectedAgent, selectedProjectSnapshot, selectedSessionSnapshot } from '../lib/store';
+import { For, Show, createMemo, createSignal, onMount } from 'solid-js';
+import {
+  filteredAgents,
+  selectAgent,
+  selectedAgent,
+  selectedProjectFocusSnapshot,
+  selectedProjectSnapshot,
+  selectedSessionSnapshot,
+} from '../lib/store';
 import type { AgentInfo, SessionInfo } from '../lib/types';
 
 const NODE_W = 180;
@@ -37,6 +44,7 @@ export default function AgentGraph() {
   const activeCount = createMemo(() => filteredAgents().filter((agent) => agent.isActive).length);
   const idleCount = createMemo(() => filteredAgents().filter((agent) => !agent.isActive && agent.eventCount > 0).length);
   const totalCount = createMemo(() => filteredAgents().length);
+  const focus = createMemo(() => selectedProjectFocusSnapshot());
 
   const layout = createMemo(() => {
     const sessions = visibleSessions();
@@ -156,6 +164,25 @@ export default function AgentGraph() {
           All ({totalCount()})
         </button>
       </div>
+
+      <Show when={focus()}>
+        {(currentFocus) => (
+          <div style="position:absolute;top:48px;left:12px;z-index:10;display:flex;flex-direction:column;gap:4px;max-width:360px;padding:8px 10px;border:1px solid var(--border);border-radius:10px;background:rgba(15, 18, 22, 0.92);backdrop-filter:blur(8px);">
+            <span style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);">
+              {currentFocus().scopeLabel}
+            </span>
+            <span style="font-size:11px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+              {currentFocus().breadcrumb}
+            </span>
+            <span style="font-size:12px;font-weight:600;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+              {currentFocus().headline}
+            </span>
+            <span style="font-size:10px;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+              {currentFocus().subheadline}
+            </span>
+          </div>
+        )}
+      </Show>
 
       <div style="position:absolute;bottom:12px;right:12px;display:flex;gap:4px;z-index:10;">
         <button onClick={() => setZoom((value) => Math.min(2.5, value + 0.2))} class="graph-zoom-btn">+</button>

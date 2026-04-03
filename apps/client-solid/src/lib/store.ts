@@ -202,10 +202,79 @@ export const selectedAgentSnapshot = createMemo((): AgentInfo | null => {
 
 type AgentStatusTone = 'active' | 'idle' | 'muted';
 
+export interface ProjectFocusSnapshot {
+  projectName: string;
+  projectSummary: string;
+  sessionId: string | null;
+  sessionLabel: string | null;
+  sessionSummary: string | null;
+  agentId: string | null;
+  agentLabel: string | null;
+  agentSummary: string | null;
+  scopeLabel: string;
+  breadcrumb: string;
+  headline: string;
+  subheadline: string;
+  eventCount: number;
+  sessionCount: number;
+  agentCount: number;
+  hasSessionFocus: boolean;
+  hasAgentFocus: boolean;
+}
+
+export function buildProjectFocusSnapshot(
+  project: Project | null,
+  session: SessionInfo | null,
+  agent: AgentInfo | null,
+): ProjectFocusSnapshot | null {
+  if (!project) return null;
+
+  const projectSummary = project.summary
+    || `${project.activeSessionCount} active · ${project.sessions.length} sessions`;
+  const sessionLabel = session?.label || session?.sessionId || null;
+  const sessionSummary = session
+    ? session.summary || session.currentAction || `${session.activeAgentCount}/${session.agents.length} agents`
+    : null;
+  const agentLabel = agent?.displayName || null;
+  const agentSummary = agent ? agent.currentAction || agent.assignment || null : null;
+  const scopeLabel = agent
+    ? 'Agent focus'
+    : session
+      ? 'Session focus'
+      : 'Project overview';
+  const breadcrumb = [project.name, sessionLabel, agentLabel].filter(Boolean).join(' · ');
+  const headline = agentSummary || session?.currentAction || sessionSummary || projectSummary || 'No activity captured yet';
+  const subheadline = agent?.assignment
+    || sessionSummary
+    || project.runtimeLabels[0]
+    || 'Project focus';
+
+  return {
+    projectName: project.name,
+    projectSummary,
+    sessionId: session?.sessionId ?? null,
+    sessionLabel,
+    sessionSummary,
+    agentId: agent?.agentId ?? null,
+    agentLabel,
+    agentSummary,
+    scopeLabel,
+    breadcrumb,
+    headline,
+    subheadline,
+    eventCount: project.eventCount,
+    sessionCount: project.sessions.length,
+    agentCount: project.agentCount,
+    hasSessionFocus: Boolean(session),
+    hasAgentFocus: Boolean(agent),
+  };
+}
+
 interface SelectedAgentDetailSnapshot {
   agent: AgentInfo;
   session: SessionInfo | null;
   projectName: string | null;
+  focus: ProjectFocusSnapshot | null;
   runtimeLabel: string;
   statusLabel: string;
   statusTone: AgentStatusTone;
@@ -222,6 +291,7 @@ export const selectedAgentDetailSnapshot = createMemo((): SelectedAgentDetailSna
 
   const session = selectedSessionSnapshot();
   const project = selectedProjectSnapshot();
+  const focus = buildProjectFocusSnapshot(project, session, agent);
   const scopedEvents = selectedAgentEvents(session, project, agent.agentId);
   const lastUsefulResult = resolveLastUsefulResult(scopedEvents);
 
@@ -229,6 +299,7 @@ export const selectedAgentDetailSnapshot = createMemo((): SelectedAgentDetailSna
     agent,
     session,
     projectName: project?.name ?? null,
+    focus,
     runtimeLabel: agent.runtimeLabel || session?.runtimeLabel || 'Runtime unavailable',
     statusLabel: resolveAgentStatusLabel(agent),
     statusTone: resolveAgentStatusTone(agent),
@@ -530,6 +601,12 @@ export const filteredAgents = createMemo((): AgentInfo[] => {
     return session.agents;
   }
   return project.sessions.flatMap(s => s.agents);
+});
+
+export const selectedProjectFocusSnapshot = createMemo((): ProjectFocusSnapshot | null => {
+  const project = selectedProjectSnapshot();
+  if (!project) return null;
+  return buildProjectFocusSnapshot(project, selectedSessionSnapshot(), selectedAgentSnapshot());
 });
 
 /** Get events filtered by selection signals */

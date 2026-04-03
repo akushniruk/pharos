@@ -38,6 +38,7 @@ export default function AgentDetail() {
   const headerContext = () => {
     const current = detail();
     if (!current) return 'Agent snapshot unavailable';
+    if (current.focus?.breadcrumb) return current.focus.breadcrumb;
 
     const parts = [current.projectName, current.session?.label || current.session?.sessionId]
       .filter((part): part is string => Boolean(part));
@@ -83,6 +84,42 @@ export default function AgentDetail() {
         </div>
       }>
         <div style="padding:12px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:10px;flex-shrink:0;">
+          <Show when={detail()!.focus}>
+            {(focus) => (
+              <div style="padding:10px;border:1px solid var(--border);border-radius:8px;background:linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.01));display:flex;flex-direction:column;gap:8px;">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+                  <span style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);">
+                    {focus().scopeLabel}
+                  </span>
+                  <span style="font-size:10px;padding:2px 8px;border-radius:9999px;border:1px solid var(--border);background:var(--bg-elevated);color:var(--text-secondary);">
+                    {focus().eventCount} events
+                  </span>
+                </div>
+                <span style="font-size:13px;font-weight:600;color:var(--text-primary);line-height:1.35;">
+                  {focus().headline}
+                </span>
+                <span style="font-size:11px;color:var(--text-secondary);line-height:1.45;">
+                  {focus().subheadline}
+                </span>
+                <div style="display:flex;flex-wrap:wrap;gap:6px;">
+                  <span style="font-size:10px;padding:2px 8px;border-radius:9999px;border:1px solid var(--border);background:var(--bg-elevated);color:var(--text-dim);">
+                    {focus().projectName}
+                  </span>
+                  <Show when={focus().sessionLabel}>
+                    <span style="font-size:10px;padding:2px 8px;border-radius:9999px;border:1px solid var(--border);background:var(--bg-elevated);color:var(--text-dim);">
+                      Session {focus().sessionLabel}
+                    </span>
+                  </Show>
+                  <Show when={focus().agentLabel}>
+                    <span style="font-size:10px;padding:2px 8px;border-radius:9999px;border:1px solid var(--border);background:var(--bg-elevated);color:var(--text-dim);">
+                      Agent {focus().agentLabel}
+                    </span>
+                  </Show>
+                </div>
+              </div>
+            )}
+          </Show>
+
           <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;">
             <div style="padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg-card);display:flex;flex-direction:column;gap:4px;">
               <span style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;">Runtime</span>
