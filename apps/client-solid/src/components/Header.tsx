@@ -1,7 +1,7 @@
 import { createMemo } from 'solid-js';
 import { Icon } from 'solid-heroicons';
-import { sun, moon } from 'solid-heroicons/solid';
-import { filteredEvents } from '../lib/store';
+import { sun, moon, questionMarkCircle } from 'solid-heroicons/solid';
+import { filteredEvents, helpVisible, toggleHelpVisible } from '../lib/store';
 import { createMetrics } from '../lib/metrics';
 import { theme, toggleTheme } from '../lib/theme';
 import PharosMark from './PharosMark';
@@ -31,15 +31,10 @@ export default function Header() {
     <header class="app-header">
       {/* Left: Brand */}
       <div style="display:flex;align-items:center;gap:10px;flex-shrink:0;min-width:0;">
-        <div class="pharos-mark-shell">
-          <PharosMark size={18} class="pharos-mark" />
-        </div>
+        <PharosMark size={18} class="pharos-mark" />
         <div style="display:flex;flex-direction:column;gap:1px;min-width:0;">
           <span style="font-size:13px;font-weight:700;color:var(--text-primary);letter-spacing:0.01em;">
             Pharos
-          </span>
-          <span style="font-size:9px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.08em;">
-            Agent Monitor
           </span>
         </div>
       </div>
@@ -99,6 +94,30 @@ export default function Header() {
         }}
       >
         <Icon path={theme() === 'dark' ? sun : moon} style="width:16px;height:16px" />
+      </button>
+      <button
+        onClick={toggleHelpVisible}
+        title={helpVisible() ? 'Hide the guide' : 'Show the guide'}
+        aria-pressed={helpVisible()}
+        style={[
+          'background:none;border:1px solid var(--border);border-radius:6px;',
+          'padding:4px 8px;cursor:pointer;font-size:12px;font-weight:600;',
+          'color:var(--text-secondary);display:flex;align-items:center;gap:6px;',
+          'transition:border-color 0.15s,color 0.15s,background 0.15s;flex-shrink:0;',
+          helpVisible() ? 'border-color:var(--accent);color:var(--text-primary);background:var(--bg-card);' : '',
+        ].join('')}
+        onMouseEnter={(e) => {
+          (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border-hover)';
+          (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-primary)';
+        }}
+        onMouseLeave={(e) => {
+          const target = e.currentTarget as HTMLButtonElement;
+          target.style.borderColor = helpVisible() ? 'var(--accent)' : 'var(--border)';
+          target.style.color = helpVisible() ? 'var(--text-primary)' : 'var(--text-secondary)';
+        }}
+      >
+        <Icon path={questionMarkCircle} style="width:14px;height:14px" />
+        <span>Guide</span>
       </button>
     </header>
   );

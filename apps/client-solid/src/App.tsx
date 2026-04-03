@@ -7,13 +7,16 @@ import {
   selectedProjectFocusSnapshot,
   selectedSession,
   selectedAgent,
+  helpVisible,
+  toggleHelpVisible,
+  initHelpState,
   projects,
   selectProject,
   selectSession,
   selectAgent,
   filteredEvents,
 } from './lib/store';
-import { connected, connectWs } from './lib/ws';
+import { connectWs, connectionState, hasStreamData } from './lib/ws';
 import { initTheme } from './lib/theme';
 import { timeAgo } from './lib/time';
 import Header from './components/Header';
@@ -40,6 +43,7 @@ export default function App() {
   onMount(() => {
     connectWs();
     initTheme();
+    initHelpState();
   });
 
   return (
@@ -58,6 +62,10 @@ export default function App() {
         {/* Zone 3 + 4: Main content */}
         <div class="app-main">
           <Show when={selectedProject()} fallback={<ProjectsHome />}>
+            <Show when={helpVisible()}>
+              <ReadingGuide mode="project" />
+            </Show>
+
             <ProjectTimeline />
 
             {/* Toolbar: project breadcrumb + view mode toggle */}
@@ -103,8 +111,17 @@ export default function App() {
       {/* Status bar */}
       <div class="app-statusbar">
         <div style="display:flex;align-items:center;gap:6px">
-          <span class={`status-dot ${connected() ? 'connected' : 'disconnected'}`} />
-          <span>{connected() ? 'Connected' : 'Disconnected'}</span>
+          <span
+            style={[
+              'width:6px;height:6px;border-radius:50%;display:inline-block;',
+              connectionState() === 'connected'
+                ? 'background:var(--green);'
+                : connectionState() === 'connecting'
+                  ? 'background:var(--yellow);animation:blink 1.5s ease-in-out infinite;'
+                  : 'background:var(--red);animation:blink 1.5s ease-in-out infinite;',
+            ].join('')}
+          />
+          <span>{streamStatusLabel()}</span>
         </div>
         <span>
           {filteredEvents().length} events
@@ -295,22 +312,67 @@ function uniqueAgentBadges(p: Project): { name: string; isActive: boolean }[] {
 
 /** Inline home view — shown when no project selected */
 function ProjectsHome() {
+  const projectList = createMemo(() => projects());
+  const streamStateText = createMemo(() => {
+    if (connectionState() === 'connecting') {
+      return hasStreamData() ? 'Reconnecting to live data' : 'Loading live data';
+    }
+
+    if (connectionState() === 'connected') {
+      return hasStreamData() ? 'Live data connected' : 'Connected, waiting for the first payload';
+    }
+
+    return hasStreamData()
+      ? 'Disconnected, showing the last captured data'
+      : 'Disconnected before any data arrived';
+  });
+
+  const streamStateDetail = createMemo(() => {
+    if (projectList().length > 0) {
+      return 'Pick a project to inspect its sessions, agents, and events.';
+    }
+
+    if (connectionState() === 'connected' || connectionState() === 'connecting') {
+      return 'Waiting for the daemon to publish a project snapshot.';
+    }
+
+    return 'Start the daemon, or reconnect it, to populate this workspace.';
+  });
+
   return (
     <div style="padding:32px;max-width:1200px;margin:0 auto;overflow-y:auto;flex:1">
+      <Show when={helpVisible()}>
+        <ReadingGuide mode="home" />
+      </Show>
+
       <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:24px">
         <h1 style="font-size:24px;font-weight:600;letter-spacing:-0.03em">Projects</h1>
-        <span style="font-size:13px;color:var(--text-tertiary)">{projects().length} projects</span>
+        <span style="font-size:13px;color:var(--text-tertiary)">{projectList().length} projects</span>
       </div>
 
-      <Show when={projects().length === 0}>
-        <div style="display:flex;flex-direction:column;align-items:center;padding:80px 20px;text-align:center">
-          <p style="font-size:16px;color:var(--text-secondary);margin-bottom:4px">Waiting for agent sessions...</p>
-          <p style="font-size:13px;color:var(--text-dim)">Start Claude or another AI agent in any folder</p>
+      <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:20px;padding:16px 18px;border:1px solid var(--border);border-radius:12px;background:var(--bg-card);">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+          <p style="font-size:14px;font-weight:600;color:var(--text-primary);">
+            No project selected
+          </p>
+          <span style="font-size:11px;color:var(--text-dim);font-family:var(--font-mono);">
+            {streamStateText()}
+          </span>
+        </div>
+        <p style="font-size:13px;color:var(--text-secondary);line-height:1.5;">
+          {streamStateDetail()}
+        </p>
+      </div>
+
+      <Show when={projectList().length === 0}>
+        <div style="display:flex;flex-direction:column;align-items:center;padding:80px 20px;text-align:center;border:1px dashed var(--border);border-radius:14px;background:linear-gradient(180deg,rgba(255,255,255,0.015),transparent);">
+          <p style="font-size:16px;color:var(--text-secondary);margin-bottom:4px">No projects have been captured yet.</p>
+          <p style="font-size:13px;color:var(--text-dim)">Open a session and wait for the first snapshot to land here.</p>
         </div>
       </Show>
 
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px">
-        <For each={projects()}>
+        <For each={projectList()}>
           {(p) => (
             <div
               style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:20px;cursor:pointer;transition:border-color 0.15s"
@@ -360,4 +422,133 @@ function ProjectsHome() {
       </div>
     </div>
   );
+}
+
+type GuideMode = 'home' | 'project';
+
+function ReadingGuide(props: { mode: GuideMode }) {
+  const project = createMemo(() => selectedProjectSnapshot());
+  const focus = createMemo(() => selectedProjectFocusSnapshot());
+
+  const content = createMemo(() => {
+    const currentProject = project();
+    const currentFocus = focus();
+
+    if (props.mode === 'home' || !currentProject) {
+      return {
+        eyebrow: 'Quick guide',
+        title: 'Start with a project, then narrow down by session or agent.',
+        summary: 'Pharos groups activity into three layers: projects on the left, sessions in the middle, and agents inside each session.',
+        steps: [
+          'Pick a project to open its activity feed.',
+          'Green means live; gray means the project is quiet.',
+          'Use Logs for the timeline and Graph for relationships.',
+        ],
+      };
+    }
+
+    if (currentFocus?.hasAgentFocus) {
+      return {
+        eyebrow: 'Reading view',
+        title: 'You are looking at one helper inside a session.',
+        summary: 'The details on the right explain what the agent was asked to do, what it tried, and the most useful result it produced.',
+        steps: [
+          'Agent detail shows the current assignment and latest useful result.',
+          'Logs show the exact events that led here.',
+          'Graph shows how this agent connects to the rest of the run.',
+        ],
+      };
+    }
+
+    if (currentFocus?.hasSessionFocus) {
+      return {
+        eyebrow: 'Reading view',
+        title: 'This session is one run inside the selected project.',
+        summary: 'Use the session chips to move between runs and read the activity in the order it happened.',
+        steps: [
+          'The session strip at the top is the quickest way to switch runs.',
+          'Logs read top to bottom like a live transcript of activity.',
+          'Graph groups the same work into a visual map.',
+        ],
+      };
+    }
+
+    return {
+      eyebrow: 'Reading view',
+      title: 'This project is an overview of all activity in one workspace or folder.',
+      summary: 'The timeline at the top explains what is active, and the main area lets you move between logs and graph without losing context.',
+      steps: [
+        'Project timeline summarizes the selected workspace or folder.',
+        'Active sessions are marked so you can see what is still running.',
+        'Logs explain the work; Graph explains who worked with whom.',
+      ],
+    };
+  });
+
+  return (
+    <div
+      style={[
+        'margin-bottom:16px;padding:16px 18px;border:1px solid var(--border);border-radius:14px;',
+        'background:linear-gradient(135deg,rgba(59,130,246,0.10),rgba(255,255,255,0.02));',
+        'box-shadow:inset 0 1px 0 rgba(255,255,255,0.04);',
+      ].join('')}
+    >
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px;">
+        <div style="min-width:0;max-width:840px;">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+            <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:var(--accent);">
+              {content().eyebrow}
+            </span>
+            <span style="width:6px;height:6px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px rgba(59,130,246,0.45);" />
+          </div>
+          <div style="font-size:16px;font-weight:700;color:var(--text-primary);line-height:1.35;">
+            {content().title}
+          </div>
+          <div style="margin-top:5px;font-size:12px;line-height:1.55;color:var(--text-secondary);max-width:900px;">
+            {content().summary}
+          </div>
+        </div>
+
+        <button
+          onClick={toggleHelpVisible}
+          style="background:none;border:1px solid var(--border);border-radius:9999px;padding:6px 10px;cursor:pointer;font-size:11px;font-weight:600;color:var(--text-secondary);flex-shrink:0;transition:border-color 0.15s,color 0.15s,background 0.15s;"
+          onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border-hover)'; }}
+          onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border)'; }}
+        >
+          Hide guide
+        </button>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;">
+        <For each={content().steps}>
+          {(step, index) => (
+            <div
+              style="padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--bg-card);min-height:72px;"
+            >
+              <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);margin-bottom:6px;">
+                {index() + 1}
+              </div>
+              <div style="font-size:12px;line-height:1.5;color:var(--text-primary);">
+                {step}
+              </div>
+            </div>
+          )}
+        </For>
+      </div>
+    </div>
+  );
+}
+
+function streamStatusLabel(): string {
+  if (connectionState() === 'connecting') {
+    return hasStreamData() ? 'Reconnecting' : 'Loading live data';
+  }
+
+  if (connectionState() === 'connected') {
+    return hasStreamData() ? 'Connected' : 'Connected, waiting for first payload';
+  }
+
+  return hasStreamData()
+    ? 'Disconnected, showing last data'
+    : 'Disconnected before any data arrived';
 }

@@ -1,4 +1,4 @@
-import { createSignal, createMemo } from 'solid-js';
+import { createSignal, createMemo, createEffect } from 'solid-js';
 import type { View, Project, SessionInfo, AgentInfo, HookEvent } from './types';
 import { agents, events, projectSnapshots } from './ws';
 import { describeEvent, describeEventDetail } from './describe';
@@ -16,6 +16,28 @@ export const goProject = (name: string) => setView({ page: 'project', projectNam
 export const [selectedProject, setSelectedProject] = createSignal<string | null>(null);
 export const [selectedSession, setSelectedSession] = createSignal<string | null>(null);
 export const [selectedAgent, setSelectedAgent] = createSignal<string | null>(null);
+
+const HELP_STORAGE_KEY = 'pharos-help-visible';
+export const [helpVisible, setHelpVisible] = createSignal(true);
+
+export function initHelpState() {
+  if (typeof localStorage !== 'undefined') {
+    const saved = localStorage.getItem(HELP_STORAGE_KEY);
+    if (saved === '0' || saved === '1') {
+      setHelpVisible(saved === '1');
+    }
+  }
+
+  createEffect(() => {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(HELP_STORAGE_KEY, helpVisible() ? '1' : '0');
+    }
+  });
+}
+
+export function toggleHelpVisible() {
+  setHelpVisible((current) => !current);
+}
 
 /** Toggle project selection (deselect if already selected) */
 export function selectProject(name: string | null) {
