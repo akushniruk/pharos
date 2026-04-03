@@ -1,7 +1,7 @@
 import { createSignal, createMemo } from 'solid-js';
 import type { View, Project, SessionInfo, AgentInfo, HookEvent } from './types';
 import { agents, events, projectSnapshots } from './ws';
-import { describeEvent } from './describe';
+import { describeEvent, describeEventDetail } from './describe';
 
 /** Navigation state (legacy, kept for compatibility) */
 export const [view, setView] = createSignal<View>({ page: 'projects' });
@@ -105,13 +105,17 @@ export const projects = createMemo((): Project[] => {
         const aLast = Math.max(...aevts.map((e) => e.timestamp || 0));
         const displayName = resolveAgentName(aevts, aid === '__main__');
         const assignment = resolveAssignment(aevts);
+        const assignmentDetail = resolveAssignmentDetail(aevts);
         const currentAction = resolveCurrentAction(aevts);
+        const currentActionDetail = resolveCurrentActionDetail(aevts);
         agentsArr.push({
           agentId: aid === '__main__' ? null : aid,
           displayName,
           runtimeLabel,
           assignment,
+          assignmentDetail,
           currentAction,
+          currentActionDetail,
           agentType: aevts.find((e) => e.payload?.agent_type)?.payload.agent_type,
           modelName: aevts.find((e) => e.model_name || e.payload?.model)?.model_name || aevts.find((e) => e.payload?.model)?.payload.model,
           eventCount: aevts.length,
@@ -129,8 +133,10 @@ export const projects = createMemo((): Project[] => {
         sessionId: sid,
         label: resolveSessionLabel(sevts, name),
         runtimeLabel,
-        summary: sessionSummary,
+        summary: sessionSummary.label,
+        summaryDetail: sessionSummary.detail,
         currentAction: resolveCurrentAction(sevts),
+        currentActionDetail: resolveCurrentActionDetail(sevts),
         eventCount: sevts.length,
         agents: agentsArr.sort((a, b) => b.eventCount - a.eventCount),
         activeAgentCount: agentsArr.filter((agent) => agent.isActive).length,
@@ -149,7 +155,8 @@ export const projects = createMemo((): Project[] => {
       name,
       runtimeLabels: Array.from(runtimeLabels),
       sessions: sessions.sort((a, b) => b.lastEventAt - a.lastEventAt),
-      summary: projectSummary,
+      summary: projectSummary.label,
+      summaryDetail: projectSummary.detail,
       eventCount: data.events.length,
       agentCount: agentIds.size,
       activeSessionCount,
@@ -279,8 +286,11 @@ interface SelectedAgentDetailSnapshot {
   statusLabel: string;
   statusTone: AgentStatusTone;
   assignmentLabel: string;
+  assignmentDetail?: string;
   currentActionLabel: string;
+  currentActionDetail?: string;
   lastUsefulResultLabel: string;
+  lastUsefulResultDetail?: string;
   lastUsefulResultAt: number | null;
   recentEvents: HookEvent[];
 }
@@ -304,8 +314,11 @@ export const selectedAgentDetailSnapshot = createMemo((): SelectedAgentDetailSna
     statusLabel: resolveAgentStatusLabel(agent),
     statusTone: resolveAgentStatusTone(agent),
     assignmentLabel: agent.assignment?.trim() || 'No assignment captured yet',
+    assignmentDetail: agent.assignmentDetail?.trim() || undefined,
     currentActionLabel: agent.currentAction?.trim() || 'Waiting for the next action',
+    currentActionDetail: agent.currentActionDetail?.trim() || undefined,
     lastUsefulResultLabel: lastUsefulResult?.label || 'No useful result captured yet',
+    lastUsefulResultDetail: lastUsefulResult?.detail ?? undefined,
     lastUsefulResultAt: lastUsefulResult?.timestamp ?? null,
     recentEvents: scopedEvents,
   };
@@ -395,6 +408,34 @@ function resolveAssignment(evts: HookEvent[]): string | undefined {
   return undefined;
 }
 
+function resolveAssignmentDetail(evts: HookEvent[]): string | undefined {
+  const subagentStart = latestEventOfType(evts, 'SubagentStart');
+  const description = subagentStart?.payload?.description;
+  if (typeof description === 'string' && description.trim()) {
+    return truncate(description.trim(), 100);
+  }
+
+  const delegatedTask = [...evts]
+    .sort((left, right) => (right.timestamp || 0) - (left.timestamp || 0))
+    .find((event) =>
+      event.hook_event_type === 'PreToolUse'
+      && event.payload?.tool_name === 'Agent'
+      && typeof event.payload?.tool_input?.description === 'string',
+    )
+    ?.payload?.tool_input?.description;
+  if (typeof delegatedTask === 'string' && delegatedTask.trim()) {
+    return truncate(delegatedTask.trim(), 100);
+  }
+
+  const prompt = latestEventOfType(evts, 'UserPromptSubmit');
+  const promptText = prompt?.payload?.prompt || prompt?.payload?.message;
+  if (typeof promptText === 'string' && promptText.trim()) {
+    return truncate(promptText.trim(), 100);
+  }
+
+  return undefined;
+}
+
 function workspaceNameFromCwd(cwd: string): string | null {
   const parts = cwd.split('/').filter(Boolean);
   return parts.length > 0 ? parts[parts.length - 1] : null;
@@ -414,14 +455,31 @@ function resolveCurrentAction(evts: HookEvent[]): string | undefined {
   return summary || undefined;
 }
 
-function resolveSessionSummary(evts: HookEvent[], agents: AgentInfo[]): string | undefined {
+function resolveCurrentActionDetail(evts: HookEvent[]): string | undefined {
+  const latest = latestMeaningfulEvent(evts) ?? latestEvent(evts);
+
+  if (!latest) return undefined;
+  if (latest.hook_event_type === 'SubagentStart') return undefined;
+
+  const detail = describeEventDetail(latest)?.trim();
+  return detail || undefined;
+}
+
+function resolveSessionSummary(
+  evts: HookEvent[],
+  agents: AgentInfo[],
+): { label?: string; detail?: string } {
   const activeWorkers = agents
     .filter((agent) => agent.agentId && agent.isActive)
     .map((agent) => summarizeAgent(agent))
     .filter(Boolean)
     .slice(0, 2);
   if (activeWorkers.length > 0) {
-    return activeWorkers.join(' · ');
+    const activeCount = agents.filter((agent) => agent.agentId && agent.isActive).length;
+    return {
+      label: activeWorkers.join(' · '),
+      detail: `${activeCount} active agent${activeCount === 1 ? '' : 's'}`,
+    };
   }
 
   const recentWorkers = agents
@@ -430,83 +488,104 @@ function resolveSessionSummary(evts: HookEvent[], agents: AgentInfo[]): string |
     .filter(Boolean)
     .slice(0, 2);
   if (recentWorkers.length > 0) {
-    return recentWorkers.join(' · ');
+    const totalWorkers = agents.filter((agent) => agent.agentId).length;
+    return {
+      label: recentWorkers.join(' · '),
+      detail: `${totalWorkers} agent${totalWorkers === 1 ? '' : 's'} involved`,
+    };
   }
 
   const latestUseful = latestUsefulEventSummary(evts);
-  if (latestUseful) return latestUseful;
+  if (latestUseful?.label) return latestUseful;
 
   const assignment = resolveAssignment(evts);
-  if (assignment) return assignment;
+  if (assignment) {
+    return {
+      label: assignment,
+      detail: resolveAssignmentDetail(evts),
+    };
+  }
 
-  return resolveCurrentAction(evts);
+  const currentAction = resolveCurrentAction(evts);
+  if (currentAction) {
+    return {
+      label: currentAction,
+      detail: resolveCurrentActionDetail(evts),
+    };
+  }
+
+  return {};
 }
 
-function latestUsefulEventSummary(evts: HookEvent[]): string | undefined {
+function latestUsefulEventSummary(evts: HookEvent[]): { label?: string; detail?: string } | undefined {
   const latest = latestUsefulEvent(evts);
 
   if (!latest) return undefined;
 
   if (latest.hook_event_type === 'AssistantResponse') {
     const text = latest.payload?.text;
-    return typeof text === 'string' && text.trim()
-      ? `Responded: ${truncate(text.trim(), 96)}`
-      : undefined;
+    return {
+      label: describeEvent(latest).trim(),
+      detail: typeof text === 'string' && text.trim() ? truncate(text.trim(), 96) : undefined,
+    };
   }
 
   if (latest.hook_event_type === 'UserPromptSubmit') {
     const prompt = latest.payload?.prompt || latest.payload?.message;
-    return typeof prompt === 'string' && prompt.trim()
-      ? `Prompted: ${truncate(prompt.trim(), 96)}`
-      : undefined;
+    return {
+      label: describeEvent(latest).trim(),
+      detail: typeof prompt === 'string' && prompt.trim() ? truncate(prompt.trim(), 96) : undefined,
+    };
   }
 
-  const toolName = typeof latest.payload?.tool_name === 'string'
-    ? latest.payload.tool_name
-    : 'tool';
-  const content = typeof latest.payload?.content === 'string'
-    ? latest.payload.content.split('\n').map((line: string) => line.trim()).find(Boolean)
-    : undefined;
-
-  if (latest.hook_event_type === 'PostToolUse') {
-    if (content) {
-      return toolName === 'exec_command'
-        ? `Command completed: ${truncate(content, 96)}`
-        : `${toolName} completed: ${truncate(content, 96)}`;
-    }
-    return `${toolName} completed`;
-  }
-
-  if (content) {
-    return `${toolName} failed: ${truncate(content, 96)}`;
-  }
-  return `${toolName} failed`;
+  return {
+    label: describeEvent(latest).trim(),
+    detail: describeEventDetail(latest)?.trim() || undefined,
+  };
 }
 
 function resolveProjectSummary(
   sessions: SessionInfo[],
   runtimeLabels: string[],
   activeSessionCount: number,
-): string | undefined {
+): { label?: string; detail?: string } {
   const topActiveSession = sessions.find((session) => session.isActive && session.summary);
   if (topActiveSession?.summary) {
-    return topActiveSession.summary;
+    return {
+      label: topActiveSession.summary,
+      detail: topActiveSession.summaryDetail,
+    };
   }
 
   const topSession = sessions.find((session) => session.summary);
   if (topSession?.summary) {
-    return topSession.summary;
+    return {
+      label: topSession.summary,
+      detail: topSession.summaryDetail,
+    };
   }
 
   if (activeSessionCount > 0 && runtimeLabels.length > 0) {
-    return `${runtimeLabels.join(', ')} active`;
+    return {
+      label: `${activeSessionCount} session${activeSessionCount === 1 ? '' : 's'} active`,
+      detail: `${runtimeLabels.join(', ')} runtime`,
+    };
   }
 
   if (runtimeLabels.length > 0) {
-    return runtimeLabels.join(', ');
+    return {
+      label: 'Watching recent activity',
+      detail: `${runtimeLabels.join(', ')} runtime`,
+    };
   }
 
-  return undefined;
+  if (activeSessionCount > 0) {
+    return {
+      label: `${activeSessionCount} session${activeSessionCount === 1 ? '' : 's'} active`,
+    };
+  }
+
+  return {};
 }
 
 function latestUsefulEvent(evts: HookEvent[]): HookEvent | undefined {
@@ -559,15 +638,17 @@ function selectedAgentEvents(
 
 function resolveLastUsefulResult(
   evts: HookEvent[],
-): { label: string; timestamp: number } | undefined {
+): { label: string; detail?: string; timestamp: number } | undefined {
   const latest = latestUsefulEvent(evts);
   if (!latest) return undefined;
 
-  const label = latestUsefulEventSummary([latest]) || describeEvent(latest).trim();
+  const summary = latestUsefulEventSummary([latest]);
+  const label = summary?.label || describeEvent(latest).trim();
   if (!label) return undefined;
 
   return {
     label,
+    detail: summary?.detail || describeEventDetail(latest)?.trim() || undefined,
     timestamp: latest.timestamp || 0,
   };
 }

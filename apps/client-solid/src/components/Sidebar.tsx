@@ -120,6 +120,20 @@ export default function Sidebar(props: SidebarProps) {
           <For each={visibleProjects()}>
             {(p) => {
               const isSelected = () => selectedProject() === p.name;
+              const primarySummary = () =>
+                p.summary
+                || (p.isActive
+                  ? `${p.activeSessionCount} session${p.activeSessionCount === 1 ? '' : 's'} active`
+                  : `${p.sessions.length} session${p.sessions.length === 1 ? '' : 's'}`);
+              const secondarySummary = () =>
+                [
+                  p.summaryDetail,
+                  p.runtimeLabels.length > 0 ? `${p.runtimeLabels.join(', ')} runtime` : undefined,
+                  `${p.eventCount} events`,
+                  timeAgo(p.lastEventAt),
+                ]
+                  .filter(Boolean)
+                  .join(' · ') || undefined;
               return (
                 <div>
                   {/* Project row */}
@@ -145,17 +159,18 @@ export default function Sidebar(props: SidebarProps) {
                     {/* Active dot */}
                     <span style={`width:6px;height:6px;border-radius:50%;flex-shrink:0;background:${p.isActive ? 'var(--green)' : 'var(--text-dim)'};${p.isActive ? 'box-shadow:0 0 6px var(--green);' : ''}`} />
                     {/* Name */}
-                    <div style="display:flex;flex-direction:column;min-width:0;flex:1;">
+                    <div style="display:flex;flex-direction:column;min-width:0;flex:1;gap:2px;">
                       <span style="font-size:12px;font-weight:500;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
                         {p.name}
                       </span>
-                      <span style="font-size:10px;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-                        {p.summary
-                          ? p.summary
-                          : p.isActive
-                            ? `${p.activeSessionCount} active · ${p.sessions.length} sessions`
-                            : `${p.sessions.length} sessions · ${timeAgo(p.lastEventAt)}`}
+                      <span style="font-size:10px;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                        {primarySummary()}
                       </span>
+                      <Show when={secondarySummary()}>
+                        <span style="font-size:9px;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                          {secondarySummary()}
+                        </span>
+                      </Show>
                     </div>
                     <Show when={p.isActive}>
                       <div style="display:flex;align-items:center;gap:4px;font-size:9px;padding:1px 5px;border-radius:9999px;font-weight:500;flex-shrink:0;background:var(--green-dim);color:var(--green);">
@@ -196,6 +211,17 @@ export default function Sidebar(props: SidebarProps) {
                 const isSelected = () => selectedSession() === sessionId();
                 const shortId = () => sessionId()?.slice(0, 8) ?? 'pending';
                 const statusIcon = () => (s.isActive ? bolt : clock);
+                const primarySummary = () => s.summary || s.currentAction || 'Waiting for the next action';
+                const secondarySummary = () =>
+                  [
+                    s.summaryDetail,
+                    s.currentActionDetail,
+                    s.runtimeLabel ? `${s.runtimeLabel} runtime` : undefined,
+                    `${s.activeAgentCount}/${s.agents.length} agents`,
+                    shortId(),
+                  ]
+                    .filter(Boolean)
+                    .join(' · ') || undefined;
                 return (
                   <div
                     onClick={() => {
@@ -221,16 +247,14 @@ export default function Sidebar(props: SidebarProps) {
                       <span style="font-size:11px;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
                         {s.label}
                       </span>
-                      <span style="font-size:10px;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-                        [
-                          s.summary,
-                          s.runtimeLabel ? `${s.runtimeLabel} runtime` : undefined,
-                          `${s.activeAgentCount}/${s.agents.length} agents`,
-                          shortId(),
-                        ]
-                          .filter(Boolean)
-                          .join(' · ')}
+                      <span style="font-size:10px;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                        {primarySummary()}
                       </span>
+                      <Show when={secondarySummary()}>
+                        <span style="font-size:9px;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                          {secondarySummary()}
+                        </span>
+                      </Show>
                     </div>
                     {/* Active/Idle badge */}
                     <div style={[

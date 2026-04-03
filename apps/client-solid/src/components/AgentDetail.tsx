@@ -147,6 +147,11 @@ export default function AgentDetail() {
             <span style="font-size:11px;color:var(--text-primary);line-height:1.45;">
               {detail()!.currentActionLabel}
             </span>
+            <Show when={detail()!.currentActionDetail}>
+              <span style="font-size:10px;color:var(--text-dim);line-height:1.45;">
+                {detail()!.currentActionDetail}
+              </span>
+            </Show>
           </div>
 
           <div style="padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg-card);display:flex;flex-direction:column;gap:4px;">
@@ -154,6 +159,11 @@ export default function AgentDetail() {
             <span style="font-size:11px;color:var(--text-primary);line-height:1.45;">
               {detail()!.lastUsefulResultLabel}
             </span>
+            <Show when={detail()!.lastUsefulResultDetail}>
+              <span style="font-size:10px;color:var(--text-dim);line-height:1.45;">
+                {detail()!.lastUsefulResultDetail}
+              </span>
+            </Show>
             <Show when={detail()!.lastUsefulResultAt}>
               <span style="font-size:10px;color:var(--text-dim);">
                 {formatTime(detail()!.lastUsefulResultAt!)}

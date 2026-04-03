@@ -1,7 +1,7 @@
 import { Show, createSignal } from 'solid-js';
 import type { HookEvent } from '../lib/types';
 import { formatTime, timeAgo } from '../lib/time';
-import { describeEvent } from '../lib/describe';
+import { describeEvent, describeEventDetail } from '../lib/describe';
 import { getEventTypeLabel, getEventTypeBgColor, getEventTypeTextColor } from '../lib/colors';
 
 interface Props {
@@ -16,22 +16,6 @@ function resolveAgentName(e: HookEvent): string {
   return e.display_name || e.agent_name || e.payload?.agent_name || e.agent_type || e.source_app || 'Agent';
 }
 
-function resolveRuntimeLabel(e: HookEvent): string | undefined {
-  return typeof e.payload?.runtime_label === 'string' ? e.payload.runtime_label : undefined;
-}
-
-function resolveActionSummary(e: HookEvent): string {
-  const summary = describeEvent(e);
-  const runtimeLabel = resolveRuntimeLabel(e);
-  if (runtimeLabel && e.hook_event_type === 'SessionStart') {
-    return `${runtimeLabel} detected`;
-  }
-  if (runtimeLabel && e.hook_event_type === 'SessionEnd') {
-    return `${runtimeLabel} ended`;
-  }
-  return summary;
-}
-
 function resolveProjectName(e: HookEvent): string {
   if (typeof e.payload?.project_name === 'string' && e.payload.project_name.trim()) {
     return e.payload.project_name;
@@ -43,6 +27,11 @@ export default function EventRow(props: Props) {
   const [expanded, setExpanded] = createSignal(false);
   const e = () => props.event;
   const isTool = () => e().hook_event_type.includes('Tool');
+  const description = () => describeEvent(e());
+  const descriptionDetail = () => {
+    const detail = describeEventDetail(e());
+    return detail && detail !== description() ? detail : undefined;
+  };
 
   const copyJson = (ev: MouseEvent) => {
     ev.stopPropagation();
@@ -89,9 +78,16 @@ export default function EventRow(props: Props) {
           </Show>
         </div>
         <div style="display:flex;align-items:flex-start;gap:8px;min-width:0;padding-left:64px;">
-          <span style="font-size:11px;color:var(--text-primary);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-            {resolveActionSummary(e())}
-          </span>
+          <div style="min-width:0;flex:1;display:flex;flex-direction:column;gap:2px;">
+            <span style="font-size:11px;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+              {description()}
+            </span>
+            <Show when={descriptionDetail()}>
+              <span style="font-size:10px;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                {descriptionDetail()}
+              </span>
+            </Show>
+          </div>
           <span style="font-size:10px;color:var(--text-dim);flex-shrink:0;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
             {[resolveProjectName(e()), timeAgo(e().timestamp)].join(' · ')}
           </span>

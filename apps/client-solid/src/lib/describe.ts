@@ -1,7 +1,22 @@
 import type { HookEvent } from './types';
 
-/** One-line description of an event */
+export interface EventDescription {
+  primary: string;
+  secondary?: string;
+}
+
+/** One-line description of an event, optimized for operator scanning */
 export function describeEvent(event: HookEvent): string {
+  return describeEventDescription(event).primary;
+}
+
+/** Secondary technical detail for an event, when available */
+export function describeEventDetail(event: HookEvent): string | undefined {
+  return describeEventDescription(event).secondary;
+}
+
+/** Plain-language description plus secondary detail for the event */
+export function describeEventDescription(event: HookEvent): EventDescription {
   const type = event.hook_event_type;
   const p = event.payload || {};
   const toolName = p.tool_name || 'unknown';
@@ -13,14 +28,23 @@ export function describeEvent(event: HookEvent): string {
       if ((toolName === 'Bash' || toolName === 'exec_command') && command) {
         const workdir = typeof toolInput?.workdir === 'string' ? basename(toolInput.workdir) : null;
         if (workdir) {
-          return `Running ${truncate(command, 64)} in ${workdir}`;
+          return {
+            primary: `Running a command in ${workdir}`,
+            secondary: command,
+          };
         }
-        return `Running ${truncate(command, 72)}`;
+        return {
+          primary: 'Running a command',
+          secondary: command,
+        };
       }
       const fileTarget = extractFileTarget(toolInput);
       if (['Read', 'Edit', 'Write'].includes(toolName) && fileTarget) {
-        const verb = toolName === 'Read' ? 'Reading' : toolName === 'Edit' ? 'Editing' : 'Writing';
-        return `${verb} ${fileTarget}`;
+        const verb = toolName === 'Read' ? 'Reading a file' : toolName === 'Edit' ? 'Editing a file' : 'Writing a file';
+        return {
+          primary: verb,
+          secondary: fileTarget,
+        };
       }
       if (toolName === 'apply_patch') {
         const patch = typeof toolInput?.patch === 'string'
@@ -29,66 +53,128 @@ export function describeEvent(event: HookEvent): string {
             ? toolInput.input
             : '';
         const target = extractPatchedFile(patch);
-        return target ? `Patching ${target}` : 'Applying patch';
+        return {
+          primary: 'Updating files',
+          secondary: target ?? undefined,
+        };
       }
       if (['Grep', 'Glob'].includes(toolName) && toolInput?.pattern) {
-        return `Searching: ${toolInput.pattern}`;
+        return {
+          primary: 'Searching for matches',
+          secondary: toolInput.pattern,
+        };
       }
       if (toolName === 'Agent') {
         const description = toolInput?.description;
-        return description ? `Delegating: ${truncate(description, 72)}` : 'Delegating work';
+        return {
+          primary: 'Handing work to another agent',
+          secondary: description ? truncate(description, 80) : undefined,
+        };
       }
       if (toolName === 'send_input' && toolInput?.message) {
-        return `Sending: ${truncate(toolInput.message, 72)}`;
+        return {
+          primary: 'Sending a message',
+          secondary: truncate(toolInput.message, 80),
+        };
       }
       if (toolName === 'wait_agent') {
-        return 'Waiting for subagent';
+        return {
+          primary: 'Waiting for the subagent to finish',
+        };
       }
-      return `Using ${toolName}`;
+      return {
+        primary: 'Using a tool',
+        secondary: toolName !== 'unknown' ? toolName : undefined,
+      };
     }
     case 'PostToolUse': {
       const contentPreview = extractContentPreview(p.content);
       if (toolName === 'exec_command' && contentPreview) {
-        return `Command completed: ${truncate(contentPreview, 72)}`;
+        return {
+          primary: 'Finished the command',
+          secondary: truncate(contentPreview, 80),
+        };
       }
       if (contentPreview) {
-        return `${toolName} completed: ${truncate(contentPreview, 72)}`;
+        return {
+          primary: 'Finished using a tool',
+          secondary: truncate(contentPreview, 80),
+        };
       }
-      return `${toolName} completed`;
+      return {
+        primary: 'Finished using a tool',
+        secondary: toolName !== 'unknown' ? toolName : undefined,
+      };
     }
     case 'PostToolUseFailure': {
       const contentPreview = extractContentPreview(p.content);
       if (contentPreview) {
-        return `${toolName} failed: ${truncate(contentPreview, 72)}`;
+        return {
+          primary: toolName === 'exec_command' ? 'Command failed' : 'A tool call failed',
+          secondary: truncate(contentPreview, 80),
+        };
       }
-      return `${toolName} failed`;
+      return {
+        primary: toolName === 'exec_command' ? 'Command failed' : 'A tool call failed',
+        secondary: toolName !== 'unknown' ? toolName : undefined,
+      };
     }
     case 'SessionStart':
-      return p.title ? `Watching ${truncate(p.title, 80)}` : 'Session observed';
+      return {
+        primary: p.title ? `Watching ${truncate(p.title, 80)}` : 'Watching the session',
+        secondary: typeof p.runtime_label === 'string' && p.runtime_label.trim()
+          ? `${p.runtime_label.trim()} runtime`
+          : undefined,
+      };
     case 'SessionEnd':
-      return 'Session ended';
+      return {
+        primary: 'Session ended',
+        secondary: typeof p.runtime_label === 'string' && p.runtime_label.trim()
+          ? `${p.runtime_label.trim()} runtime`
+          : undefined,
+      };
     case 'SubagentStart': {
-      const agentLabel =
+      const rawAgentLabel =
         p.display_name || p.agent_name || p.agent_type || event.agent_name || event.agent_type || 'Agent';
+      const agentLabel = rawAgentLabel === 'Agent' ? 'a helper agent' : rawAgentLabel;
       if (p.description) {
-        return `Spawned ${agentLabel} to ${truncate(p.description, 72)}`;
+        return {
+          primary: `Started ${agentLabel}`,
+          secondary: truncate(p.description, 80),
+        };
       }
-      return `Spawned ${agentLabel}`;
+      return {
+        primary: `Started ${agentLabel}`,
+      };
     }
     case 'SubagentStop':
-      return 'Subagent finished';
+      return {
+        primary: 'Helper agent finished',
+      };
     case 'UserPromptSubmit': {
       const prompt = p.prompt || p.message || '';
-      return prompt ? `Prompted: ${truncate(prompt, 72)}` : 'User prompt';
+      return {
+        primary: 'Captured a request',
+        secondary: prompt ? truncate(prompt, 80) : undefined,
+      };
     }
     case 'AssistantResponse': {
       const text = p.text || '';
-      return text ? `Responded: ${truncate(text, 72)}` : 'Response';
+      return {
+        primary: 'Shared an update',
+        secondary: text ? truncate(text, 80) : undefined,
+      };
     }
     case 'SessionTitleChanged':
-      return p.title || 'Title changed';
+      return {
+        primary: p.title ? `Renamed the session to ${truncate(p.title, 80)}` : 'Renamed the session',
+        secondary: p.title ? p.title : undefined,
+      };
     default:
-      return type || 'event';
+      return {
+        primary: 'Observed an event',
+        secondary: type || undefined,
+      };
   }
 }
 
