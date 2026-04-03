@@ -91,5 +91,6 @@ impl ClaudeProfile {
 
 #[must_use]
 pub fn cwd_to_project_slug(cwd: &str) -> String {
-    cwd.replace('/', "-")
+    // Claude replaces both '/' and '_' with '-' in project directory slugs
+    cwd.replace('/', "-").replace('_', "-")
 }
