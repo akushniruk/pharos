@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{LazyLock, Mutex};
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
 
+use rusqlite::Connection;
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -53,6 +54,13 @@ pub enum CodexSessionEvent {
         is_error: bool,
         content: String,
     },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct CodexLiveEvent {
+    pub row_id: i64,
+    pub occurred_at_ms: i64,
+    pub event: CodexSessionEvent,
 }
 
 #[derive(Debug, Deserialize)]
@@ -118,6 +126,26 @@ impl CodexProfile {
                         history_path: None,
                     },
                 );
+            }
+        }
+
+        for live_session in self.discover_log_sessions() {
+            let native_session_id = live_session.native_session_id.clone();
+            match sessions_by_id.get_mut(&native_session_id) {
+                Some(existing) => {
+                    if existing.title.is_none() {
+                        existing.title = live_session.title.clone();
+                    }
+                    if existing.project_root.is_none() {
+                        existing.project_root = live_session.project_root.clone();
+                    }
+                    if live_session.updated_at_ms > existing.updated_at_ms {
+                        existing.updated_at_ms = live_session.updated_at_ms;
+                    }
+                }
+                None => {
+                    sessions_by_id.insert(native_session_id, live_session);
+                }
             }
         }
 
@@ -190,6 +218,41 @@ impl CodexProfile {
         parse_codex_items(&parsed.items)
     }
 
+    pub fn read_live_events(&self, thread_id: &str, after_row_id: i64) -> Vec<CodexLiveEvent> {
+        let db_path = self.codex_home.join("logs_1.sqlite");
+        let Ok(connection) = Connection::open(db_path) else {
+            return Vec::new();
+        };
+        let Ok(mut statement) = connection.prepare(
+            "SELECT id, ts, feedback_log_body
+             FROM logs
+             WHERE thread_id = ?1 AND id > ?2
+             ORDER BY id ASC",
+        ) else {
+            return Vec::new();
+        };
+        let Ok(rows) = statement.query_map([thread_id, &after_row_id.to_string()], |row| {
+            let row_id: i64 = row.get(0)?;
+            let ts_seconds: i64 = row.get(1)?;
+            let body: String = row.get(2)?;
+            Ok((row_id, ts_seconds, body))
+        }) else {
+            return Vec::new();
+        };
+
+        rows.filter_map(|row| {
+            let Ok((row_id, ts_seconds, body)) = row else {
+                return None;
+            };
+            parse_live_log_event(&body).map(|event| CodexLiveEvent {
+                row_id,
+                occurred_at_ms: ts_seconds.saturating_mul(1000),
+                event,
+            })
+        })
+        .collect()
+    }
+
     fn discovery_fingerprint(&self) -> CodexDiscoveryFingerprint {
         let index_modified_ms = modified_ms(self.codex_home.join("session_index.jsonl"));
         let sessions_dir = self.codex_home.join("sessions");
@@ -212,6 +275,51 @@ impl CodexProfile {
             sessions_modified_ms,
             session_file_count,
         }
+    }
+
+    fn discover_log_sessions(&self) -> Vec<NativeCodexSession> {
+        let db_path = self.codex_home.join("logs_1.sqlite");
+        let Ok(connection) = Connection::open(db_path) else {
+            return Vec::new();
+        };
+
+        let recent_cutoff_ms = now_millis().saturating_sub(Duration::from_hours(12).as_millis() as i64);
+        let recent_cutoff_secs = recent_cutoff_ms / 1000;
+
+        let Ok(mut statement) = connection.prepare(
+            "SELECT thread_id, MAX(ts) AS last_ts
+             FROM logs
+             WHERE thread_id IS NOT NULL AND ts >= ?1
+             GROUP BY thread_id
+             ORDER BY last_ts DESC",
+        ) else {
+            return Vec::new();
+        };
+
+        let Ok(rows) = statement.query_map([recent_cutoff_secs], |row| {
+            let thread_id: String = row.get(0)?;
+            let last_ts: i64 = row.get(1)?;
+            Ok((thread_id, last_ts))
+        }) else {
+            return Vec::new();
+        };
+
+        rows.filter_map(|row| {
+            let Ok((thread_id, last_ts)) = row else {
+                return None;
+            };
+            let body = latest_body_for_thread(&connection, &thread_id)?;
+            let project_root = extract_workdir_from_log_body(&body);
+            let title = extract_title_from_log_body(&body);
+            Some(NativeCodexSession {
+                native_session_id: thread_id,
+                title,
+                updated_at_ms: last_ts.saturating_mul(1000),
+                project_root,
+                history_path: None,
+            })
+        })
+        .collect()
     }
 }
 
@@ -404,6 +512,123 @@ fn extract_project_root(items: &[Value]) -> Option<String> {
         text.lines()
             .find_map(|line| line.strip_prefix("Project root: ").map(ToString::to_string))
     })
+}
+
+fn latest_body_for_thread(connection: &Connection, thread_id: &str) -> Option<String> {
+    let mut statement = connection
+        .prepare(
+            "SELECT feedback_log_body
+             FROM logs
+             WHERE thread_id = ?1
+             ORDER BY id DESC
+             LIMIT 1",
+        )
+        .ok()?;
+    statement.query_row([thread_id], |row| row.get(0)).ok()
+}
+
+fn extract_workdir_from_log_body(body: &str) -> Option<String> {
+    extract_quoted_value(body, "\"workdir\":\"")
+}
+
+fn extract_title_from_log_body(body: &str) -> Option<String> {
+    if let Some(cmd) = extract_quoted_value(body, "\"cmd\":\"") {
+        return Some(trimmed_preview(&cmd));
+    }
+
+    extract_quoted_value(body, "Prompt: ")
+        .or_else(|| extract_quoted_value(body, "UserPrompt: "))
+        .map(|text| trimmed_preview(&text))
+}
+
+fn extract_quoted_value(body: &str, marker: &str) -> Option<String> {
+    let start = body.find(marker)? + marker.len();
+    let rest = body.get(start..)?;
+    let mut escaped = false;
+    let mut value = String::new();
+
+    for ch in rest.chars() {
+        if escaped {
+            value.push(match ch {
+                'n' => '\n',
+                'r' => '\r',
+                't' => '\t',
+                '"' => '"',
+                '\\' => '\\',
+                other => other,
+            });
+            escaped = false;
+            continue;
+        }
+
+        match ch {
+            '\\' => escaped = true,
+            '"' => break,
+            other => value.push(other),
+        }
+    }
+
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
+fn parse_live_log_event(body: &str) -> Option<CodexSessionEvent> {
+    let tool_marker = ": ToolCall: ";
+    let start = body.find(tool_marker)? + tool_marker.len();
+    let rest = body.get(start..)?.trim();
+    let mut parts = rest.splitn(2, ' ');
+    let tool_name = parts.next()?.trim();
+    if tool_name.is_empty() {
+        return None;
+    }
+    let input = parts
+        .next()
+        .and_then(|raw| serde_json::from_str::<Value>(raw).ok())
+        .unwrap_or(Value::Null);
+    let tool_use_id = extract_turn_id(body)
+        .unwrap_or_else(|| format!("log-{}", stable_hash(body)));
+
+    Some(CodexSessionEvent::ToolUse {
+        tool_name: tool_name.to_string(),
+        tool_use_id,
+        input,
+    })
+}
+
+fn extract_turn_id(body: &str) -> Option<String> {
+    extract_unquoted_value(body, "turn.id=")
+}
+
+fn extract_unquoted_value(body: &str, marker: &str) -> Option<String> {
+    let start = body.find(marker)? + marker.len();
+    let rest = body.get(start..)?;
+    let end = rest
+        .find(|ch: char| ch.is_whitespace() || ch == '}' || ch == '"')
+        .unwrap_or(rest.len());
+    let value = rest.get(..end)?.trim();
+    if value.is_empty() {
+        None
+    } else {
+        Some(value.to_string())
+    }
+}
+
+fn stable_hash(body: &str) -> u64 {
+    use std::hash::{BuildHasher, Hasher};
+    let builder = std::collections::hash_map::RandomState::new();
+    let mut hasher = builder.build_hasher();
+    hasher.write(body.as_bytes());
+    hasher.finish()
+}
+
+fn now_millis() -> i64 {
+    SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .map_or(0, |duration| i64::try_from(duration.as_millis()).unwrap_or(i64::MAX))
 }
 
 fn workspace_name(path: &str) -> String {

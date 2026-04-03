@@ -32,6 +32,7 @@ struct TrackedSession {
     session: crate::profiles::DetectedSession,
     file_offset: u64,
     codex_item_offset: usize,
+    codex_log_offset: i64,
     known_subagents: Vec<TrackedSubagent>,
     /// Maps tool_use_id → tool_name so ToolResult events can inherit the tool name.
     tool_name_map: HashMap<String, String>,
@@ -120,6 +121,7 @@ pub async fn run_scanner(
                     session,
                     file_offset: 0,
                     codex_item_offset: 0,
+                    codex_log_offset: 0,
                     known_subagents: Vec::new(),
                     tool_name_map: HashMap::new(),
                 },
@@ -191,7 +193,7 @@ pub async fn run_scanner(
                     }
                     RuntimeSource::CodexCli => {
                         if let Some(profile) = codex_profile.as_ref() {
-                            tail_codex_history(ts, profile, &store, &sender);
+                            tail_codex_activity(ts, profile, &store, &sender);
                         }
                     }
                     _ => {}
@@ -201,35 +203,52 @@ pub async fn run_scanner(
     }
 }
 
-fn tail_codex_history(
+fn tail_codex_activity(
     ts: &mut TrackedSession,
     profile: &CodexProfile,
     store: &Store,
     sender: &broadcast::Sender<OutboundWsMessage>,
 ) {
-    let Some(history_path) = &ts.session.history_path else {
-        return;
-    };
-
     let workspace_id = workspace_id_from_cwd(&ts.session.cwd);
-    let now_ms = now_millis();
-    let events = profile.read_session_events(history_path);
-    if ts.codex_item_offset >= events.len() {
-        return;
+    if let Some(history_path) = &ts.session.history_path {
+        let now_ms = now_millis();
+        let events = profile.read_session_events(history_path);
+        if ts.codex_item_offset < events.len() {
+            for event in &events[ts.codex_item_offset..] {
+                let envelope = codex_event_to_envelope(
+                    event,
+                    &workspace_id,
+                    &ts.session.session_id,
+                    now_ms,
+                );
+                let _ = store.insert_event(&envelope);
+                broadcast_envelope(store, sender, &envelope);
+            }
+
+            ts.codex_item_offset = events.len();
+        }
     }
 
-    for event in &events[ts.codex_item_offset..] {
-        let envelope = codex_event_to_envelope(
-            event,
-            &workspace_id,
-            &ts.session.session_id,
-            now_ms,
-        );
-        let _ = store.insert_event(&envelope);
-        broadcast_envelope(store, sender, &envelope);
-    }
+    if ts.session.history_path.is_none() {
+        let Some(thread_id) = ts.session.native_session_id.as_deref() else {
+            return;
+        };
 
-    ts.codex_item_offset = events.len();
+        let events = profile.read_live_events(thread_id, ts.codex_log_offset);
+        for live_event in &events {
+            let envelope = codex_event_to_envelope(
+                &live_event.event,
+                &workspace_id,
+                &ts.session.session_id,
+                live_event.occurred_at_ms,
+            );
+            let _ = store.insert_event(&envelope);
+            broadcast_envelope(store, sender, &envelope);
+        }
+        if let Some(last) = events.last() {
+            ts.codex_log_offset = last.row_id;
+        }
+    }
 }
 
 fn tail_transcript(

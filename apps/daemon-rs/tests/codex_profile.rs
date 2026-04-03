@@ -1,5 +1,10 @@
 use pharos_daemon::model::RuntimeSource;
-use pharos_daemon::profiles::codex::{enrich_detected_sessions, parse_codex_items, CodexProfile, CodexSessionEvent};
+use pharos_daemon::profiles::codex::{
+    enrich_detected_sessions,
+    parse_codex_items,
+    CodexProfile,
+    CodexSessionEvent,
+};
 use pharos_daemon::profiles::DetectedSession;
 use tempfile::tempdir;
 
@@ -149,5 +154,69 @@ fn codex_session_items_parse_into_user_tool_and_assistant_events() {
                 text: "I listed the files.".to_string(),
             },
         ]
+    );
+}
+
+#[test]
+fn codex_live_log_body_parses_tool_use_and_workdir() {
+    let temp_dir = tempdir().expect("tempdir");
+    let profile = CodexProfile::new(temp_dir.path().to_path_buf());
+    let db_path = temp_dir.path().join("logs_1.sqlite");
+    let connection = rusqlite::Connection::open(db_path).expect("open sqlite");
+    connection
+        .execute_batch(
+            "CREATE TABLE logs (
+                id INTEGER PRIMARY KEY,
+                ts INTEGER NOT NULL,
+                level TEXT,
+                target TEXT,
+                feedback_log_body TEXT,
+                thread_id TEXT
+            );",
+        )
+        .expect("create logs");
+    connection
+        .execute(
+            "INSERT INTO logs (id, ts, level, target, feedback_log_body, thread_id)
+             VALUES (?1, ?2, 'INFO', 'codex_core::stream_events_utils', ?3, ?4)",
+            rusqlite::params![
+                1_i64,
+                1_775_226_325_i64,
+                "session_loop{thread_id=thread-1}:submission_dispatch{otel.name=\"op.dispatch.user_input\"}:turn{otel.name=\"session_task.turn\" thread.id=thread-1 turn.id=turn-1 model=gpt-5.4}: ToolCall: exec_command {\"cmd\":\"sed -n '1,240p' src/main.tsx\",\"workdir\":\"/Users/tester/work/demo/signal\"}",
+                "thread-1",
+            ],
+        )
+        .expect("insert log");
+
+    let sessions = profile.discover_native_sessions();
+    let live_session = sessions
+        .iter()
+        .find(|session| session.native_session_id == "thread-1")
+        .expect("live session");
+    assert_eq!(
+        live_session.project_root.as_deref(),
+        Some("/Users/tester/work/demo/signal")
+    );
+    assert!(
+        live_session
+            .title
+            .as_deref()
+            .is_some_and(|title| title.contains("src/main.tsx"))
+    );
+
+    let events = profile.read_live_events("thread-1", 0);
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].row_id, 1);
+    assert_eq!(events[0].occurred_at_ms, 1_775_226_325_000);
+    assert_eq!(
+        events[0].event,
+        CodexSessionEvent::ToolUse {
+            tool_name: "exec_command".to_string(),
+            tool_use_id: "turn-1".to_string(),
+            input: serde_json::json!({
+                "cmd": "sed -n '1,240p' src/main.tsx",
+                "workdir": "/Users/tester/work/demo/signal"
+            }),
+        }
     );
 }
