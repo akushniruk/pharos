@@ -215,6 +215,7 @@ impl Store {
                 event_count: 1,
                 agent_count: 1,
                 agents: vec![event.source_app],
+                is_active: event.hook_event_type != "SessionEnd",
             });
         }
 

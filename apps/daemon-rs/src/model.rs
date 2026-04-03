@@ -114,6 +114,7 @@ pub struct SessionSummary {
     pub event_count: usize,
     pub agent_count: usize,
     pub agents: Vec<String>,
+    pub is_active: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -122,4 +123,46 @@ pub struct DiscoveredSession {
     pub prompt_count: usize,
     pub latest_prompt_preview: String,
     pub path: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ProjectSnapshot {
+    pub name: String,
+    pub runtime_labels: Vec<String>,
+    pub sessions: Vec<SessionSnapshot>,
+    pub summary: Option<String>,
+    pub event_count: usize,
+    pub agent_count: usize,
+    pub active_session_count: usize,
+    pub last_event_at: i64,
+    pub is_active: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SessionSnapshot {
+    pub session_id: String,
+    pub label: String,
+    pub runtime_label: Option<String>,
+    pub summary: Option<String>,
+    pub current_action: Option<String>,
+    pub event_count: usize,
+    pub agents: Vec<AgentSnapshot>,
+    pub active_agent_count: usize,
+    pub last_event_at: i64,
+    pub is_active: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AgentSnapshot {
+    pub agent_id: Option<String>,
+    pub display_name: String,
+    pub runtime_label: Option<String>,
+    pub assignment: Option<String>,
+    pub current_action: Option<String>,
+    pub agent_type: Option<String>,
+    pub model_name: Option<String>,
+    pub event_count: usize,
+    pub last_event_at: i64,
+    pub is_active: bool,
+    pub parent_id: Option<String>,
 }

@@ -2,7 +2,8 @@ use std::collections::{BTreeSet, HashMap};
 use std::sync::{Arc, Mutex};
 
 use crate::model::{
-    AgentRegistryEntry, EventEnvelope, EventKind, FilterOptions, LegacyHookEvent, SessionSummary,
+    AgentRegistryEntry, AgentSnapshot, EventEnvelope, EventKind, FilterOptions, LegacyHookEvent,
+    ProjectSnapshot, SessionSnapshot, SessionSummary,
 };
 use crate::store::{legacy_event_from_envelope, Store, StoreError};
 
@@ -99,6 +100,11 @@ impl LiveState {
             .cloned()
             .unwrap_or_default())
     }
+
+    pub fn list_projects(&self) -> Result<Vec<ProjectSnapshot>, StoreError> {
+        let inner = self.inner.lock().map_err(|_| StoreError::Poisoned)?;
+        Ok(inner.build_projects())
+    }
 }
 
 impl LiveStateData {
@@ -120,6 +126,112 @@ impl LiveStateData {
             .push(event.clone());
         self.update_registry(&event);
         self.update_session_summary(&event);
+    }
+
+    fn build_projects(&self) -> Vec<ProjectSnapshot> {
+        let mut grouped = HashMap::<String, Vec<&SessionState>>::new();
+        for session in self.sessions.values() {
+            grouped
+                .entry(session.summary.source_app.clone())
+                .or_default()
+                .push(session);
+        }
+
+        let mut projects = Vec::new();
+        for (name, sessions) in grouped {
+            let mut runtime_labels = BTreeSet::new();
+            let mut session_snaps = Vec::new();
+            let mut project_event_count = 0_usize;
+            let mut project_agent_count = 0_usize;
+            let mut active_session_count = 0_usize;
+            let mut last_event_at = 0_i64;
+
+            for session in sessions {
+                project_event_count += session.summary.event_count;
+                project_agent_count += session.summary.agent_count;
+                last_event_at = last_event_at.max(session.summary.last_event_at);
+
+                let events = self
+                    .session_events
+                    .get(&session.summary.session_id)
+                    .cloned()
+                    .unwrap_or_default();
+                let agents = self.build_agents(&events);
+                let active_agent_count = agents.iter().filter(|agent| agent.is_active).count();
+                let runtime_label = resolve_runtime_label(&events);
+                if let Some(label) = &runtime_label {
+                    runtime_labels.insert(label.clone());
+                }
+                let is_active = session.summary.is_active || active_agent_count > 0;
+                if is_active {
+                    active_session_count += 1;
+                }
+                session_snaps.push(SessionSnapshot {
+                    session_id: session.summary.session_id.clone(),
+                    label: resolve_session_label(&events, &name),
+                    runtime_label,
+                    summary: resolve_session_summary(&events, &agents),
+                    current_action: resolve_current_action(&events),
+                    event_count: session.summary.event_count,
+                    agents,
+                    active_agent_count,
+                    last_event_at: session.summary.last_event_at,
+                    is_active,
+                });
+            }
+
+            session_snaps.sort_by(|left, right| right.last_event_at.cmp(&left.last_event_at));
+            let summary = resolve_project_summary(&session_snaps, &runtime_labels, active_session_count);
+            projects.push(ProjectSnapshot {
+                name,
+                runtime_labels: runtime_labels.into_iter().collect(),
+                sessions: session_snaps,
+                summary,
+                event_count: project_event_count,
+                agent_count: project_agent_count,
+                active_session_count,
+                last_event_at,
+                is_active: active_session_count > 0,
+            });
+        }
+
+        projects.sort_by(|left, right| right.last_event_at.cmp(&left.last_event_at));
+        projects
+    }
+
+    fn build_agents(&self, events: &[LegacyHookEvent]) -> Vec<AgentSnapshot> {
+        let mut grouped = HashMap::<String, Vec<&LegacyHookEvent>>::new();
+        for event in events {
+            let key = event.agent_id.clone().unwrap_or_else(|| "__main__".to_string());
+            grouped.entry(key).or_default().push(event);
+        }
+
+        let mut agents = Vec::new();
+        for (agent_key, grouped_events) in grouped {
+            let latest_at = grouped_events
+                .iter()
+                .map(|event| event.timestamp)
+                .max()
+                .unwrap_or(0);
+            let sample = grouped_events[0];
+            let runtime_label = grouped_events.iter().find_map(|event| payload_string(&event.payload, "runtime_label"));
+            agents.push(AgentSnapshot {
+                agent_id: if agent_key == "__main__" { None } else { Some(agent_key.clone()) },
+                display_name: resolve_agent_name(&grouped_events, agent_key == "__main__"),
+                runtime_label,
+                assignment: resolve_assignment(&grouped_events),
+                current_action: resolve_current_action_from_refs(&grouped_events),
+                agent_type: sample.agent_type.clone(),
+                model_name: sample.model_name.clone(),
+                event_count: grouped_events.len(),
+                last_event_at: latest_at,
+                is_active: resolve_agent_active(&sample.session_id, if agent_key == "__main__" { None } else { Some(&agent_key) }, &self.registry),
+                parent_id: grouped_events.iter().find_map(|event| payload_string(&event.payload, "parent_agent_id")),
+            });
+        }
+
+        agents.sort_by(|left, right| right.event_count.cmp(&left.event_count));
+        agents
     }
 
     fn update_registry(&mut self, event: &LegacyHookEvent) {
@@ -186,6 +298,7 @@ impl LiveStateData {
                     event_count: 0,
                     agent_count: 0,
                     agents: Vec::new(),
+                    is_active: resolve_lifecycle_status(&event.hook_event_type) == "active",
                 },
                 seen_agents: BTreeSet::new(),
             });
@@ -193,6 +306,7 @@ impl LiveStateData {
         state.summary.last_event_at = state.summary.last_event_at.max(event.timestamp);
         state.summary.started_at = state.summary.started_at.min(event.timestamp);
         state.summary.event_count += 1;
+        state.summary.is_active = resolve_lifecycle_status(&event.hook_event_type) == "active";
 
         let agent_key = event
             .agent_id
@@ -205,6 +319,266 @@ impl LiveStateData {
             state.summary.agents.push(event.source_app.clone());
         }
     }
+}
+
+fn resolve_agent_active(
+    session_id: &str,
+    agent_id: Option<&str>,
+    registry: &HashMap<String, RegistryState>,
+) -> bool {
+    registry.values().any(|state| {
+        state.entry.session_id == session_id
+            && state.entry.agent_id.as_deref() == agent_id
+            && state.entry.lifecycle_status == "active"
+    })
+}
+
+fn resolve_runtime_label(events: &[LegacyHookEvent]) -> Option<String> {
+    events
+        .iter()
+        .find_map(|event| payload_string(&event.payload, "runtime_label"))
+}
+
+fn resolve_agent_name(events: &[&LegacyHookEvent], is_main: bool) -> String {
+    for event in events {
+        if let Some(display_name) = &event.display_name {
+            return display_name.clone();
+        }
+        if let Some(agent_name) = &event.agent_name {
+            return agent_name.clone();
+        }
+        if let Some(display_name) = payload_string(&event.payload, "display_name") {
+            return display_name;
+        }
+        if let Some(agent_name) = payload_string(&event.payload, "agent_name") {
+            return agent_name;
+        }
+        if let Some(agent_type) = payload_string(&event.payload, "agent_type") {
+            if agent_type != "main" {
+                return agent_type;
+            }
+        }
+        if is_main {
+            if let Some(title) = payload_string(&event.payload, "title") {
+                return title;
+            }
+            if let Some(description) = payload_string(&event.payload, "description") {
+                return description;
+            }
+            if let Some(cwd) = payload_string(&event.payload, "cwd") {
+                if let Some(workspace) = workspace_name_from_cwd(&cwd) {
+                    return workspace;
+                }
+            }
+        }
+    }
+    if is_main {
+        "Session".to_string()
+    } else {
+        "Agent".to_string()
+    }
+}
+
+fn resolve_session_label(events: &[LegacyHookEvent], workspace_name: &str) -> String {
+    if let Some(title) = events
+        .iter()
+        .find(|event| event.hook_event_type == "SessionTitleChanged")
+        .and_then(|event| payload_string(&event.payload, "title"))
+    {
+        return title;
+    }
+
+    let main_events: Vec<_> = events.iter().filter(|event| event.agent_id.is_none()).collect();
+    let main_name = resolve_agent_name(&main_events, true);
+    if main_name != "Session" && main_name != "Agent" {
+        return main_name;
+    }
+    workspace_name.to_string()
+}
+
+fn resolve_assignment(events: &[&LegacyHookEvent]) -> Option<String> {
+    let subagent = events
+        .iter()
+        .rev()
+        .find(|event| event.hook_event_type == "SubagentStart")
+        .and_then(|event| payload_string(&event.payload, "description"));
+    if let Some(description) = subagent.filter(|value| !value.trim().is_empty()) {
+        return Some(truncate(&description, 100));
+    }
+
+    let delegated = events
+        .iter()
+        .rev()
+        .find(|event| {
+            event.hook_event_type == "PreToolUse"
+                && payload_string(&event.payload, "tool_name").as_deref() == Some("Agent")
+        })
+        .and_then(|event| {
+            event.payload
+                .get("tool_input")
+                .and_then(|value| value.get("description"))
+                .and_then(serde_json::Value::as_str)
+                .map(ToString::to_string)
+        });
+    if let Some(description) = delegated.filter(|value| !value.trim().is_empty()) {
+        return Some(truncate(&description, 100));
+    }
+
+    let prompt = events
+        .iter()
+        .rev()
+        .find(|event| event.hook_event_type == "UserPromptSubmit")
+        .and_then(|event| payload_string(&event.payload, "prompt").or_else(|| payload_string(&event.payload, "message")));
+    prompt.map(|value| truncate(&value, 100))
+}
+
+fn resolve_current_action(events: &[LegacyHookEvent]) -> Option<String> {
+    let refs: Vec<_> = events.iter().collect();
+    resolve_current_action_from_refs(&refs)
+}
+
+fn resolve_current_action_from_refs(events: &[&LegacyHookEvent]) -> Option<String> {
+    let latest = events
+        .iter()
+        .rev()
+        .find(|event| !matches!(event.hook_event_type.as_str(), "SessionStart" | "SessionEnd" | "SessionTitleChanged"))
+        .or_else(|| events.last())?;
+    if latest.hook_event_type == "SubagentStart" {
+        return None;
+    }
+    Some(describe_legacy_event(latest))
+}
+
+fn resolve_session_summary(
+    events: &[LegacyHookEvent],
+    agents: &[AgentSnapshot],
+) -> Option<String> {
+    let active_workers: Vec<_> = agents
+        .iter()
+        .filter(|agent| agent.agent_id.is_some() && agent.is_active)
+        .filter_map(summarize_agent)
+        .take(2)
+        .collect();
+    if !active_workers.is_empty() {
+        return Some(active_workers.join(" · "));
+    }
+
+    let recent_workers: Vec<_> = agents
+        .iter()
+        .filter(|agent| agent.agent_id.is_some())
+        .filter_map(summarize_agent)
+        .take(2)
+        .collect();
+    if !recent_workers.is_empty() {
+        return Some(recent_workers.join(" · "));
+    }
+
+    let refs: Vec<_> = events.iter().collect();
+    resolve_assignment(&refs).or_else(|| resolve_current_action(events))
+}
+
+fn resolve_project_summary(
+    sessions: &[SessionSnapshot],
+    runtime_labels: &BTreeSet<String>,
+    active_session_count: usize,
+) -> Option<String> {
+    if let Some(summary) = sessions.iter().find(|session| session.is_active).and_then(|session| session.summary.clone()) {
+        return Some(summary);
+    }
+    if let Some(summary) = sessions.iter().find_map(|session| session.summary.clone()) {
+        return Some(summary);
+    }
+    if active_session_count > 0 && !runtime_labels.is_empty() {
+        return Some(format!(
+            "{} active",
+            runtime_labels.iter().cloned().collect::<Vec<_>>().join(", ")
+        ));
+    }
+    if !runtime_labels.is_empty() {
+        return Some(runtime_labels.iter().cloned().collect::<Vec<_>>().join(", "));
+    }
+    None
+}
+
+fn summarize_agent(agent: &AgentSnapshot) -> Option<String> {
+    let action = agent
+        .current_action
+        .as_ref()
+        .filter(|action| Some((*action).clone()) != agent.assignment)
+        .cloned()
+        .or_else(|| agent.assignment.clone());
+    match action {
+        Some(action) => Some(format!("{}: {}", agent.display_name, truncate(&action, 72))),
+        None => Some(agent.display_name.clone()),
+    }
+}
+
+fn describe_legacy_event(event: &LegacyHookEvent) -> String {
+    let tool_name = payload_string(&event.payload, "tool_name").unwrap_or_else(|| "unknown".to_string());
+    match event.hook_event_type.as_str() {
+        "PreToolUse" => {
+            if let Some(tool_input) = event.payload.get("tool_input") {
+                if (tool_name == "Bash" || tool_name == "exec_command")
+                    && tool_input.get("command").and_then(serde_json::Value::as_str).is_some()
+                {
+                    let command = tool_input
+                        .get("command")
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or_default();
+                    return format!("Running {}", truncate(command, 72));
+                }
+                if tool_name == "exec_command"
+                    && tool_input.get("cmd").and_then(serde_json::Value::as_str).is_some()
+                {
+                    let command = tool_input
+                        .get("cmd")
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or_default();
+                    return format!("Running {}", truncate(command, 72));
+                }
+            }
+            format!("Using {tool_name}")
+        }
+        "PostToolUse" => format!("{tool_name} completed"),
+        "PostToolUseFailure" => format!("{tool_name} failed"),
+        "SessionStart" => payload_string(&event.payload, "title")
+            .map(|title| format!("Watching {}", truncate(&title, 80)))
+            .unwrap_or_else(|| "Session observed".to_string()),
+        "SessionEnd" => "Session ended".to_string(),
+        "SubagentStart" => {
+            let label = payload_string(&event.payload, "display_name")
+                .or_else(|| payload_string(&event.payload, "agent_name"))
+                .or_else(|| payload_string(&event.payload, "agent_type"))
+                .or_else(|| event.agent_name.clone())
+                .unwrap_or_else(|| "Agent".to_string());
+            if let Some(description) = payload_string(&event.payload, "description") {
+                return format!("Spawned {} to {}", label, truncate(&description, 72));
+            }
+            format!("Spawned {label}")
+        }
+        "SubagentStop" => "Subagent finished".to_string(),
+        "UserPromptSubmit" => payload_string(&event.payload, "prompt")
+            .or_else(|| payload_string(&event.payload, "message"))
+            .map(|prompt| format!("Prompted: {}", truncate(&prompt, 72)))
+            .unwrap_or_else(|| "User prompt".to_string()),
+        "AssistantResponse" => payload_string(&event.payload, "text")
+            .map(|text| format!("Responded: {}", truncate(&text, 72)))
+            .unwrap_or_else(|| "Response".to_string()),
+        "SessionTitleChanged" => payload_string(&event.payload, "title").unwrap_or_else(|| "Title changed".to_string()),
+        _ => event.hook_event_type.clone(),
+    }
+}
+
+fn truncate(text: &str, max: usize) -> String {
+    if text.len() > max {
+        format!("{}…", &text[..max.saturating_sub(1)])
+    } else {
+        text.to_string()
+    }
+}
+
+fn workspace_name_from_cwd(cwd: &str) -> Option<String> {
+    cwd.split('/').filter(|part| !part.is_empty()).next_back().map(ToString::to_string)
 }
 
 struct DisplayNameCandidate {

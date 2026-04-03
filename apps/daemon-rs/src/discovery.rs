@@ -113,6 +113,7 @@ pub fn discovered_session_summaries(dir: &Path) -> Result<Vec<SessionSummary>, D
             event_count: archive.prompts.len(),
             agent_count: 1,
             agents: vec!["claude_observed".to_string()],
+            is_active: false,
         });
     }
 

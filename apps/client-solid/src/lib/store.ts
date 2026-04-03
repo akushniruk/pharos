@@ -1,6 +1,6 @@
 import { createSignal, createMemo } from 'solid-js';
 import type { View, Project, SessionInfo, AgentInfo, HookEvent } from './types';
-import { agents, events } from './ws';
+import { agents, events, projectSnapshots } from './ws';
 import { describeEvent } from './describe';
 
 /** Navigation state (legacy, kept for compatibility) */
@@ -56,6 +56,11 @@ const registryBySessionAgent = createMemo(() => {
 
 /** Derive projects from the event stream */
 export const projects = createMemo((): Project[] => {
+  const snapshots = projectSnapshots();
+  if (snapshots.length > 0) {
+    return snapshots;
+  }
+
   const evts = events();
   const registry = registryBySessionAgent();
   const map = new Map<string, { events: HookEvent[]; sessions: Map<string, HookEvent[]> }>();

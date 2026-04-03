@@ -17,7 +17,7 @@ use crate::{
     live_state::{should_broadcast_registry, LiveState},
     model::{
         AgentRegistryEntry, DiscoveredSession, EventEnvelope, FilterOptions, LegacyHookEvent,
-        SessionSummary,
+        ProjectSnapshot, SessionSummary,
     },
     store::Store,
 };
@@ -48,6 +48,7 @@ pub fn build_router_with_options(store: Store, options: AppOptions) -> (Router, 
         .route("/api/connectors/{connector}/events", post(create_connector_event))
         .route("/api/events", post(create_event).get(list_events))
         .route("/api/agents", get(list_agent_registry))
+        .route("/api/projects", get(list_projects))
         .route("/api/events/legacy/claude", post(create_legacy_claude_event))
         .route("/events/filter-options", get(get_filter_options))
         .route("/sessions", get(list_sessions))
@@ -119,6 +120,16 @@ async fn list_agent_registry(
         .list_agent_registry()
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(Json(entries))
+}
+
+async fn list_projects(
+    State(state): State<AppState>,
+) -> Result<Json<Vec<ProjectSnapshot>>, StatusCode> {
+    let projects = state
+        .live_state
+        .list_projects()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(projects))
 }
 
 async fn get_filter_options(

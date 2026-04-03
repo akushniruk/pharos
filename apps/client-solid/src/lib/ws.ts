@@ -1,5 +1,5 @@
 import { createSignal } from 'solid-js';
-import type { HookEvent, AgentEntry } from './types';
+import type { HookEvent, AgentEntry, Project } from './types';
 
 const SERVER_PORT = import.meta.env.VITE_API_PORT || '4000';
 const DEFAULT_HOST = resolveApiHost(
@@ -12,6 +12,7 @@ const WS_URL =
 
 export const [events, setEvents] = createSignal<HookEvent[]>([]);
 export const [agents, setAgents] = createSignal<AgentEntry[]>([]);
+export const [projectSnapshots, setProjectSnapshots] = createSignal<Project[]>([]);
 export const [connected, setConnected] = createSignal(false);
 
 const MAX_EVENTS = 2000;
@@ -55,6 +56,7 @@ export function connectWs() {
         if (Array.isArray(msg.data)) {
           setAgents(msg.data);
         }
+        void fetchProjects();
       }
     } catch {}
   };
@@ -64,6 +66,13 @@ export async function fetchAgents() {
   try {
     const res = await fetch(`${API_BASE}/api/agents`);
     if (res.ok) setAgents(await res.json());
+  } catch {}
+}
+
+export async function fetchProjects() {
+  try {
+    const res = await fetch(`${API_BASE}/api/projects`);
+    if (res.ok) setProjectSnapshots(await res.json());
   } catch {}
 }
 

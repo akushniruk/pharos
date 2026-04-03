@@ -2,7 +2,7 @@ import { Show, For, onMount, createSignal } from 'solid-js';
 import { Icon } from 'solid-heroicons';
 import { listBullet, share, folder, bolt, cpuChip } from 'solid-heroicons/solid';
 import { selectedProject, selectedAgent, projects, selectProject, filteredEvents } from './lib/store';
-import { connected, connectWs, fetchAgents } from './lib/ws';
+import { connected, connectWs, fetchAgents, fetchProjects } from './lib/ws';
 import { initTheme } from './lib/theme';
 import Header from './components/Header';
 import Sidebar from './components/Sidebar';
@@ -27,6 +27,7 @@ export default function App() {
   onMount(() => {
     connectWs();
     fetchAgents();
+    fetchProjects();
     initTheme();
   });
 
