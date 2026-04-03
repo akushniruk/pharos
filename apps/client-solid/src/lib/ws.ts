@@ -14,6 +14,8 @@ export const [events, setEvents] = createSignal<HookEvent[]>([]);
 export const [agents, setAgents] = createSignal<AgentEntry[]>([]);
 export const [projectSnapshots, setProjectSnapshots] = createSignal<Project[]>([]);
 export const [connected, setConnected] = createSignal(false);
+export const [connectionState, setConnectionState] = createSignal<'connecting' | 'connected' | 'disconnected'>('connecting');
+export const [hasStreamData, setHasStreamData] = createSignal(false);
 
 const MAX_EVENTS = 2000;
 
@@ -32,17 +34,23 @@ export function resolveApiHost(hostname?: string): string {
 export function connectWs() {
   if (ws) return;
 
+  setConnectionState('connecting');
   ws = new WebSocket(WS_URL);
 
-  ws.onopen = () => setConnected(true);
+  ws.onopen = () => {
+    setConnected(true);
+    setConnectionState('connected');
+  };
   ws.onclose = () => {
     setConnected(false);
+    setConnectionState('disconnected');
     ws = null;
     setTimeout(connectWs, 3000);
   };
 
   ws.onmessage = (e) => {
     try {
+      setHasStreamData(true);
       const msg = JSON.parse(e.data);
       if (msg.type === 'initial') {
         const initial = Array.isArray(msg.data) ? msg.data : [];

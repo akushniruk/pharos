@@ -4,12 +4,14 @@ import { bars_3BottomLeft, queueList, signal, pauseCircle, funnel } from 'solid-
 import {
   filteredEvents,
   selectedProjectFocusSnapshot,
+  selectedProjectSnapshot,
   selectAgent,
   selectSession,
 } from '../lib/store';
 import { getEventTypeLabel, getEventTypeBgColor, getEventTypeTextColor } from '../lib/colors';
 import SearchBar, { searchQuery } from './SearchBar';
 import EventRow from './EventRow';
+import { connectionState, hasStreamData } from '../lib/ws';
 
 const EVENT_TYPES = [
   'PreToolUse', 'PostToolUse', 'PostToolUseFailure',
@@ -25,6 +27,7 @@ export default function EventStream() {
   const [showFilters, setShowFilters] = createSignal(false);
   const [hiddenTypes, setHiddenTypes] = createSignal<Set<string>>(new Set(SIMPLE_HIDDEN));
   const focus = createMemo(() => selectedProjectFocusSnapshot());
+  const project = createMemo(() => selectedProjectSnapshot());
 
   const switchToDetailed = () => {
     setDetailed(true);
@@ -85,6 +88,62 @@ export default function EventStream() {
     return evts.slice(-500).reverse();
   });
 
+  const emptyState = createMemo(() => {
+    const totalEvents = filteredEvents().length;
+    const visibleEvents = displayEvents().length;
+    const projectSnapshot = project();
+    const query = searchQuery().trim();
+    const hidden = hiddenTypes();
+    const customFiltersActive = hidden.size > SIMPLE_HIDDEN.size;
+    const hasScopedFocus = Boolean(focus()?.hasSessionFocus || focus()?.hasAgentFocus);
+
+    if (connectionState() === 'connecting' && !hasStreamData()) {
+      return {
+        title: 'Loading live events',
+        body: 'Waiting for the first event batch from the daemon.',
+      };
+    }
+
+    if (connectionState() === 'disconnected' && !hasStreamData()) {
+      return {
+        title: 'Disconnected',
+        body: 'No live event data has arrived yet.',
+      };
+    }
+
+    if (totalEvents === 0) {
+      return {
+        title: hasScopedFocus ? 'No events match the current focus' : 'No events captured for this project yet',
+        body: hasScopedFocus
+          ? 'Clear the selected session or agent to widen the scope.'
+          : `Project ${projectSnapshot()?.name || 'selection'} has no event rows yet.`,
+      };
+    }
+
+    if (visibleEvents === 0) {
+      if (query) {
+        return {
+          title: 'No events match your search',
+          body: 'Clear the search box or use a broader term.',
+        };
+      }
+
+      if (customFiltersActive) {
+        return {
+          title: 'No events match the active type filters',
+          body: 'Re-enable one or more event types to reveal rows.',
+        };
+      }
+
+      return {
+        title: 'No visible events in this view',
+        body: 'The current focus only has lifecycle events, or nothing remains after trimming the stream.',
+      };
+    }
+
+    return null;
+  });
+
   createEffect(() => {
     displayEvents();
     if (stick() && containerRef) containerRef.scrollTop = 0;
@@ -139,6 +198,9 @@ export default function EventStream() {
         {(currentFocus) => (
           <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:8px 16px;border-bottom:1px solid var(--border);flex-shrink:0;">
             <span style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);padding-right:4px;">
+              Current focus
+            </span>
+            <span style="font-size:10px;color:var(--text-dim);padding-right:6px;">
               {currentFocus().scopeLabel}
             </span>
             <button
@@ -163,14 +225,17 @@ export default function EventStream() {
                 Agent {currentFocus().agentLabel ?? 'n/a'}
               </button>
             </Show>
+            <span style="font-size:10px;color:var(--text-primary);">
+              Now: {currentFocus().headline}
+            </span>
             <span style="font-size:10px;color:var(--text-dim);">
-              {currentFocus().headline}
+              Context: {currentFocus().subheadline}
             </span>
             <button
               onClick={() => selectSession(null)}
               style="font-size:10px;padding:4px 8px;border-radius:9999px;border:1px solid var(--border);background:var(--bg-card);color:var(--text-dim);cursor:pointer;margin-left:auto;"
             >
-              Clear focus
+              Show all events
             </button>
           </div>
         )}
@@ -209,8 +274,15 @@ export default function EventStream() {
           {(e) => <EventRow event={e} detailed={detailed()} />}
         </For>
         <Show when={displayEvents().length === 0}>
-          <div style="padding:40px;text-align:center;color:var(--text-dim);font-size:12px;">
-            No events match the current filters
+          <div style="display:flex;align-items:center;justify-content:center;padding:48px 24px;min-height:220px;">
+            <div style="max-width:420px;padding:18px 20px;border:1px solid var(--border);border-radius:14px;background:linear-gradient(180deg,rgba(255,255,255,0.02),transparent);text-align:center;">
+              <p style="font-size:14px;font-weight:600;color:var(--text-primary);margin-bottom:6px;">
+                {emptyState()?.title}
+              </p>
+              <p style="font-size:12px;line-height:1.5;color:var(--text-dim);">
+                {emptyState()?.body}
+              </p>
+            </div>
           </div>
         </Show>
       </div>

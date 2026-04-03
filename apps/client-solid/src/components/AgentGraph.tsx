@@ -7,6 +7,7 @@ import {
   selectedProjectSnapshot,
   selectedSessionSnapshot,
 } from '../lib/store';
+import { connectionState, hasStreamData } from '../lib/ws';
 import type { AgentInfo, SessionInfo } from '../lib/types';
 
 const NODE_W = 180;
@@ -45,6 +46,55 @@ export default function AgentGraph() {
   const idleCount = createMemo(() => filteredAgents().filter((agent) => !agent.isActive && agent.eventCount > 0).length);
   const totalCount = createMemo(() => filteredAgents().length);
   const focus = createMemo(() => selectedProjectFocusSnapshot());
+  const emptyState = createMemo(() => {
+    const project = selectedProjectSnapshot();
+    const session = selectedSessionSnapshot();
+    const visible = visibleSessions();
+
+    if (connectionState() === 'connecting' && !hasStreamData()) {
+      return {
+        title: 'Loading agent graph',
+        body: 'Waiting for the first project snapshot to populate this view.',
+      };
+    }
+
+    if (connectionState() === 'disconnected' && !hasStreamData()) {
+      return {
+        title: 'Disconnected',
+        body: 'No live project snapshot has arrived yet.',
+      };
+    }
+
+    if ((project?.sessions ?? []).length === 0) {
+      return {
+        title: 'No sessions captured for this project yet',
+        body: 'The daemon has not reported any sessions for the selected project.',
+      };
+    }
+
+    if (visible.length === 0) {
+      if (session) {
+        return {
+          title: 'No agents match the selected session',
+          body: 'Try a different session or widen the agent filter.',
+        };
+      }
+
+      if (filter() !== 'all') {
+        return {
+          title: 'No agents match the active graph filter',
+          body: 'Switch to All to reveal every agent in the project.',
+        };
+      }
+
+      return {
+        title: 'No agents available for the current graph',
+        body: 'This project has sessions, but none of them include drawable agent nodes yet.',
+      };
+    }
+
+    return null;
+  });
 
   const layout = createMemo(() => {
     const sessions = visibleSessions();
@@ -190,225 +240,241 @@ export default function AgentGraph() {
         <button onClick={() => setZoom((value) => Math.max(0.3, value - 0.2))} class="graph-zoom-btn">−</button>
       </div>
 
-      <svg
-        width={layout().width * zoom()}
-        height={layout().height * zoom()}
-        viewBox={`0 0 ${layout().width} ${layout().height}`}
-        style={`transform:translate(${pan().x}px,${pan().y}px);`}
+      <Show
+        when={layout().lanes.length > 0}
+        fallback={(
+          <div style="display:flex;align-items:center;justify-content:center;height:100%;padding:28px;">
+            <div style="max-width:420px;padding:18px 20px;border:1px solid var(--border);border-radius:14px;background:linear-gradient(180deg,rgba(255,255,255,0.02),transparent);text-align:center;">
+              <p style="font-size:14px;font-weight:600;color:var(--text-primary);margin-bottom:6px;">
+                {emptyState()?.title}
+              </p>
+              <p style="font-size:12px;line-height:1.5;color:var(--text-dim);">
+                {emptyState()?.body}
+              </p>
+            </div>
+          </div>
+        )}
       >
-        <For each={layout().lanes}>
-          {(lane) => {
-            const isSelectedLane = () => selectedSessionSnapshot()?.sessionId === lane.session.sessionId;
-            const isActiveLane = lane.session.isActive;
-            const laneWidth = layout().width - 24;
-            const headerFill = isSelectedLane() ? 'var(--bg-elevated)' : 'var(--bg-card)';
-            const headerStroke = isSelectedLane() ? 'var(--accent)' : 'var(--border)';
-            const laneSummary = lane.session.currentAction
-              || lane.session.summary
-              || `${lane.session.activeAgentCount}/${lane.session.agents.length} agents`;
-            const laneRuntime = lane.session.runtimeLabel || 'Runtime unavailable';
+        <svg
+          width={layout().width * zoom()}
+          height={layout().height * zoom()}
+          viewBox={`0 0 ${layout().width} ${layout().height}`}
+          style={`transform:translate(${pan().x}px,${pan().y}px);`}
+        >
+          <For each={layout().lanes}>
+            {(lane) => {
+              const isSelectedLane = () => selectedSessionSnapshot()?.sessionId === lane.session.sessionId;
+              const isActiveLane = lane.session.isActive;
+              const laneWidth = layout().width - 24;
+              const headerFill = isSelectedLane() ? 'var(--bg-elevated)' : 'var(--bg-card)';
+              const headerStroke = isSelectedLane() ? 'var(--accent)' : 'var(--border)';
+              const laneSummary = lane.session.currentAction
+                || lane.session.summary
+                || `${lane.session.activeAgentCount}/${lane.session.agents.length} agents`;
+              const laneRuntime = lane.session.runtimeLabel || 'Runtime unavailable';
 
-            return (
-              <g>
-                <rect
-                  x="12"
-                  y={lane.y - 4}
-                  width={laneWidth}
-                  height={LANE_ROW_H}
-                  rx="12"
-                  fill="var(--bg-primary)"
-                  stroke="var(--border)"
-                />
-                <rect
-                  x="18"
-                  y={lane.y}
-                  width={LANE_HEADER_W - 12}
-                  height={LANE_ROW_H - 8}
-                  rx="10"
-                  fill={headerFill}
-                  stroke={headerStroke}
-                  stroke-width={isSelectedLane() ? 2 : 1}
-                />
-                <rect
-                  x="18"
-                  y={lane.y}
-                  width="3"
-                  height={LANE_ROW_H - 8}
-                  rx="1.5"
-                  fill={isActiveLane ? 'var(--green)' : 'var(--border-hover)'}
-                />
-                <circle
-                  cx="36"
-                  cy={lane.y + 20}
-                  r="4"
-                  fill={isActiveLane ? 'var(--green)' : lane.session.eventCount > 0 ? 'var(--yellow)' : 'var(--text-dim)'}
-                />
-                <text
-                  x="46"
-                  y={lane.y + 23}
-                  font-size="12"
-                  font-weight="600"
-                  fill="var(--text-primary)"
-                  font-family="var(--font-sans)"
-                >
-                  {truncate(lane.session.label, 24)}
-                </text>
-                <text
-                  x="26"
-                  y={lane.y + 45}
-                  font-size="10"
-                  fill="var(--text-secondary)"
-                  font-family="var(--font-sans)"
-                >
-                  {truncate(`${laneRuntime} · ${laneSummary}`, 44)}
-                </text>
-                <text
-                  x="26"
-                  y={lane.y + 63}
-                  font-size="10"
-                  fill="var(--text-dim)"
-                  font-family="var(--font-sans)"
-                >
-                  {timeLabel(lane.session.lastEventAt)} · {lane.session.eventCount} events
-                </text>
-                <rect
-                  x="26"
-                  y={lane.y + LANE_ROW_H - 30}
-                  width="66"
-                  height="16"
-                  rx="8"
-                  fill={isActiveLane ? 'var(--green-dim)' : 'var(--bg-elevated)'}
-                />
-                <text
-                  x="59"
-                  y={lane.y + LANE_ROW_H - 18}
-                  textAnchor="middle"
-                  font-size="9"
-                  font-weight="600"
-                  fill={isActiveLane ? 'var(--green)' : 'var(--text-dim)'}
-                  font-family="var(--font-sans)"
-                >
-                  {isActiveLane ? 'Active' : 'Idle'}
-                </text>
-                {!lane.session.agents.length && (
+              return (
+                <g>
+                  <rect
+                    x="12"
+                    y={lane.y - 4}
+                    width={laneWidth}
+                    height={LANE_ROW_H}
+                    rx="12"
+                    fill="var(--bg-primary)"
+                    stroke="var(--border)"
+                  />
+                  <rect
+                    x="18"
+                    y={lane.y}
+                    width={LANE_HEADER_W - 12}
+                    height={LANE_ROW_H - 8}
+                    rx="10"
+                    fill={headerFill}
+                    stroke={headerStroke}
+                    stroke-width={isSelectedLane() ? 2 : 1}
+                  />
+                  <rect
+                    x="18"
+                    y={lane.y}
+                    width="3"
+                    height={LANE_ROW_H - 8}
+                    rx="1.5"
+                    fill={isActiveLane ? 'var(--green)' : 'var(--border-hover)'}
+                  />
+                  <circle
+                    cx="36"
+                    cy={lane.y + 20}
+                    r="4"
+                    fill={isActiveLane ? 'var(--green)' : lane.session.eventCount > 0 ? 'var(--yellow)' : 'var(--text-dim)'}
+                  />
                   <text
-                    x={LANE_HEADER_W + 40}
-                    y={lane.y + 66}
-                    font-size="11"
+                    x="46"
+                    y={lane.y + 23}
+                    font-size="12"
+                    font-weight="600"
+                    fill="var(--text-primary)"
+                    font-family="var(--font-sans)"
+                  >
+                    {truncate(lane.session.label, 24)}
+                  </text>
+                  <text
+                    x="26"
+                    y={lane.y + 45}
+                    font-size="10"
+                    fill="var(--text-secondary)"
+                    font-family="var(--font-sans)"
+                  >
+                    {truncate(`${laneRuntime} · ${laneSummary}`, 44)}
+                  </text>
+                  <text
+                    x="26"
+                    y={lane.y + 63}
+                    font-size="10"
                     fill="var(--text-dim)"
                     font-family="var(--font-sans)"
                   >
-                    No agents match the current filter
+                    {timeLabel(lane.session.lastEventAt)} · {lane.session.eventCount} events
                   </text>
-                )}
-              </g>
-            );
-          }}
-        </For>
+                  <rect
+                    x="26"
+                    y={lane.y + LANE_ROW_H - 30}
+                    width="66"
+                    height="16"
+                    rx="8"
+                    fill={isActiveLane ? 'var(--green-dim)' : 'var(--bg-elevated)'}
+                  />
+                  <text
+                    x="59"
+                    y={lane.y + LANE_ROW_H - 18}
+                    textAnchor="middle"
+                    font-size="9"
+                    font-weight="600"
+                    fill={isActiveLane ? 'var(--green)' : 'var(--text-dim)'}
+                    font-family="var(--font-sans)"
+                  >
+                    {isActiveLane ? 'Active' : 'Idle'}
+                  </text>
+                  {!lane.session.agents.length && (
+                    <text
+                      x={LANE_HEADER_W + 40}
+                      y={lane.y + 66}
+                      font-size="11"
+                      fill="var(--text-dim)"
+                      font-family="var(--font-sans)"
+                    >
+                      No agents match the current filter
+                    </text>
+                  )}
+                </g>
+              );
+            }}
+          </For>
 
-        <For each={layout().edges}>
-          {(edge) => {
-            const midY = (edge.y1 + edge.y2) / 2;
-            return (
-              <path
-                d={`M ${edge.x1} ${edge.y1} C ${edge.x1} ${midY}, ${edge.x2} ${midY}, ${edge.x2} ${edge.y2}`}
-                fill="none"
-                stroke="var(--border-hover)"
-                stroke-width="1.5"
-                stroke-dasharray="4 2"
-              />
-            );
-          }}
-        </For>
-
-        <For each={layout().nodes}>
-          {(node) => {
-            const id = node.agent.agentId || '__main__';
-            const isSelected = () => selectedAgent() === id;
-            const isActive = node.agent.isActive;
-            const runtimeText = node.agent.runtimeLabel || node.session.runtimeLabel || 'Runtime unavailable';
-            const statusText = isActive ? 'Online' : node.agent.eventCount > 0 ? 'Idle' : 'Done';
-            const actionText = node.agent.currentAction
-              || node.agent.assignment
-              || node.agent.modelName
-              || 'Waiting for next action';
-
-            return (
-              <g
-                style="cursor:pointer;"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  selectAgent(id);
-                }}
-              >
-                <rect
-                  x={node.x}
-                  y={node.y}
-                  width={NODE_W}
-                  height={NODE_H}
-                  rx="10"
-                  fill="var(--bg-card)"
-                  stroke={isSelected() ? 'var(--accent)' : isActive ? 'var(--green)' : 'var(--border)'}
-                  stroke-width={isSelected() ? 2 : 1}
+          <For each={layout().edges}>
+            {(edge) => {
+              const midY = (edge.y1 + edge.y2) / 2;
+              return (
+                <path
+                  d={`M ${edge.x1} ${edge.y1} C ${edge.x1} ${midY}, ${edge.x2} ${midY}, ${edge.x2} ${edge.y2}`}
+                  fill="none"
+                  stroke="var(--border-hover)"
+                  stroke-width="1.5"
+                  stroke-dasharray="4 2"
                 />
-                {isActive && (
+              );
+            }}
+          </For>
+
+          <For each={layout().nodes}>
+            {(node) => {
+              const id = node.agent.agentId || '__main__';
+              const isSelected = () => selectedAgent() === id;
+              const isActive = node.agent.isActive;
+              const runtimeText = node.agent.runtimeLabel || node.session.runtimeLabel || 'Runtime unavailable';
+              const statusText = isActive ? 'Online' : node.agent.eventCount > 0 ? 'Idle' : 'Done';
+              const actionText = node.agent.currentAction
+                || node.agent.assignment
+                || node.agent.modelName
+                || 'Waiting for next action';
+
+              return (
+                <g
+                  style="cursor:pointer;"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    selectAgent(id);
+                  }}
+                >
                   <rect
                     x={node.x}
-                    y={node.y + 4}
-                    width="3"
-                    height={NODE_H - 8}
-                    rx="1.5"
-                    fill="var(--green)"
+                    y={node.y}
+                    width={NODE_W}
+                    height={NODE_H}
+                    rx="10"
+                    fill="var(--bg-card)"
+                    stroke={isSelected() ? 'var(--accent)' : isActive ? 'var(--green)' : 'var(--border)'}
+                    stroke-width={isSelected() ? 2 : 1}
                   />
-                )}
-                <circle
-                  cx={node.x + NODE_W - 14}
-                  cy={node.y + 14}
-                  r="4"
-                  fill={isActive ? 'var(--green)' : node.agent.eventCount > 0 ? 'var(--yellow)' : 'var(--text-dim)'}
-                />
-                <text
-                  x={node.x + 12}
-                  y={node.y + 18}
-                  font-size="12"
-                  font-weight="600"
-                  fill="var(--text-primary)"
-                  font-family="var(--font-sans)"
-                >
-                  {truncate(node.agent.displayName, 20)}
-                </text>
-                <text
-                  x={node.x + 12}
-                  y={node.y + 34}
-                  font-size="10"
-                  fill={isActive ? 'var(--green)' : 'var(--text-secondary)'}
-                  font-family="var(--font-sans)"
-                >
-                  {statusText} · {node.agent.eventCount} events
-                </text>
-                <text
-                  x={node.x + 12}
-                  y={node.y + 49}
-                  font-size="10"
-                  fill="var(--text-dim)"
-                  font-family="var(--font-sans)"
-                >
-                  {truncate(runtimeText, 24)}
-                </text>
-                <text
-                  x={node.x + 12}
-                  y={node.y + 64}
-                  font-size="10"
-                  fill="var(--text-dim)"
-                  font-family="var(--font-sans)"
-                >
-                  {truncate(actionText, 26)}
-                </text>
-              </g>
-            );
-          }}
-        </For>
-      </svg>
+                  {isActive && (
+                    <rect
+                      x={node.x}
+                      y={node.y + 4}
+                      width="3"
+                      height={NODE_H - 8}
+                      rx="1.5"
+                      fill="var(--green)"
+                    />
+                  )}
+                  <circle
+                    cx={node.x + NODE_W - 14}
+                    cy={node.y + 14}
+                    r="4"
+                    fill={isActive ? 'var(--green)' : node.agent.eventCount > 0 ? 'var(--yellow)' : 'var(--text-dim)'}
+                  />
+                  <text
+                    x={node.x + 12}
+                    y={node.y + 18}
+                    font-size="12"
+                    font-weight="600"
+                    fill="var(--text-primary)"
+                    font-family="var(--font-sans)"
+                  >
+                    {truncate(node.agent.displayName, 20)}
+                  </text>
+                  <text
+                    x={node.x + 12}
+                    y={node.y + 34}
+                    font-size="10"
+                    fill={isActive ? 'var(--green)' : 'var(--text-secondary)'}
+                    font-family="var(--font-sans)"
+                  >
+                    {statusText} · {node.agent.eventCount} events
+                  </text>
+                  <text
+                    x={node.x + 12}
+                    y={node.y + 49}
+                    font-size="10"
+                    fill="var(--text-dim)"
+                    font-family="var(--font-sans)"
+                  >
+                    {truncate(runtimeText, 24)}
+                  </text>
+                  <text
+                    x={node.x + 12}
+                    y={node.y + 64}
+                    font-size="10"
+                    fill="var(--text-dim)"
+                    font-family="var(--font-sans)"
+                  >
+                    {truncate(actionText, 26)}
+                  </text>
+                </g>
+              );
+            }}
+          </For>
+        </svg>
+      </Show>
     </div>
   );
 }
