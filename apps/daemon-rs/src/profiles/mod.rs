@@ -38,10 +38,21 @@ pub fn discover_all_sessions(options: &DiscoveryOptions) -> Vec<DetectedSession>
         sessions.extend(claude::ClaudeProfile::new(claude_home).discover_sessions());
     }
 
-    // TODO: Process-based detection for Codex/Gemini/etc is disabled until
-    // false positive filtering is improved. The current heuristics match
-    // system daemons, package managers, and unrelated "agent" processes.
-    // Re-enable once process.rs has proper allowlist-based detection.
+    // Process-based detection for non-Claude runtimes (exact name matching only)
+    let mut process_sessions = process::ProcessProfile::new(options.runtime_matchers.clone())
+        .discover_sessions();
 
+    // Enrich process-detected sessions with native metadata
+    if let Some(codex_home) = options.codex_home.clone() {
+        let native_sessions = codex::CodexProfile::new(codex_home).discover_native_sessions();
+        codex::enrich_detected_sessions(&mut process_sessions, &native_sessions);
+    }
+
+    if let Some(gemini_home) = options.gemini_home.clone() {
+        let native_sessions = gemini::GeminiProfile::new(gemini_home).discover_native_sessions();
+        gemini::enrich_detected_sessions(&mut process_sessions, &native_sessions);
+    }
+
+    sessions.extend(process_sessions);
     sessions
 }
