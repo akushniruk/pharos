@@ -103,7 +103,7 @@ The installable artifact is written under:
 apps/desktop/src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/
 ```
 
-This first release is intentionally an unsigned internal tester build. See [docs/macos-desktop-release.md](/Users/akushniruk/home_projects/pharos/docs/macos-desktop-release.md) for maintainer build steps and tester install instructions.
+This first release is intentionally an unsigned internal tester build. See [docs/macos-desktop-release.md](docs/macos-desktop-release.md) for maintainer build steps and tester install instructions.
 
 ## What You See
 
