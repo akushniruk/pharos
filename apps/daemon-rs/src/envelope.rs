@@ -25,7 +25,7 @@ pub fn transcript_event_to_envelope(
         TranscriptEvent::AssistantText { text, model } => (
             EventKind::AssistantResponse,
             "assistant response".to_string(),
-            json!({ "text": truncate(text, 200), "model": model }),
+            json!({ "text": text, "model": model }),
         ),
         TranscriptEvent::ToolUse {
             tool_name,
@@ -116,7 +116,7 @@ pub fn codex_event_to_envelope(
             EventKind::AssistantResponse,
             "assistant response".to_string(),
             json!({
-                "text": truncate(text, 200),
+                "text": text,
                 "model": model.as_deref().unwrap_or("codex"),
             }),
         ),
@@ -233,7 +233,7 @@ pub fn gemini_event_to_envelope(
         GeminiSessionEvent::AssistantText { text } => (
             EventKind::AssistantResponse,
             "assistant response".to_string(),
-            json!({ "text": truncate(text, 200), "model": "gemini" }),
+            json!({ "text": text, "model": "gemini" }),
         ),
         GeminiSessionEvent::ToolUse {
             tool_name,
@@ -317,7 +317,7 @@ pub fn cursor_event_to_envelope(
         CursorSessionEvent::AssistantText { text } => (
             EventKind::AssistantResponse,
             "assistant response".to_string(),
-            json!({ "text": truncate(text, 200), "model": "cursor-agent" }),
+            json!({ "text": text, "model": "cursor-agent" }),
         ),
         CursorSessionEvent::ToolUse {
             tool_name,

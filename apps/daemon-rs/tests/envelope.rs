@@ -258,6 +258,49 @@ fn converts_gemini_assistant_text_to_envelope() {
 }
 
 #[test]
+fn preserves_full_assistant_text_without_truncating() {
+    let long_text = "A".repeat(260);
+
+    let transcript_event = TranscriptEvent::AssistantText {
+        text: long_text.clone(),
+        model: Some("claude-sonnet".to_string()),
+    };
+    let transcript_envelope = transcript_event_to_envelope(
+        &transcript_event,
+        RuntimeSource::ClaudeCode,
+        "pharos",
+        "sess-1",
+        None,
+        1_711_234_567_000,
+    );
+    assert_eq!(transcript_envelope.payload["text"], long_text);
+
+    let codex_event = CodexSessionEvent::AssistantText {
+        text: long_text.clone(),
+        model: None,
+    };
+    let codex_envelope = codex_event_to_envelope(&codex_event, "pharos", "codex-1", 1_711_234_567_000);
+    assert_eq!(codex_envelope.payload["text"], long_text);
+
+    let gemini_event = GeminiSessionEvent::AssistantText {
+        text: long_text.clone(),
+    };
+    let gemini_envelope =
+        pharos_daemon::envelope::gemini_event_to_envelope(
+            &gemini_event,
+            "pharos",
+            "gemini-1",
+            1_711_234_567_000,
+        );
+    assert_eq!(gemini_envelope.payload["text"], long_text);
+
+    let cursor_event = CursorSessionEvent::AssistantText { text: long_text.clone() };
+    let cursor_envelope =
+        cursor_event_to_envelope(&cursor_event, "pharos", "cursor-1", 1_711_234_567_000);
+    assert_eq!(cursor_envelope.payload["text"], long_text);
+}
+
+#[test]
 fn converts_gemini_tool_use_to_envelope() {
     let event = GeminiSessionEvent::ToolUse {
         tool_name: "shell".to_string(),
