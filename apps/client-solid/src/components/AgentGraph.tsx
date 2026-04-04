@@ -25,8 +25,10 @@ export default function AgentGraph() {
   const agents = createMemo(() => {
     const all = filteredAgents();
     if (filter() === 'all') return all;
-    if (filter() === 'active') return all.filter(a => a.isActive || a.statusTone === 'active');
-    return all.filter(a => !a.isActive && a.statusTone !== 'active');
+    // Always include roots (orchestrators) so the tree has anchor nodes
+    const isRoot = (a: AgentInfo) => a.agentId === null || !a.parentId;
+    if (filter() === 'active') return all.filter(a => isRoot(a) || a.isActive || a.statusTone === 'active');
+    return all.filter(a => isRoot(a) || (!a.isActive && a.statusTone !== 'active'));
   });
   const roots = createMemo(() => agents().filter(a => a.agentId === null || !a.parentId));
   const children = createMemo(() => agents().filter(a => a.agentId !== null && a.parentId));
