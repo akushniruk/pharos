@@ -460,6 +460,16 @@ fn resolve_runtime_label(events: &[LegacyHookEvent]) -> Option<String> {
 
 fn resolve_agent_name(events: &[&LegacyHookEvent], is_main: bool) -> String {
     for event in events {
+        if let Some(responsibility) = payload_responsibility(&event.payload) {
+            return responsibility;
+        }
+        if let Some(agent_type) = payload_string(&event.payload, "agent_type") {
+            if let Some(mapped) = mapped_agent_type_label(&agent_type) {
+                if mapped != "Session" {
+                    return mapped;
+                }
+            }
+        }
         if let Some(display_name) = &event.display_name {
             return display_name.clone();
         }
@@ -1059,6 +1069,22 @@ struct DisplayNameCandidate {
 }
 
 fn display_name_candidate_for_legacy_event(event: &LegacyHookEvent) -> DisplayNameCandidate {
+    if let Some(responsibility) = payload_responsibility(&event.payload) {
+        return DisplayNameCandidate {
+            value: responsibility,
+            score: 9,
+        };
+    }
+    if let Some(agent_type) = payload_string(&event.payload, "agent_type") {
+        if let Some(mapped) = mapped_agent_type_label(&agent_type) {
+            if mapped != "Session" {
+                return DisplayNameCandidate {
+                    value: mapped,
+                    score: 8,
+                };
+            }
+        }
+    }
     if let Some(display_name) = &event.display_name {
         return DisplayNameCandidate {
             value: display_name.clone(),
@@ -1107,6 +1133,52 @@ fn display_name_candidate_for_legacy_event(event: &LegacyHookEvent) -> DisplayNa
     DisplayNameCandidate {
         value: "Agent".to_string(),
         score: 0,
+    }
+}
+
+fn payload_responsibility(payload: &serde_json::Value) -> Option<String> {
+    payload_string(payload, "responsibility")
+        .or_else(|| payload_string(payload, "description"))
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+fn mapped_agent_type_label(agent_type: &str) -> Option<String> {
+    let normalized = agent_type.trim().to_ascii_lowercase();
+    if normalized.is_empty() {
+        return None;
+    }
+    let mapped = match normalized.as_str() {
+        "team-reviewer" | "code-reviewer" | "reviewer" => Some("Code Reviewer"),
+        "pr-review-toolkit" => Some("PR Review Toolkit"),
+        "full-stack-orchestrator" => Some("Full Stack Orchestrator"),
+        "general-purpose" => Some("General Purpose"),
+        "orchestrator" => Some("Orchestrator"),
+        "explorer" | "explore" => Some("Explorer"),
+        "cursor_subagent" => Some("Cursor Helper"),
+        "main" => Some("Session"),
+        _ => None,
+    };
+    if let Some(value) = mapped {
+        return Some(value.to_string());
+    }
+    let words = normalized
+        .replace('_', "-")
+        .split('-')
+        .filter(|part| !part.is_empty())
+        .map(|part| {
+            let mut chars = part.chars();
+            if let Some(first) = chars.next() {
+                format!("{}{}", first.to_uppercase(), chars.as_str())
+            } else {
+                String::new()
+            }
+        })
+        .collect::<Vec<_>>();
+    if words.is_empty() {
+        None
+    } else {
+        Some(words.join(" "))
     }
 }
 

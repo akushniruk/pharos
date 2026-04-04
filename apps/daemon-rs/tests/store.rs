@@ -88,15 +88,36 @@ fn registry_and_legacy_events_use_subagent_description_for_names() {
 
     let registry = store.list_agent_registry().expect("registry");
     assert_eq!(registry.len(), 1);
-    assert_eq!(registry[0].display_name, "Explore · Audit auth flow");
+    assert_eq!(registry[0].display_name, "Audit auth flow");
 
     let legacy_events = store.list_legacy_events().expect("legacy events");
     assert_eq!(legacy_events.len(), 1);
     assert_eq!(
         legacy_events[0].display_name.as_deref(),
-        Some("Explore · Audit auth flow")
+        Some("Audit auth flow")
     );
     assert_eq!(legacy_events[0].agent_name.as_deref(), Some("Explore"));
+}
+
+#[test]
+fn registry_uses_friendly_agent_type_when_no_responsibility_exists() {
+    let store = Store::open_in_memory().expect("store");
+
+    store
+        .insert_event(&event(
+            EventKind::SubagentStarted,
+            100,
+            Some("agent-777"),
+            json!({
+                "agent_type": "team-reviewer",
+                "agent_name": "team-reviewer"
+            }),
+        ))
+        .expect("insert subagent start");
+
+    let registry = store.list_agent_registry().expect("registry");
+    assert_eq!(registry.len(), 1);
+    assert_eq!(registry[0].display_name, "Code Reviewer");
 }
 
 #[test]

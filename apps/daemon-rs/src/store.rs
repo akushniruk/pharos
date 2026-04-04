@@ -345,10 +345,28 @@ struct DisplayNameCandidate {
 }
 
 fn display_name_candidate_for_event(event: &EventEnvelope) -> DisplayNameCandidate {
+    if let Some(responsibility) = payload_responsibility(&event.payload) {
+        return DisplayNameCandidate {
+            value: responsibility,
+            score: 8,
+        };
+    }
+
+    if let Some(agent_type) = payload_string(&event.payload, "agent_type") {
+        if let Some(mapped) = mapped_agent_type_label(&agent_type) {
+            if mapped != "Session" {
+                return DisplayNameCandidate {
+                    value: mapped,
+                    score: 7,
+                };
+            }
+        }
+    }
+
     if let Some(display_name) = payload_string(&event.payload, "display_name") {
         return DisplayNameCandidate {
             value: display_name,
-            score: 7,
+            score: 6,
         };
     }
 
@@ -356,7 +374,7 @@ fn display_name_candidate_for_event(event: &EventEnvelope) -> DisplayNameCandida
         if let Some(title) = payload_string(&event.payload, "title") {
             return DisplayNameCandidate {
                 value: title,
-                score: 6,
+                score: 5,
             };
         }
     }
@@ -378,7 +396,7 @@ fn display_name_candidate_for_event(event: &EventEnvelope) -> DisplayNameCandida
 
             return DisplayNameCandidate {
                 value: label,
-                score: 5,
+                score: 4,
             };
         }
     }
@@ -386,7 +404,7 @@ fn display_name_candidate_for_event(event: &EventEnvelope) -> DisplayNameCandida
     if let Some(agent_name) = payload_string(&event.payload, "agent_name") {
         return DisplayNameCandidate {
             value: agent_name,
-            score: 4,
+            score: 3,
         };
     }
 
@@ -394,7 +412,7 @@ fn display_name_candidate_for_event(event: &EventEnvelope) -> DisplayNameCandida
         if agent_type != "main" {
             return DisplayNameCandidate {
                 value: agent_type,
-                score: 3,
+                score: 2,
             };
         }
     }
@@ -403,7 +421,7 @@ fn display_name_candidate_for_event(event: &EventEnvelope) -> DisplayNameCandida
         if let Some(workspace_name) = workspace_name_from_cwd(&cwd) {
             return DisplayNameCandidate {
                 value: workspace_name,
-                score: 2,
+                score: 1,
             };
         }
     }
@@ -411,13 +429,59 @@ fn display_name_candidate_for_event(event: &EventEnvelope) -> DisplayNameCandida
     if event.agent_id.is_none() {
         DisplayNameCandidate {
             value: event.session.workspace_id.clone(),
-            score: 1,
+            score: 0,
         }
     } else {
         DisplayNameCandidate {
             value: "Agent".to_string(),
             score: 0,
         }
+    }
+}
+
+fn payload_responsibility(payload: &serde_json::Value) -> Option<String> {
+    payload_string(payload, "responsibility")
+        .or_else(|| payload_string(payload, "description"))
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+fn mapped_agent_type_label(agent_type: &str) -> Option<String> {
+    let normalized = agent_type.trim().to_ascii_lowercase();
+    if normalized.is_empty() {
+        return None;
+    }
+    let mapped = match normalized.as_str() {
+        "team-reviewer" | "code-reviewer" | "reviewer" => Some("Code Reviewer"),
+        "pr-review-toolkit" => Some("PR Review Toolkit"),
+        "full-stack-orchestrator" => Some("Full Stack Orchestrator"),
+        "general-purpose" => Some("General Purpose"),
+        "orchestrator" => Some("Orchestrator"),
+        "explorer" | "explore" => Some("Explorer"),
+        "cursor_subagent" => Some("Cursor Helper"),
+        "main" => Some("Session"),
+        _ => None,
+    };
+    if let Some(value) = mapped {
+        return Some(value.to_string());
+    }
+    let words = normalized
+        .replace('_', "-")
+        .split('-')
+        .filter(|part| !part.is_empty())
+        .map(|part| {
+            let mut chars = part.chars();
+            if let Some(first) = chars.next() {
+                format!("{}{}", first.to_uppercase(), chars.as_str())
+            } else {
+                String::new()
+            }
+        })
+        .collect::<Vec<_>>();
+    if words.is_empty() {
+        None
+    } else {
+        Some(words.join(" "))
     }
 }
 

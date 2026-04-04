@@ -1,4 +1,5 @@
 import type { HookEvent } from './types';
+import { mapAgentTypeLabel, resolveHybridAgentName, responsibilityFromPayload } from './agentNaming';
 
 export interface EventDescription {
   primary: string;
@@ -49,14 +50,33 @@ export function simpleEventKindLabel(type: string): string {
   }
 }
 
-export function mergeSimpleRowSummary(event: HookEvent, maxLen = 120): string {
+export function mergeSimpleRowSummary(event: HookEvent, maxLen?: number): string {
+  const payload = event.payload || {};
+  const runtime = formatRuntimeLabel(payload.runtime_label || payload.runtime_source);
+  if (event.hook_event_type === 'AssistantResponse') {
+    const text = typeof payload.text === 'string' ? payload.text.trim() : '';
+    const base = text || 'Shared an update';
+    const merged = runtime ? `${base} - ${runtime} runtime` : base;
+    return typeof maxLen === 'number' ? truncate(merged, maxLen) : merged;
+  }
+  if (event.hook_event_type === 'UserPromptSubmit') {
+    const prompt = typeof payload.prompt === 'string'
+      ? payload.prompt.trim()
+      : typeof payload.message === 'string'
+        ? payload.message.trim()
+        : '';
+    const base = prompt || 'You asked for help';
+    const merged = runtime ? `${base} - ${runtime} runtime` : base;
+    return typeof maxLen === 'number' ? truncate(merged, maxLen) : merged;
+  }
   const description = describeEventDescription(event);
   const primary = description.primary.trim();
   const secondary = description.secondary?.trim();
   if (!secondary || primary.toLowerCase().includes(secondary.toLowerCase())) {
-    return truncate(primary, maxLen);
+    return typeof maxLen === 'number' ? truncate(primary, maxLen) : primary;
   }
   const joined = `${primary} - ${secondary}`;
+  if (typeof maxLen !== 'number') return joined;
   if (joined.length <= maxLen) return joined;
   return truncate(joined, maxLen);
 }
@@ -231,8 +251,19 @@ export function describeEventDescription(event: HookEvent): EventDescription {
         secondary: composeRuntimeDetail(runtime),
       };
     case 'SubagentStart': {
-      const rawAgentLabel =
-        p.display_name || p.agent_name || p.agent_type || event.agent_name || event.agent_type || 'Agent';
+      const rawAgentLabel = resolveHybridAgentName({
+        responsibility: responsibilityFromPayload(p),
+        agentType:
+          (typeof p.agent_type === 'string' ? p.agent_type : undefined)
+          || event.agent_type,
+        displayName:
+          (typeof p.display_name === 'string' ? p.display_name : undefined)
+          || event.display_name,
+        agentName:
+          (typeof p.agent_name === 'string' ? p.agent_name : undefined)
+          || event.agent_name,
+        fallback: mapAgentTypeLabel(event.agent_type) || 'Agent',
+      });
       const agentLabel = rawAgentLabel === 'Agent' ? 'a helper agent' : rawAgentLabel;
       if (p.description) {
         return {

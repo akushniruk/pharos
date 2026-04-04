@@ -216,6 +216,8 @@ fn converts_codex_spawn_agent_to_subagent_start_envelope() {
     assert_eq!(envelope.payload["agent_type"], "explorer");
     assert_eq!(envelope.payload["agent_name"], "Explorer");
     assert_eq!(envelope.payload["description"], "inspect the daemon");
+    assert_eq!(envelope.payload["responsibility"], "inspect the daemon");
+    assert_eq!(envelope.payload["display_name"], "inspect the daemon");
     assert_eq!(envelope.payload["parent_agent_id"], "main");
 }
 
@@ -376,4 +378,12 @@ fn converts_cursor_subagent_start_to_envelope() {
     assert_eq!(envelope.event_kind, EventKind::SubagentStarted);
     assert_eq!(envelope.agent_id.as_deref(), Some("tool-1"));
     assert_eq!(envelope.payload["agent_name"], "Cursor Helper");
+    assert_eq!(
+        envelope.payload["display_name"],
+        "inspect scanner dedupe behavior"
+    );
+    assert_eq!(
+        envelope.payload["responsibility"],
+        "inspect scanner dedupe behavior"
+    );
 }

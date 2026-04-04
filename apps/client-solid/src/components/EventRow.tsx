@@ -13,6 +13,7 @@ import {
   sortedPayloadEntries,
 } from '../lib/describe';
 import { getEventTypeLabel, getEventTypeBgColor, getEventTypeTextColor } from '../lib/colors';
+import { resolveEventAgentName } from '../lib/agentNaming';
 
 interface Props {
   event: HookEvent;
@@ -21,9 +22,9 @@ interface Props {
 
 function resolveAgentName(e: HookEvent): string {
   if (e.hook_event_type === 'SubagentStart') {
-    return e.agent_name || e.payload?.agent_name || e.agent_type || e.payload?.agent_type || 'Agent';
+    return resolveEventAgentName(e, 'Agent');
   }
-  return e.display_name || e.agent_name || e.payload?.agent_name || e.agent_type || e.source_app || 'Agent';
+  return resolveEventAgentName(e, e.source_app || 'Agent');
 }
 
 function resolveRuntimeDisplay(e: HookEvent): string | undefined {
@@ -73,7 +74,7 @@ export default function EventRow(props: Props) {
     const detail = describeEventDetail(e());
     return detail && detail !== description() ? detail : undefined;
   };
-  const simpleSummary = () => mergeSimpleRowSummary(e(), 160);
+  const simpleSummary = () => mergeSimpleRowSummary(e());
   const payloadJson = () => JSON.stringify(e().payload, null, 2);
   const payloadEntries = () => sortedPayloadEntries((e().payload as Record<string, unknown>) ?? {});
 

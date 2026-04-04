@@ -4,11 +4,18 @@ import type {
   Project,
   SessionInfo,
   AgentInfo,
+  AgentEntry,
   HookEvent,
   ViewedChangesSnapshot,
 } from './types';
 import { agents, events, projectSnapshots } from './ws';
 import { describeEvent, describeEventDetail, formatRuntimeLabel } from './describe';
+import {
+  mapAgentTypeLabel,
+  resolveEventAgentName,
+  resolveHybridAgentName,
+  responsibilityFromPayload,
+} from './agentNaming';
 
 /** Navigation state (legacy, kept for compatibility) */
 export const [view, setView] = createSignal<View>({ page: 'projects' });
@@ -759,42 +766,43 @@ function resolveAgentName(evts: HookEvent[], isMain: boolean): string {
       && normalized !== 'unknown'
       && !normalized.startsWith('<user_query>');
   };
-  const cleanName = (value: string) => value.replace(/^<[^>]+>\s*/i, '').trim();
 
-  for (const e of evts) {
-    if (isMeaningfulName(e.display_name)) return cleanName(e.display_name!);
-    if (isMeaningfulName(e.agent_name)) return cleanName(e.agent_name!);
-    if (isMeaningfulName(e.payload?.display_name)) return cleanName(e.payload.display_name);
-    if (isMeaningfulName(e.payload?.agent_name)) return cleanName(e.payload.agent_name);
-    if (e.payload?.agent_type && e.payload.agent_type !== 'main') {
-      return e.payload.agent_type;
+  const byLatest = [...evts].sort((left, right) => (right.timestamp || 0) - (left.timestamp || 0));
+
+  if (!isMain) {
+    const responsibility = byLatest
+      .map((event) => responsibilityFromPayload(event.payload))
+      .find(Boolean);
+    if (responsibility) {
+      return truncate(responsibility, 36);
     }
-    if (e.payload?.title && isMain) return e.payload.title;
-    if (e.payload?.description && isMain) return e.payload.description;
-    if (e.payload?.cwd && isMain) {
-      const cwdName = workspaceNameFromCwd(e.payload.cwd);
+  }
+
+  for (const event of byLatest) {
+    const name = resolveEventAgentName(event, isMain ? 'Session' : 'Agent');
+    if (isMeaningfulName(name)) return name;
+    if (event.payload?.title && isMain) return event.payload.title;
+    if (event.payload?.cwd && isMain) {
+      const cwdName = workspaceNameFromCwd(event.payload.cwd);
       if (cwdName) return cwdName;
     }
   }
-  // Check agent_type from events as a fallback before using generic names
-  const agentType = evts.find((e) => e.payload?.agent_type)?.payload.agent_type;
-  if (agentType && agentType !== 'main') {
-    // Capitalize the agent_type (e.g. "builder" -> "Builder")
-    return agentType.charAt(0).toUpperCase() + agentType.slice(1);
-  }
-  const eventAgentType = evts.find((e) => e.agent_type)?.agent_type;
-  if (eventAgentType && eventAgentType !== 'main') {
-    return eventAgentType.charAt(0).toUpperCase() + eventAgentType.slice(1);
-  }
-  const describedTask = [...evts]
-    .sort((left, right) => (right.timestamp || 0) - (left.timestamp || 0))
-    .find((event) =>
-      typeof event.payload?.description === 'string'
-      || typeof event.payload?.tool_input?.description === 'string');
-  const description = describedTask?.payload?.description || describedTask?.payload?.tool_input?.description;
-  if (!isMain && typeof description === 'string' && description.trim()) {
-    return truncate(description.trim(), 36);
-  }
+
+  const mappedType = byLatest
+    .map((event) => mapAgentTypeLabel(event.payload?.agent_type || event.agent_type))
+    .find((value) => value && value !== 'Session');
+  if (mappedType) return mappedType;
+
+  const fallback = byLatest
+    .map((event) =>
+      resolveHybridAgentName({
+        displayName: event.display_name || event.payload?.display_name,
+        agentName: event.agent_name || event.payload?.agent_name,
+        fallback: isMain ? 'Session' : 'Agent',
+      }))
+    .find(isMeaningfulName);
+  if (fallback) return fallback;
+
   return isMain ? 'Session' : 'Agent';
 }
 
@@ -828,9 +836,12 @@ function resolveRegistryDisplayName(
   const key = `${sessionId}:${agentId || MAIN_AGENT_KEY}`;
   const info = registry.get(key);
   if (!info) return undefined;
-  const name = info.display_name?.trim();
-  if (name && name !== 'Agent') return name;
-  return undefined;
+  const resolved = resolveHybridAgentName({
+    displayName: info.display_name,
+    fallback: agentId ? 'Agent' : 'Session',
+  });
+  if (!resolved || resolved === 'Agent' || resolved === 'Session') return undefined;
+  return resolved;
 }
 
 function resolveRegistryParentId(
@@ -1325,6 +1336,69 @@ export const filteredAgents = createMemo((): AgentInfo[] => {
   }
   return project.sessions.flatMap(s => s.agents);
 });
+
+/**
+ * Graph-first agent list.
+ * Prefer live registry topology in scoped views (session or single-session project),
+ * and fall back to snapshot-derived agents when registry scope is ambiguous.
+ */
+export const graphAgents = createMemo((): AgentInfo[] => {
+  const snapshotAgents = filteredAgents();
+  const projectName = selectedProject();
+  const sessionId = selectedSession();
+
+  const scopedRegistry = agents().filter((entry) => {
+    if (projectName && entry.source_app !== projectName) return false;
+    if (sessionId && entry.session_id !== sessionId) return false;
+    return true;
+  });
+
+  if (scopedRegistry.length === 0) {
+    return snapshotAgents;
+  }
+
+  const uniqueSessions = new Set(scopedRegistry.map((entry) => entry.session_id));
+  const useRegistryTopology = Boolean(sessionId) || uniqueSessions.size <= 1;
+  if (!useRegistryTopology) {
+    return snapshotAgents;
+  }
+
+  const mapped = new Map<string, AgentInfo>();
+  for (const entry of scopedRegistry) {
+    const key = entry.agent_id || MAIN_AGENT_KEY;
+    const previous = mapped.get(key);
+    const next = registryEntryToGraphAgent(entry);
+    if (!previous || next.lastEventAt >= previous.lastEventAt) {
+      mapped.set(key, next);
+    }
+  }
+
+  return Array.from(mapped.values()).sort((left, right) => {
+    if (left.isActive !== right.isActive) return left.isActive ? -1 : 1;
+    return right.lastEventAt - left.lastEventAt;
+  });
+});
+
+function registryEntryToGraphAgent(entry: AgentEntry): AgentInfo {
+  const isActive = entry.lifecycle_status === 'active';
+  return {
+    agentId: entry.agent_id || null,
+    displayName: resolveHybridAgentName({
+      displayName: entry.display_name,
+      agentType: entry.agent_type,
+      fallback: entry.agent_id ? 'Agent' : 'Session',
+    }),
+    statusLabel: isActive ? 'Active' : 'Idle',
+    statusTone: isActive ? 'active' : 'idle',
+    statusDetail: undefined,
+    agentType: entry.agent_type,
+    modelName: entry.model_name,
+    eventCount: entry.event_count || 0,
+    lastEventAt: entry.last_seen_at || 0,
+    isActive,
+    parentId: entry.parent_id || undefined,
+  };
+}
 
 export const selectedProjectFocusSnapshot = createMemo((): ProjectFocusSnapshot | null => {
   const project = selectedProjectSnapshot();

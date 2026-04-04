@@ -138,8 +138,9 @@ pub fn codex_event_to_envelope(
             json!({
                 "agent_type": agent_type,
                 "agent_name": display_name,
-                "display_name": display_name,
+                "display_name": resolve_subagent_display_name(display_name, agent_type, description.as_deref()),
                 "description": description,
+                "responsibility": description,
                 "model": model,
                 "reasoning_effort": reasoning_effort,
                 "parent_agent_id": "main",
@@ -372,8 +373,9 @@ pub fn cursor_event_to_envelope(
             json!({
                 "agent_type": "cursor_subagent",
                 "agent_name": display_name,
-                "display_name": display_name,
+                "display_name": resolve_subagent_display_name(display_name, "cursor_subagent", description.as_deref()),
                 "description": description,
+                "responsibility": description,
                 "parent_agent_id": parent_agent_id.clone().unwrap_or_else(|| "main".to_string()),
             }),
         ),
@@ -415,4 +417,54 @@ fn truncate(s: &str, max: usize) -> String {
         end -= 1;
     }
     format!("{}...", &s[..end])
+}
+
+fn resolve_subagent_display_name(
+    display_name: &str,
+    agent_type: &str,
+    description: Option<&str>,
+) -> String {
+    if let Some(description) = description.map(str::trim).filter(|value| !value.is_empty()) {
+        return description.to_string();
+    }
+    mapped_agent_type_label(agent_type).unwrap_or_else(|| display_name.trim().to_string())
+}
+
+fn mapped_agent_type_label(agent_type: &str) -> Option<String> {
+    let normalized = agent_type.trim().to_ascii_lowercase();
+    if normalized.is_empty() {
+        return None;
+    }
+    let mapped = match normalized.as_str() {
+        "team-reviewer" | "code-reviewer" | "reviewer" => Some("Code Reviewer"),
+        "pr-review-toolkit" => Some("PR Review Toolkit"),
+        "full-stack-orchestrator" => Some("Full Stack Orchestrator"),
+        "general-purpose" => Some("General Purpose"),
+        "orchestrator" => Some("Orchestrator"),
+        "explorer" | "explore" => Some("Explorer"),
+        "cursor_subagent" => Some("Cursor Helper"),
+        "main" => Some("Session"),
+        _ => None,
+    };
+    if let Some(value) = mapped {
+        return Some(value.to_string());
+    }
+    let words = normalized
+        .replace('_', "-")
+        .split('-')
+        .filter(|part| !part.is_empty())
+        .map(|part| {
+            let mut chars = part.chars();
+            if let Some(first) = chars.next() {
+                format!("{}{}", first.to_uppercase(), chars.as_str())
+            } else {
+                String::new()
+            }
+        })
+        .collect::<Vec<_>>();
+    if words.is_empty() {
+        None
+    } else {
+        Some(words.join(" "))
+    }
 }

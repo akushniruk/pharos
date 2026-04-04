@@ -9,10 +9,21 @@ import {
 import { projects, selectedProject, selectedSession, selectProject, selectSession } from '../lib/store';
 import { getAgentColor } from '../lib/colors';
 import { timeAgo } from '../lib/time';
+import { DOCS_PORTAL_RUN_COMMANDS, DOCS_PORTAL_SECTIONS, type DocsPortalSection } from '../lib/docsPortal';
+import { mapAgentTypeLabel } from '../lib/agentNaming';
 
 interface SidebarProps {
   collapsed: boolean;
   onToggle: () => void;
+  isDocsRoute?: boolean;
+  docsQuery?: string;
+  onDocsQueryChange?: (value: string) => void;
+  docsEntryCount?: number;
+  docsSections?: DocsPortalSection[];
+  selectedDocPath?: string;
+  onSelectDoc?: (path: string) => void;
+  copiedValue?: string | null;
+  onCopy?: (value: string) => void;
 }
 
 type ActivityTone = 'active' | 'blocked' | 'attention' | 'idle' | 'done';
@@ -130,6 +141,7 @@ export default function Sidebar(props: SidebarProps) {
   const [activityFilter, setActivityFilter] = createSignal<'all' | 'active'>('all');
   const [expandedProject, setExpandedProject] = createSignal<string | null>(null);
   const [expandedSession, setExpandedSession] = createSignal<string | null>(null);
+  const [expandedDocSections, setExpandedDocSections] = createSignal<Record<string, boolean>>({});
 
   const selectedProjectSessions = createMemo(() => {
     const proj = selectedProject();
@@ -171,6 +183,117 @@ export default function Sidebar(props: SidebarProps) {
       ? projects().filter(p => p.isActive)
       : projects(),
   );
+
+  if (props.isDocsRoute) {
+    const docsSections = () => props.docsSections ?? DOCS_PORTAL_SECTIONS;
+    const docsEntryCount = () => props.docsEntryCount ?? docsSections().reduce((count, section) => count + section.entries.length, 0);
+    const isDocSectionExpanded = (title: string) => expandedDocSections()[title] ?? true;
+    const toggleDocSection = (title: string) => {
+      setExpandedDocSections((current) => ({ ...current, [title]: !isDocSectionExpanded(title) }));
+    };
+    return (
+      <Show
+        when={!props.collapsed}
+        fallback={
+          <div class="docs-sidebar-collapsed">
+            <button
+              onClick={props.onToggle}
+              title="Expand sidebar"
+              class="docs-sidebar-toggle"
+            >
+              <Icon path={chevronRight} style="width:12px;height:12px;" />
+            </button>
+          </div>
+        }
+      >
+        <div class="docs-sidebar-root">
+          <div class="docs-sidebar-head">
+            <div class="docs-sidebar-headcopy">
+              <span class="docs-sidebar-kicker">Documentation</span>
+              <div class="docs-sidebar-title-row">
+                <span class="docs-sidebar-title">Pharos Docs</span>
+                <span class="docs-sidebar-count">{docsEntryCount()} entries</span>
+              </div>
+            </div>
+            <button
+              onClick={props.onToggle}
+              title="Collapse sidebar"
+              class="docs-sidebar-toggle"
+            >
+              <Icon path={chevronLeft} style="width:12px;height:12px;" />
+            </button>
+          </div>
+
+          <div class="docs-sidebar-search-wrap">
+            <input
+              type="text"
+              value={props.docsQuery ?? ''}
+              onInput={(event) => props.onDocsQueryChange?.(event.currentTarget.value)}
+              placeholder="Search docs..."
+              class="docs-sidebar-search"
+            />
+          </div>
+
+          <div class="docs-sidebar-scroll">
+            <For each={docsSections()}>
+              {(section) => (
+                <div class="docs-sidebar-section">
+                  <button
+                    type="button"
+                    class="docs-sidebar-section-head"
+                    onClick={() => toggleDocSection(section.title)}
+                  >
+                    <span class="docs-sidebar-section-title">{section.title}</span>
+                    <Icon
+                      path={chevronRight}
+                      style={`width:11px;height:11px;transition:transform 0.18s;transform:${isDocSectionExpanded(section.title) ? 'rotate(90deg)' : 'rotate(0deg)'};`}
+                    />
+                  </button>
+                  <div class="docs-sidebar-section-items" style={{ display: isDocSectionExpanded(section.title) ? 'flex' : 'none' }}>
+                    <For each={section.entries}>
+                      {(entry) => (
+                        <button
+                          type="button"
+                          onClick={() => props.onSelectDoc?.(entry.path)}
+                          class="docs-sidebar-entry"
+                          classList={{ 'is-active': props.selectedDocPath === entry.path }}
+                        >
+                          <div class="docs-sidebar-entry-title">{entry.title}</div>
+                          <div class="docs-sidebar-entry-path">{entry.path}</div>
+                        </button>
+                      )}
+                    </For>
+                  </div>
+                </div>
+              )}
+            </For>
+
+            <div class="docs-sidebar-section docs-sidebar-commands">
+              <div class="docs-sidebar-section-title">
+                Run The Platform
+              </div>
+              <div class="docs-sidebar-command-list">
+                <For each={DOCS_PORTAL_RUN_COMMANDS}>
+                  {(command) => (
+                    <div class="docs-sidebar-command-item">
+                      <code class="docs-sidebar-command-code">{command}</code>
+                      <button
+                        type="button"
+                        onClick={() => props.onCopy?.(command)}
+                        class="docs-sidebar-command-copy"
+                      >
+                        {props.copiedValue === command ? 'Copied' : 'Copy'}
+                      </button>
+                    </div>
+                  )}
+                </For>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Show>
+    );
+  }
 
   return (
     <Show
@@ -347,7 +470,7 @@ export default function Sidebar(props: SidebarProps) {
                             'font-size:9px;padding:1px 5px;border-radius:9999px;font-weight:500;',
                             `background:${getAgentColor(type)}22;color:${getAgentColor(type)};`,
                           ].join('')}>
-                            {type}
+                            {mapAgentTypeLabel(type) || type}
                           </span>
                         )}
                       </For>

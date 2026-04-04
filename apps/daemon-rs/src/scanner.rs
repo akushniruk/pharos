@@ -970,6 +970,11 @@ fn scan_subagents(
             .and_then(|v| v.as_str())
             .unwrap_or("")
             .to_string();
+        let display_name = if description.trim().is_empty() {
+            agent_type.clone()
+        } else {
+            description.trim().to_string()
+        };
 
         let envelope = EventEnvelope {
             runtime_source: ts.session.runtime_source.clone(),
@@ -987,7 +992,9 @@ fn scan_subagents(
             payload: json!({
                 "agent_type": agent_type,
                 "description": description,
+                "responsibility": description,
                 "agent_name": agent_type,
+                "display_name": display_name,
                 "parent_agent_id": "main",
             }),
         };
