@@ -1,529 +1,193 @@
-import { For, Show, createMemo, createSignal, onMount } from 'solid-js';
-import {
-  filteredAgents,
-  selectAgent,
-  selectedAgent,
-  selectedProjectFocusSnapshot,
-  selectedProjectSnapshot,
-  selectedSessionSnapshot,
-} from '../lib/store';
-import { connectionState, hasStreamData } from '../lib/ws';
-import type { ActivityTone, AgentInfo, SessionInfo } from '../lib/types';
+import { For, Show, createMemo, createSignal } from 'solid-js';
+import { filteredAgents, filteredEvents, selectAgent, selectedAgent } from '../lib/store';
+import type { AgentInfo } from '../lib/types';
 
-const NODE_W = 180;
-const NODE_H = 76;
-const H_GAP = 16;
-const V_GAP = 20;
-const LANE_HEADER_W = 238;
-const LANE_ROW_H = 126;
+const NODE_W = 200;
+const NODE_H = 64;
+const H_GAP = 24;
+const V_GAP = 80;
+const MAX_PER_ROW = 5;
 
-function statusPalette(tone: ActivityTone) {
-  switch (tone) {
-    case 'active':
-      return { background: 'var(--green-dim)', text: 'var(--green)', dot: 'var(--green)' };
-    case 'blocked':
-      return { background: 'rgba(245, 158, 11, 0.16)', text: 'var(--yellow)', dot: 'var(--yellow)' };
-    case 'attention':
-      return { background: 'rgba(239, 68, 68, 0.16)', text: 'var(--red)', dot: 'var(--red)' };
-    case 'idle':
-      return { background: 'var(--bg-elevated)', text: 'var(--text-dim)', dot: 'var(--text-dim)' };
-    case 'done':
-    default:
-      return { background: 'var(--bg-elevated)', text: 'var(--text-dim)', dot: 'var(--text-dim)' };
-  }
-}
+type StatusColor = 'var(--green)' | 'var(--yellow)' | 'var(--text-dim)';
 
-function resolveTone(entity: { statusTone?: ActivityTone; isActive: boolean; eventCount: number }): ActivityTone {
-  return entity.statusTone || (entity.isActive ? 'active' : entity.eventCount > 0 ? 'idle' : 'done');
-}
-
-function statusLabel(tone: ActivityTone): string {
-  switch (tone) {
-    case 'active':
-      return 'Active';
-    case 'blocked':
-      return 'Blocked';
-    case 'attention':
-      return 'Needs attention';
-    case 'idle':
-      return 'Idle';
-    case 'done':
-    default:
-      return 'Done';
-  }
+function statusDot(agent: AgentInfo): StatusColor {
+  if (agent.statusTone === 'active' || agent.isActive) return 'var(--green)';
+  if (agent.statusTone === 'blocked' || agent.statusTone === 'attention') return 'var(--yellow)';
+  return 'var(--text-dim)';
 }
 
 export default function AgentGraph() {
-  let containerRef: HTMLDivElement | undefined;
   const [zoom, setZoom] = createSignal(1);
   const [pan, setPan] = createSignal({ x: 0, y: 0 });
   const [dragging, setDragging] = createSignal(false);
   const [dragStart, setDragStart] = createSignal({ x: 0, y: 0 });
-  const [filter, setFilter] = createSignal<'active' | 'inactive' | 'all'>('active');
-
-  const visibleSessions = createMemo(() => {
-    const project = selectedProjectSnapshot();
-    if (!project) return [];
-
-    const focusedSession = selectedSessionSnapshot();
-    const sessions = focusedSession
-      ? project.sessions.filter((session) => session.sessionId === focusedSession.sessionId)
-      : project.sessions;
-
-    return sessions
-      .map((session) => ({
-        ...session,
-        agents: filterAgents(session.agents, filter()),
-      }))
-      .filter((session) => session.agents.length > 0 || session.isActive);
+  const [filter, setFilter] = createSignal<'active' | 'idle' | 'all'>('all');
+  const agents = createMemo(() => {
+    const all = filteredAgents();
+    if (filter() === 'all') return all;
+    if (filter() === 'active') return all.filter(a => a.isActive || a.statusTone === 'active');
+    return all.filter(a => !a.isActive && a.statusTone !== 'active');
   });
+  const roots = createMemo(() => agents().filter(a => a.agentId === null || !a.parentId));
+  const children = createMemo(() => agents().filter(a => a.agentId !== null && a.parentId));
 
-  const activeCount = createMemo(() => filteredAgents().filter((agent) => resolveTone(agent) === 'active').length);
-  const inactiveCount = createMemo(() => filteredAgents().filter((agent) => resolveTone(agent) !== 'active').length);
-  const totalCount = createMemo(() => filteredAgents().length);
-  const focus = createMemo(() => selectedProjectFocusSnapshot());
-  const emptyState = createMemo(() => {
-    const project = selectedProjectSnapshot();
-    const session = selectedSessionSnapshot();
-    const visible = visibleSessions();
-
-    if (connectionState() === 'connecting' && !hasStreamData()) {
-      return {
-        title: 'Loading agent graph',
-        body: 'Waiting for the first project snapshot to populate this view.',
-      };
+  const edges = createMemo(() => {
+    const evts = filteredEvents();
+    const parentMap = new Map<string, string>();
+    for (const a of agents()) {
+      if (a.parentId && a.agentId) parentMap.set(a.agentId, a.parentId);
     }
-
-    if (connectionState() === 'disconnected' && !hasStreamData()) {
-      return {
-        title: 'Disconnected',
-        body: 'No live project snapshot has arrived yet.',
-      };
-    }
-
-    if ((project?.sessions ?? []).length === 0) {
-      return {
-        title: 'No sessions captured for this project yet',
-        body: 'The daemon has not reported any sessions for the selected project.',
-      };
-    }
-
-    if (visible.length === 0) {
-      if (session) {
-        return {
-          title: 'No agents match the selected session',
-          body: 'Try a different session or widen the agent filter.',
-        };
+    for (const e of evts) {
+      if (e.hook_event_type === 'SubagentStart' && e.agent_id && e.payload?.parent_id) {
+        parentMap.set(e.agent_id, e.payload.parent_id);
       }
-
-      if (filter() !== 'all') {
-        return {
-          title: 'No agents match the active graph filter',
-          body: 'Switch to All to reveal every agent in the project.',
-        };
-      }
-
-      return {
-        title: 'No agents available for the current graph',
-        body: 'This project has sessions, but none of them include drawable agent nodes yet.',
-      };
     }
-
-    return null;
+    return parentMap;
   });
-
   const layout = createMemo(() => {
-    const sessions = visibleSessions();
-    if (sessions.length === 0) {
-      return {
-        nodes: [] as Array<{ agent: AgentInfo; session: SessionInfo; x: number; y: number }>,
-        edges: [] as Array<{ x1: number; y1: number; x2: number; y2: number }>,
-        lanes: [] as Array<{ session: SessionInfo; y: number }>,
-        width: 520,
-        height: 220,
-      };
-    }
+    const r = roots();
+    const c = children();
+    const rootCount = Math.max(r.length, 1);
+    const childRows = Math.ceil(c.length / MAX_PER_ROW) || 0;
+    const maxCols = Math.max(rootCount, Math.min(c.length, MAX_PER_ROW));
+    const width = maxCols * (NODE_W + H_GAP) - H_GAP + 80;
+    const height = NODE_H + (childRows > 0 ? childRows * (NODE_H + V_GAP) + V_GAP : 0) + 80;
 
-    const maxAgents = Math.max(1, ...sessions.map((session) => Math.max(1, session.agents.length)));
-    const width = LANE_HEADER_W + maxAgents * (NODE_W + H_GAP) - H_GAP + 48;
-    const height = 28 + sessions.length * (LANE_ROW_H + V_GAP) + 24;
+    const rootPositions = new Map<string, { x: number; y: number }>();
+    const rootStartX = (width - (rootCount * (NODE_W + H_GAP) - H_GAP)) / 2;
+    r.forEach((agent, i) => {
+      const key = agent.agentId ?? '__root__';
+      rootPositions.set(key, { x: rootStartX + i * (NODE_W + H_GAP), y: 40 });
+    });
 
-    const positions = new Map<string, { x: number; y: number }>();
-    const nodes: Array<{ agent: AgentInfo; session: SessionInfo; x: number; y: number }> = [];
-    const edges: Array<{ x1: number; y1: number; x2: number; y2: number }> = [];
-    const lanes: Array<{ session: SessionInfo; y: number }> = [];
-
-    sessions.forEach((session, laneIndex) => {
-      const y = 24 + laneIndex * (LANE_ROW_H + V_GAP);
-      const nodeY = y + 38;
-      lanes.push({ session, y });
-
-      session.agents.forEach((agent, agentIndex) => {
-        const x = LANE_HEADER_W + 20 + agentIndex * (NODE_W + H_GAP);
-        const key = `${session.sessionId}:${agent.agentId || '__main__'}`;
-        positions.set(key, { x, y: nodeY });
-        nodes.push({ agent, session, x, y: nodeY });
+    const childPositions = new Map<string, { x: number; y: number }>();
+    c.forEach((agent, i) => {
+      const row = Math.floor(i / MAX_PER_ROW);
+      const col = i % MAX_PER_ROW;
+      const rowCols = Math.min(c.length - row * MAX_PER_ROW, MAX_PER_ROW);
+      const rowStartX = (width - (rowCols * (NODE_W + H_GAP) - H_GAP)) / 2;
+      const key = agent.agentId ?? '__child__';
+      childPositions.set(key, {
+        x: rowStartX + col * (NODE_W + H_GAP),
+        y: 40 + NODE_H + V_GAP + row * (NODE_H + V_GAP),
       });
     });
 
-    sessions.forEach((session) => {
-      for (const agent of session.agents) {
-        if (!agent.parentId) continue;
-
-        const parentKey = `${session.sessionId}:${agent.parentId === 'main' ? '__main__' : agent.parentId}`;
-        const childKey = `${session.sessionId}:${agent.agentId || '__main__'}`;
-        const parent = positions.get(parentKey);
-        const child = positions.get(childKey);
-
-        if (!parent || !child) continue;
-        edges.push({
-          x1: parent.x + NODE_W / 2,
-          y1: parent.y + NODE_H,
-          x2: child.x + NODE_W / 2,
-          y2: child.y,
-        });
-      }
-    });
-
-    return { nodes, edges, lanes, width, height };
+    return { width, height, rootPositions, childPositions };
   });
-
-  onMount(() => {
-    if (containerRef) {
-      const cw = containerRef.clientWidth;
-      const lw = layout().width;
-      if (lw < cw) {
-        setPan({ x: (cw - lw) / 2, y: 20 });
-      }
-    }
-  });
+  const nodePos = (agent: AgentInfo) => {
+    const key = agent.agentId ?? '__root__';
+    return layout().rootPositions.get(key) ?? layout().childPositions.get(key) ?? { x: 0, y: 0 };
+  };
 
   const onWheel = (e: WheelEvent) => {
     e.preventDefault();
-    const delta = e.deltaY > 0 ? -0.08 : 0.08;
-    setZoom((value) => Math.max(0.3, Math.min(2.5, value + delta)));
+    setZoom(z => Math.max(0.3, Math.min(2.5, z + (e.deltaY > 0 ? -0.08 : 0.08))));
   };
-
   const onMouseDown = (e: MouseEvent) => {
     if (e.button !== 0) return;
     setDragging(true);
     setDragStart({ x: e.clientX - pan().x, y: e.clientY - pan().y });
   };
-
   const onMouseMove = (e: MouseEvent) => {
     if (!dragging()) return;
     setPan({ x: e.clientX - dragStart().x, y: e.clientY - dragStart().y });
   };
-
   const onMouseUp = () => setDragging(false);
+  const activeCount = () => filteredAgents().filter(a => a.isActive || a.statusTone === 'active').length;
+  const idleCount = () => filteredAgents().filter(a => !a.isActive && a.statusTone !== 'active').length;
 
   return (
     <div
-      ref={containerRef}
-      style="flex:1;overflow:hidden;position:relative;cursor:grab;user-select:none;background:linear-gradient(180deg,rgba(255,255,255,0.015),transparent);"
+      style="flex:1;overflow:hidden;position:relative;cursor:grab;user-select:none;"
       onWheel={onWheel}
       onMouseDown={onMouseDown}
       onMouseMove={onMouseMove}
       onMouseUp={onMouseUp}
       onMouseLeave={onMouseUp}
     >
+      {/* Filter buttons top-left */}
       <div style="position:absolute;top:12px;left:12px;display:flex;gap:4px;z-index:10;">
-        <button
-          onClick={() => setFilter('active')}
-          class="graph-zoom-btn"
-          style={`font-size:10px;width:auto;padding:0 10px;${filter() === 'active' ? 'background:var(--green-dim);color:var(--green);border-color:var(--green);' : ''}`}
-        >
-          Active ({activeCount()})
-        </button>
-        <button
-          onClick={() => setFilter('inactive')}
-          class="graph-zoom-btn"
-          style={`font-size:10px;width:auto;padding:0 10px;${filter() === 'inactive' ? 'background:var(--yellow-dim);color:var(--yellow);border-color:var(--yellow);' : ''}`}
-        >
-          Inactive ({inactiveCount()})
-        </button>
-        <button
-          onClick={() => setFilter('all')}
-          class="graph-zoom-btn"
-          style={`font-size:10px;width:auto;padding:0 10px;${filter() === 'all' ? 'background:var(--bg-elevated);color:var(--text-primary);border-color:var(--accent);' : ''}`}
-        >
-          All ({totalCount()})
-        </button>
+        <For each={[
+          { key: 'active' as const, label: `Active (${activeCount()})` },
+          { key: 'idle' as const, label: `Idle (${idleCount()})` },
+          { key: 'all' as const, label: `All (${filteredAgents().length})` },
+        ]}>
+          {(f) => (
+            <button
+              class="graph-zoom-btn"
+              style={`font-size:10px;width:auto;padding:0 10px;${filter() === f.key ? 'background:var(--bg-elevated);color:var(--text-primary);border-color:var(--accent);' : ''}`}
+              onClick={() => setFilter(f.key)}
+            >
+              {f.label}
+            </button>
+          )}
+        </For>
       </div>
 
-      <Show when={focus()}>
-        {(currentFocus) => (
-          <div style="position:absolute;top:48px;left:12px;z-index:10;display:flex;flex-direction:column;gap:4px;max-width:360px;padding:8px 10px;border:1px solid var(--border);border-radius:10px;background:rgba(15, 18, 22, 0.92);backdrop-filter:blur(8px);">
-            <span style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);">
-              {currentFocus().scopeLabel}
-            </span>
-            <span style="font-size:11px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-              {currentFocus().breadcrumb}
-            </span>
-            <span style="font-size:12px;font-weight:600;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-              {currentFocus().headline}
-            </span>
-            <span style="font-size:10px;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-              {currentFocus().subheadline}
-            </span>
-          </div>
-        )}
-      </Show>
-
+      {/* Zoom controls bottom-right */}
       <div style="position:absolute;bottom:12px;right:12px;display:flex;gap:4px;z-index:10;">
-        <button onClick={() => setZoom((value) => Math.min(2.5, value + 0.2))} class="graph-zoom-btn">+</button>
-        <button onClick={() => setZoom(1)} class="graph-zoom-btn" style="font-size:10px;">Fit</button>
-        <button onClick={() => setZoom((value) => Math.max(0.3, value - 0.2))} class="graph-zoom-btn">−</button>
+        <button class="graph-zoom-btn" onClick={() => setZoom(z => Math.min(2.5, z + 0.2))}>+</button>
+        <button class="graph-zoom-btn" style="font-size:10px;" onClick={() => setZoom(1)}>Fit</button>
+        <button class="graph-zoom-btn" onClick={() => setZoom(z => Math.max(0.3, z - 0.2))}>-</button>
       </div>
 
-      <Show
-        when={layout().lanes.length > 0}
-        fallback={(
-          <div style="display:flex;align-items:center;justify-content:center;height:100%;padding:28px;">
-            <div style="max-width:420px;padding:18px 20px;border:1px solid var(--border);border-radius:14px;background:linear-gradient(180deg,rgba(255,255,255,0.02),transparent);text-align:center;">
-              <p style="font-size:14px;font-weight:600;color:var(--text-primary);margin-bottom:6px;">
-                {emptyState()?.title}
-              </p>
-              <p style="font-size:12px;line-height:1.5;color:var(--text-dim);">
-                {emptyState()?.body}
-              </p>
-            </div>
+      <Show when={agents().length > 0} fallback={
+        <div style="display:flex;align-items:center;justify-content:center;height:100%;padding:28px;">
+          <div style="max-width:420px;padding:18px 20px;border:1px solid var(--border);border-radius:14px;text-align:center;">
+            <p style="font-size:14px;font-weight:600;color:var(--text-primary);margin-bottom:6px;">No agents to display</p>
+            <p style="font-size:12px;line-height:1.5;color:var(--text-dim);">Try changing the filter or selecting a different project.</p>
           </div>
-        )}
-      >
+        </div>
+      }>
         <svg
           width={layout().width * zoom()}
           height={layout().height * zoom()}
           viewBox={`0 0 ${layout().width} ${layout().height}`}
           style={`transform:translate(${pan().x}px,${pan().y}px);`}
         >
-          <For each={layout().lanes}>
-            {(lane) => {
-              const isSelectedLane = () => selectedSessionSnapshot()?.sessionId === lane.session.sessionId;
-              const laneTone = resolveTone(lane.session);
-              const lanePalette = statusPalette(laneTone);
-              const laneWidth = layout().width - 24;
-              const headerFill = isSelectedLane() ? 'var(--bg-elevated)' : 'var(--bg-card)';
-              const headerStroke = isSelectedLane() ? 'var(--accent)' : 'var(--border)';
-              const laneSummary = lane.session.currentProgress
-                || lane.session.currentAction
-                || lane.session.summary
-                || `${lane.session.activeAgentCount}/${lane.session.agents.length} agents`;
-              const laneRuntime = lane.session.runtimeLabel || 'Runtime unavailable';
-              const laneReason = (laneTone === 'blocked' || laneTone === 'attention')
-                ? lane.session.statusDetail || 'No new progress after recent activity'
-                : undefined;
-
+          {/* Edges */}
+          <For each={children()}>
+            {(child) => {
+              const parentKey = child.parentId === 'main' ? '__root__' : child.parentId!;
+              const parentPos = () => layout().rootPositions.get(parentKey) ?? layout().childPositions.get(parentKey);
+              const childPos = () => nodePos(child);
               return (
-                <g>
-                  <rect
-                    x="12"
-                    y={lane.y - 4}
-                    width={laneWidth}
-                    height={LANE_ROW_H}
-                    rx="12"
-                    fill="var(--bg-primary)"
-                    stroke="var(--border)"
+                <Show when={parentPos()}>
+                  <path
+                    d={`M ${parentPos()!.x + NODE_W / 2} ${parentPos()!.y + NODE_H} C ${parentPos()!.x + NODE_W / 2} ${(parentPos()!.y + NODE_H + childPos().y) / 2}, ${childPos().x + NODE_W / 2} ${(parentPos()!.y + NODE_H + childPos().y) / 2}, ${childPos().x + NODE_W / 2} ${childPos().y}`}
+                    fill="none"
+                    stroke="var(--border-hover)"
+                    stroke-width="1.5"
                   />
-                  <rect
-                    x="18"
-                    y={lane.y}
-                    width={LANE_HEADER_W - 12}
-                    height={LANE_ROW_H - 8}
-                    rx="10"
-                    fill={headerFill}
-                    stroke={headerStroke}
-                    stroke-width={isSelectedLane() ? 2 : 1}
-                  />
-                  <rect
-                    x="18"
-                    y={lane.y}
-                    width="3"
-                    height={LANE_ROW_H - 8}
-                    rx="1.5"
-                    fill={lanePalette.dot}
-                  />
-                  <circle
-                    cx="36"
-                    cy={lane.y + 20}
-                    r="4"
-                    fill={lanePalette.dot}
-                  />
-                  <text
-                    x="46"
-                    y={lane.y + 23}
-                    font-size="12"
-                    font-weight="600"
-                    fill="var(--text-primary)"
-                    font-family="var(--font-sans)"
-                  >
-                    {truncate(lane.session.label, 24)}
-                  </text>
-                  <text
-                    x="26"
-                    y={lane.y + 45}
-                    font-size="10"
-                    fill="var(--text-secondary)"
-                    font-family="var(--font-sans)"
-                  >
-                    {truncate(`${laneRuntime} · ${laneSummary}`, 44)}
-                  </text>
-                  <text
-                    x="26"
-                    y={lane.y + 63}
-                    font-size="10"
-                    fill="var(--text-dim)"
-                    font-family="var(--font-sans)"
-                  >
-                    {timeLabel(lane.session.lastEventAt)} · {lane.session.eventCount} events
-                  </text>
-                  {laneReason && (
-                    <text
-                      x="26"
-                      y={lane.y + 82}
-                      font-size="10"
-                      fill="var(--text-secondary)"
-                      font-family="var(--font-sans)"
-                    >
-                      {truncate(laneReason, 56)}
-                    </text>
-                  )}
-                  <rect
-                    x="26"
-                    y={lane.y + LANE_ROW_H - 30}
-                    width="66"
-                    height="16"
-                    rx="8"
-                    fill={lanePalette.background}
-                  />
-                  <text
-                    x="59"
-                    y={lane.y + LANE_ROW_H - 18}
-                    textAnchor="middle"
-                    font-size="9"
-                    font-weight="600"
-                    fill={lanePalette.text}
-                    font-family="var(--font-sans)"
-                  >
-                    {statusLabel(laneTone)}
-                  </text>
-                  {!lane.session.agents.length && (
-                    <text
-                      x={LANE_HEADER_W + 40}
-                      y={lane.y + 66}
-                      font-size="11"
-                      fill="var(--text-dim)"
-                      font-family="var(--font-sans)"
-                    >
-                      No agents match the current filter
-                    </text>
-                  )}
-                </g>
+                </Show>
               );
             }}
           </For>
 
-          <For each={layout().edges}>
-            {(edge) => {
-              const midY = (edge.y1 + edge.y2) / 2;
+          {/* All nodes */}
+          <For each={[...roots(), ...children()]}>
+            {(agent) => {
+              const pos = () => nodePos(agent);
+              const id = agent.agentId ?? '__main__';
+              const isSel = () => selectedAgent() === id;
               return (
-                <path
-                  d={`M ${edge.x1} ${edge.y1} C ${edge.x1} ${midY}, ${edge.x2} ${midY}, ${edge.x2} ${edge.y2}`}
-                  fill="none"
-                  stroke="var(--border-hover)"
-                  stroke-width="1.5"
-                  stroke-dasharray="4 2"
-                />
-              );
-            }}
-          </For>
-
-          <For each={layout().nodes}>
-            {(node) => {
-              const id = node.agent.agentId || '__main__';
-              const isSelected = () => selectedAgent() === id;
-              const tone = resolveTone(node.agent);
-              const palette = statusPalette(tone);
-              const runtimeText = node.agent.runtimeLabel || node.session.runtimeLabel || 'Runtime unavailable';
-              const statusText = statusLabel(tone);
-              const reasonText = (tone === 'blocked' || tone === 'attention')
-                ? node.agent.statusDetail || 'No new progress after recent activity'
-                : undefined;
-              const actionText = node.agent.currentAction
-                || node.agent.assignment
-                || node.agent.modelName
-                || 'Waiting for next action';
-
-              return (
-                <g
-                  style="cursor:pointer;"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    selectAgent(id);
-                  }}
-                >
+                <g style="cursor:pointer;" onClick={(e) => { e.stopPropagation(); selectAgent(id); }}>
                   <rect
-                    x={node.x}
-                    y={node.y}
-                    width={NODE_W}
-                    height={NODE_H}
-                    rx="10"
+                    x={pos().x} y={pos().y} width={NODE_W} height={NODE_H} rx="10"
                     fill="var(--bg-card)"
-                    stroke={isSelected() ? 'var(--accent)' : palette.dot}
-                    stroke-width={isSelected() ? 2 : 1}
+                    stroke={isSel() ? 'var(--accent)' : 'var(--border)'}
+                    stroke-width={isSel() ? 2 : 1}
                   />
-                  {tone === 'active' && (
-                    <rect
-                      x={node.x}
-                      y={node.y + 4}
-                      width="3"
-                      height={NODE_H - 8}
-                      rx="1.5"
-                      fill="var(--green)"
-                    />
-                  )}
-                  <circle
-                    cx={node.x + NODE_W - 14}
-                    cy={node.y + 14}
-                    r="4"
-                    fill={palette.dot}
-                  />
-                  <text
-                    x={node.x + 12}
-                    y={node.y + 18}
-                    font-size="12"
-                    font-weight="600"
-                    fill="var(--text-primary)"
-                    font-family="var(--font-sans)"
-                  >
-                    {truncate(node.agent.displayName, 20)}
+                  <circle cx={pos().x + 14} cy={pos().y + 16} r="4" fill={statusDot(agent)} />
+                  <text x={pos().x + 24} y={pos().y + 20} font-size="12" font-weight="600" fill="var(--text-primary)" font-family="var(--font-sans)">
+                    {agent.displayName.length > 22 ? agent.displayName.slice(0, 21) + '...' : agent.displayName}
                   </text>
-                  <text
-                    x={node.x + 12}
-                    y={node.y + 34}
-                    font-size="10"
-                    fill={palette.text}
-                    font-family="var(--font-sans)"
-                  >
-                    {statusText} · {node.agent.eventCount} events
+                  <text x={pos().x + 14} y={pos().y + 38} font-size="10" fill="var(--text-secondary)" font-family="var(--font-sans)">
+                    {agent.eventCount} events{agent.modelName ? ` · ${agent.modelName}` : ''}
                   </text>
-                  <text
-                    x={node.x + 12}
-                    y={node.y + 49}
-                    font-size="10"
-                    fill="var(--text-dim)"
-                    font-family="var(--font-sans)"
-                  >
-                    {truncate(reasonText || runtimeText, 24)}
-                  </text>
-                  <text
-                    x={node.x + 12}
-                    y={node.y + 64}
-                    font-size="10"
-                    fill="var(--text-dim)"
-                    font-family="var(--font-sans)"
-                  >
-                    {truncate(actionText, 26)}
+                  <text x={pos().x + 14} y={pos().y + 54} font-size="10" fill="var(--text-dim)" font-family="var(--font-sans)">
+                    {agent.isActive ? 'Active' : agent.statusTone === 'blocked' ? 'Blocked' : 'Idle'}
                   </text>
                 </g>
               );
@@ -533,25 +197,4 @@ export default function AgentGraph() {
       </Show>
     </div>
   );
-}
-
-function filterAgents(agents: AgentInfo[], mode: 'active' | 'inactive' | 'all'): AgentInfo[] {
-  if (mode === 'all') return agents;
-  if (mode === 'active') {
-    return agents.filter((agent) => agent.agentId === null || resolveTone(agent) === 'active');
-  }
-  return agents.filter((agent) => agent.agentId === null || resolveTone(agent) !== 'active');
-}
-
-function timeLabel(ms: number): string {
-  const diff = Date.now() - ms;
-  if (diff < 10_000) return 'just now';
-  if (diff < 60_000) return `${Math.floor(diff / 1000)}s ago`;
-  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
-  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
-  return `${Math.floor(diff / 86_400_000)}d ago`;
-}
-
-function truncate(text: string, max: number): string {
-  return text.length > max ? `${text.slice(0, max - 1)}…` : text;
 }

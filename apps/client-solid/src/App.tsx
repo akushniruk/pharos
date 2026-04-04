@@ -6,7 +6,6 @@ import {
   selectedProjectSnapshot,
   selectedProjectFocusSnapshot,
   selectedViewedChangesSnapshot,
-  selectedSession,
   selectedAgent,
   helpVisible,
   toggleHelpVisible,
@@ -14,14 +13,11 @@ import {
   initViewedScopeState,
   projects,
   selectProject,
-  selectSession,
   selectAgent,
-  acknowledgeSelectedScope,
   filteredEvents,
 } from './lib/store';
 import { connectWs, connectionState, hasStreamData } from './lib/ws';
 import { initTheme } from './lib/theme';
-import { timeAgo } from './lib/time';
 import Header from './components/Header';
 import Sidebar from './components/Sidebar';
 import EventStream from './components/EventStream';
@@ -66,14 +62,6 @@ export default function App() {
         {/* Zone 3 + 4: Main content */}
         <div class="app-main">
           <Show when={selectedProject()} fallback={<ProjectsHome />}>
-            <Show when={helpVisible()}>
-              <ReadingGuide mode="project" />
-            </Show>
-
-            <ProjectTimeline />
-
-            <RecentChangesStrip />
-
             {/* Toolbar: project breadcrumb + view mode toggle */}
             <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 16px;border-bottom:1px solid var(--border);flex-shrink:0;">
               <button
@@ -102,8 +90,10 @@ export default function App() {
               fallback={
                 <div style="display:flex;flex:1;overflow:hidden;">
                   <AgentGraph />
-                  <Show when={selectedAgent()}>
-                    <AgentDetail />
+                  <Show when={selectedAgent() && viewMode() === 'graph'}>
+                    <div style="width:300px;flex-shrink:0;border-left:1px solid var(--border);overflow-y:auto;">
+                      <AgentDetail />
+                    </div>
                   </Show>
                 </div>
               }
@@ -141,239 +131,6 @@ export default function App() {
   );
 }
 
-function ProjectTimeline() {
-  const project = createMemo(() => selectedProjectSnapshot());
-  const sessions = createMemo(() => project()?.sessions ?? []);
-  const focus = createMemo(() => selectedProjectFocusSnapshot());
-
-  return (
-    <Show when={project()}>
-      {(currentProject) => (
-        <div
-          style="display:flex;gap:12px;align-items:stretch;padding:10px 16px;border-bottom:1px solid var(--border);background:linear-gradient(180deg,rgba(255,255,255,0.02),transparent);flex-shrink:0;"
-        >
-          <div style="min-width:180px;max-width:240px;display:flex;flex-direction:column;justify-content:space-between;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--bg-card);">
-            <div style="display:flex;align-items:center;gap:8px;">
-              <Icon path={folder} style="width:14px;height:14px;color:var(--text-secondary);" />
-              <span style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);">
-                Project timeline
-              </span>
-            </div>
-            <div style="display:flex;flex-direction:column;gap:4px;min-width:0;">
-              <span style="font-size:13px;font-weight:600;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-                {currentProject().name}
-              </span>
-              <span style="font-size:11px;color:var(--text-dim);line-height:1.45;">
-                {currentProject().summary
-                  ?? `${currentProject().activeSessionCount} active · ${currentProject().sessions.length} sessions`}
-              </span>
-            </div>
-            <div style="display:flex;flex-wrap:wrap;gap:6px;">
-              <For each={currentProject().runtimeLabels.slice(0, 3)}>
-                {(runtime) => (
-                  <span
-                    style="font-size:10px;padding:2px 8px;border-radius:9999px;border:1px solid var(--border);background:var(--bg-elevated);color:var(--text-secondary);"
-                  >
-                    {runtime}
-                  </span>
-                )}
-              </For>
-            </div>
-          </div>
-
-          <Show when={focus()}>
-            {(currentFocus) => (
-              <div style="min-width:240px;max-width:360px;flex:0 1 340px;display:flex;flex-direction:column;gap:8px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.01));">
-                <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
-                  <div style="display:flex;flex-direction:column;gap:2px;min-width:0;">
-                    <span style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);">
-                      {currentFocus().scopeLabel}
-                    </span>
-                    <span style="font-size:11px;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-                      {currentFocus().breadcrumb}
-                    </span>
-                  </div>
-                  <span style="font-size:10px;padding:2px 8px;border-radius:9999px;border:1px solid var(--border);background:var(--bg-elevated);color:var(--text-secondary);flex-shrink:0;">
-                    {currentFocus().eventCount} events
-                  </span>
-                </div>
-                <span style="font-size:13px;font-weight:600;color:var(--text-primary);line-height:1.35;">
-                  {currentFocus().headline}
-                </span>
-                <span style="font-size:11px;color:var(--text-secondary);line-height:1.45;">
-                  {currentFocus().subheadline}
-                </span>
-                <div style="display:flex;flex-wrap:wrap;gap:6px;">
-                  <button
-                    onClick={() => {
-                      if (currentFocus().sessionId) {
-                        selectSession(currentFocus().sessionId);
-                      }
-                    }}
-                    style="font-size:10px;padding:4px 8px;border-radius:9999px;border:1px solid var(--border);background:var(--bg-elevated);color:var(--text-secondary);cursor:pointer;"
-                    title="Focus session"
-                  >
-                    Session {currentFocus().sessionLabel ?? 'n/a'}
-                  </button>
-                  <Show when={currentFocus().agentId}>
-                    <button
-                      onClick={() => {
-                        if (currentFocus().agentId) {
-                          selectAgent(currentFocus().agentId);
-                        }
-                      }}
-                      style="font-size:10px;padding:4px 8px;border-radius:9999px;border:1px solid var(--border);background:var(--bg-elevated);color:var(--text-secondary);cursor:pointer;"
-                      title="Focus agent"
-                    >
-                      Agent {currentFocus().agentLabel ?? 'n/a'}
-                    </button>
-                  </Show>
-                  <button
-                    onClick={() => selectSession(null)}
-                    style="font-size:10px;padding:4px 8px;border-radius:9999px;border:1px solid var(--border);background:var(--bg-card);color:var(--text-dim);cursor:pointer;"
-                    title="Clear session and agent focus"
-                  >
-                    Clear focus
-                  </button>
-                </div>
-              </div>
-            )}
-          </Show>
-
-          <div style="flex:1;overflow-x:auto;padding-bottom:2px;">
-            <div style="display:flex;gap:8px;min-width:max-content;">
-              <For each={sessions()}>
-                {(session) => {
-                  const isSelected = () => selectedSession() === session.sessionId;
-                  const title = () => session.label || session.sessionId;
-                  const primaryContext = () =>
-                    session.currentAction
-                    || session.summary
-                    || `${session.activeAgentCount}/${session.agents.length} agents`;
-                  const secondaryContext = () =>
-                    session.runtimeLabel
-                    ? `${session.runtimeLabel} runtime · ${timeAgo(session.lastEventAt)}`
-                    : `${timeAgo(session.lastEventAt)} · ${session.eventCount} events`;
-
-                  return (
-                    <button
-                      onClick={() => selectSession(session.sessionId)}
-                      style={[
-                        'display:flex;align-items:center;gap:8px;padding:4px 10px;border-radius:6px;border:1px solid var(--border);cursor:pointer;',
-                        'background:var(--bg-card);transition:background 0.15s,border-color 0.15s;white-space:nowrap;flex-shrink:0;',
-                        isSelected()
-                          ? 'border-color:var(--accent);background:var(--bg-elevated);'
-                          : '',
-                      ].join('')}
-                      onMouseEnter={(e) => {
-                        if (!isSelected()) (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg-card-hover)';
-                      }}
-                      onMouseLeave={(e) => {
-                        if (!isSelected()) (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg-card)';
-                      }}
-                    >
-                      <span
-                        style={[
-                          'font-size:9px;font-weight:600;padding:1px 6px;border-radius:9999px;flex-shrink:0;',
-                          session.isActive
-                            ? 'background:var(--green-dim);color:var(--green);'
-                            : 'background:var(--bg-elevated);color:var(--text-dim);',
-                        ].join('')}
-                      >
-                        {session.isActive ? 'Active' : 'Idle'}
-                      </span>
-                      <span style="font-size:11px;font-weight:600;color:var(--text-primary);font-family:var(--font-mono);">
-                        {session.sessionId.slice(0, 8)}
-                      </span>
-                      <span style="font-size:11px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;max-width:200px;">
-                        {primaryContext()}
-                      </span>
-                      <span style="font-size:10px;color:var(--text-dim);">
-                        {timeAgo(session.lastEventAt)}
-                      </span>
-                    </button>
-                  );
-                }}
-              </For>
-            </div>
-          </div>
-        </div>
-      )}
-    </Show>
-  );
-}
-
-function RecentChangesStrip() {
-  const recentChanges = createMemo(() => selectedViewedChangesSnapshot());
-
-  return (
-    <Show when={recentChanges()}>
-      {(currentChanges) => (
-        <div
-          style="margin:0 16px 10px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.01));flex-shrink:0;"
-        >
-          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:8px;">
-            <div style="min-width:0;">
-              <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);">
-                Since last viewed
-              </div>
-              <div style="font-size:13px;font-weight:600;color:var(--text-primary);line-height:1.35;">
-                {currentChanges().headline}
-              </div>
-              <div style="font-size:11px;color:var(--text-dim);line-height:1.45;">
-                {currentChanges().body}
-              </div>
-            </div>
-            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0;">
-              <span
-                style={[
-                  'font-size:10px;padding:2px 8px;border-radius:9999px;border:1px solid var(--border);',
-                  currentChanges().hasUnreadChanges
-                    ? 'background:var(--green-dim);color:var(--green);'
-                    : 'background:var(--bg-elevated);color:var(--text-secondary);',
-                ].join('')}
-              >
-                {currentChanges().hasUnreadChanges
-                  ? `${currentChanges().unreadCount} new`
-                  : 'Up to date'}
-              </span>
-              <button
-                onClick={acknowledgeSelectedScope}
-                style="font-size:10px;padding:4px 8px;border-radius:9999px;border:1px solid var(--border);background:var(--bg-card);color:var(--text-secondary);cursor:pointer;"
-              >
-                Mark viewed
-              </button>
-            </div>
-          </div>
-
-          <Show when={currentChanges().items.length > 0}>
-            <div style="display:flex;flex-wrap:wrap;gap:6px;">
-              <For each={currentChanges().items}>
-                {(item) => (
-                  <div
-                    style="display:flex;align-items:center;gap:6px;max-width:100%;padding:5px 8px;border-radius:9999px;border:1px solid var(--border);background:var(--bg-card);color:var(--text-secondary);font-size:10px;line-height:1.3;"
-                  >
-                    <span style="font-weight:600;color:var(--text-primary);">
-                      {item.label}
-                    </span>
-                    <Show when={item.detail}>
-                      <span style="color:var(--text-dim);">
-                        {item.detail}
-                      </span>
-                    </Show>
-                    <span style="color:var(--text-dim);white-space:nowrap;">
-                      {timeAgo(item.timestamp)}
-                    </span>
-                  </div>
-                )}
-              </For>
-            </div>
-          </Show>
-        </div>
-      )}
-    </Show>
-  );
-}
 
 /** Deduplicate agent badges by displayName, keeping the most active */
 function uniqueAgentBadges(p: Project): { name: string; isActive: boolean }[] {
