@@ -1,32 +1,10 @@
-import { createMemo } from 'solid-js';
 import { Icon } from 'solid-heroicons';
 import { sun, moon, questionMarkCircle } from 'solid-heroicons/solid';
-import { filteredEvents, helpVisible, toggleHelpVisible } from '../lib/store';
-import { createMetrics } from '../lib/metrics';
+import { helpVisible, toggleHelpVisible } from '../lib/store';
 import { theme, toggleTheme } from '../lib/theme';
 import PharosMark from './PharosMark';
 
 export default function Header() {
-  const metrics = createMetrics(filteredEvents);
-  const { agentCount, primaryModel, toolSuccessRate, eventsPerMinute, sessionDuration, healthStatus } = metrics;
-
-  const healthColor = createMemo(() => {
-    const s = healthStatus();
-    if (s === 'green') return 'var(--green)';
-    if (s === 'yellow') return 'var(--yellow)';
-    return 'var(--red)';
-  });
-
-  const successRateColor = createMemo(() => {
-    const rate = toolSuccessRate();
-    if (rate > 90) return 'var(--green)';
-    if (rate > 75) return 'var(--yellow)';
-    return 'var(--red)';
-  });
-
-  const statStyle = 'font-size:11px;font-weight:500;color:var(--text-secondary);';
-  const sepStyle = 'font-size:11px;color:var(--text-dim);margin:0 6px;';
-
   return (
     <header class="app-header">
       {/* Left: Brand */}
@@ -39,40 +17,7 @@ export default function Header() {
         </div>
       </div>
 
-      {/* Center: Live metrics strip */}
-      <div style="display:flex;align-items:center;gap:0;flex:1;justify-content:center;overflow:hidden;">
-        {/* Health dot */}
-        <span style={`width:6px;height:6px;border-radius:50%;background:${healthColor()};display:inline-block;margin-right:8px;flex-shrink:0;`} />
-
-        {/* Agent count */}
-        <span style={statStyle}>{agentCount()} {agentCount() === 1 ? 'agent' : 'agents'}</span>
-
-        <span style={sepStyle}>|</span>
-
-        {/* Primary model */}
-        <span style={statStyle + 'font-family:var(--font-mono);font-size:10px;'}>
-          {primaryModel() || '—'}
-        </span>
-
-        <span style={sepStyle}>|</span>
-
-        {/* Tool success rate */}
-        <span style={`font-size:11px;font-weight:500;color:${successRateColor()};`}>
-          {toolSuccessRate()}% ok
-        </span>
-
-        <span style={sepStyle}>|</span>
-
-        {/* Events per minute */}
-        <span style={statStyle}>{eventsPerMinute()} evt/min</span>
-
-        <span style={sepStyle}>|</span>
-
-        {/* Session duration */}
-        <span style={statStyle + 'font-family:var(--font-mono);font-size:10px;'}>
-          {sessionDuration()}
-        </span>
-      </div>
+      <div style="flex:1;" />
 
       {/* Right: Theme toggle */}
       <button

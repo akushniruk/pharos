@@ -36,6 +36,7 @@ pub enum CursorSessionEvent {
         agent_id: String,
         display_name: String,
         description: Option<String>,
+        parent_agent_id: Option<String>,
     },
 }
 
@@ -83,7 +84,8 @@ impl CursorProfile {
                     continue;
                 }
 
-                let (title, project_root) = parse_cursor_transcript_metadata(&transcript_path);
+                let (title, project_root) =
+                    parse_cursor_transcript_metadata(&transcript_path, project_hint.as_deref());
                 let updated_at_ms = modified_ms(&transcript_path);
                 sessions.push(NativeCursorSession {
                     native_session_id,
@@ -169,38 +171,48 @@ fn best_native_match<'a>(
     live_cursor_count: usize,
 ) -> Option<&'a NativeCursorSession> {
     let workspace = workspace_name(&session.cwd);
-    let mut best: Option<(&NativeCursorSession, i64)> = None;
+    let workspace_is_project_like = is_project_like_name(&workspace);
+    let mut best: Option<(&NativeCursorSession, i64, i64)> = None;
 
     for native_session in native_sessions {
         let mut score = 0_i64;
+        let mut correlation = 0_i64;
         if let Some(project_root) = &native_session.project_root {
             if project_root == &session.cwd {
                 score += 100_000;
+                correlation += 100_000;
             } else if workspace == workspace_name(project_root) {
                 score += 40_000;
+                correlation += 40_000;
             }
         }
         if let Some(project_hint) = &native_session.project_hint {
             if workspace == normalized_project_hint(project_hint) {
                 score += 10_000;
+                correlation += 10_000;
             }
         }
         if live_cursor_count == 1 {
             score += 1_000;
+            if !workspace_is_project_like && native_sessions.len() == 1 {
+                correlation += 1;
+            }
         }
 
         if best
             .as_ref()
-            .is_none_or(|(_, best_score)| score > *best_score)
+            .is_none_or(|(_, best_score, best_correlation)| {
+                score > *best_score || (score == *best_score && correlation > *best_correlation)
+            })
         {
-            best = Some((native_session, score));
+            best = Some((native_session, score, correlation));
         }
     }
 
-    let (native_session, score) = best?;
+    let (native_session, score, correlation) = best?;
     // Avoid mis-associating unrelated transcripts when there are multiple
     // live Cursor sessions and we have no workspace/project correlation.
-    if score <= 0 {
+    if score <= 0 || correlation <= 0 {
         return None;
     }
 
@@ -249,18 +261,30 @@ pub fn parse_cursor_jsonl_line(line: &str) -> Vec<CursorSessionEvent> {
                     .map(ToString::to_string)
                     .unwrap_or_else(|| format!("cursor-tool-{}", stable_hash(&format!("{line}:{index}"))));
                 let input = block.get("input").cloned().unwrap_or(Value::Null);
-                if tool_name.eq_ignore_ascii_case("Agent")
-                    || tool_name.eq_ignore_ascii_case("spawn_agent")
-                {
+                if is_subagent_tool_name(&tool_name) {
                     let description = input
                         .get("description")
                         .and_then(Value::as_str)
                         .or_else(|| input.get("message").and_then(Value::as_str))
                         .map(ToString::to_string);
+                    let display_name = input
+                        .get("display_name")
+                        .and_then(Value::as_str)
+                        .or_else(|| input.get("agent_name").and_then(Value::as_str))
+                        .or_else(|| input.get("agent_type").and_then(Value::as_str))
+                        .map(title_case)
+                        .unwrap_or_else(|| "Cursor Helper".to_string());
+                    let parent_agent_id = input
+                        .get("parent_agent_id")
+                        .and_then(Value::as_str)
+                        .or_else(|| input.get("parent_id").and_then(Value::as_str))
+                        .or_else(|| input.get("parentId").and_then(Value::as_str))
+                        .map(ToString::to_string);
                     events.push(CursorSessionEvent::SubagentStart {
                         agent_id: tool_use_id.clone(),
-                        display_name: "Cursor Agent".to_string(),
+                        display_name,
                         description,
+                        parent_agent_id,
                     });
                 }
                 events.push(CursorSessionEvent::ToolUse {
@@ -297,20 +321,26 @@ pub fn parse_cursor_jsonl_line(line: &str) -> Vec<CursorSessionEvent> {
     events
 }
 
-fn parse_cursor_transcript_metadata(path: &Path) -> (Option<String>, Option<String>) {
+fn parse_cursor_transcript_metadata(
+    path: &Path,
+    project_hint: Option<&str>,
+) -> (Option<String>, Option<String>) {
     let Ok(file) = std::fs::File::open(path) else {
         return (None, None);
     };
     let reader = std::io::BufReader::new(file);
     let mut title: Option<String> = None;
     let mut project_root: Option<String> = None;
+    let expected_workspace = project_hint
+        .map(normalized_project_hint)
+        .filter(|workspace| is_project_like_name(workspace));
     for line in reader.lines().map_while(Result::ok).take(200) {
         for event in parse_cursor_jsonl_line(&line) {
             if title.is_none() {
                 if let CursorSessionEvent::UserPrompt { text } = &event {
                     title = Some(text.chars().take(96).collect());
                     if project_root.is_none() {
-                        project_root = extract_project_root(text);
+                        project_root = extract_project_root(text, expected_workspace.as_deref());
                     }
                 }
             }
@@ -322,10 +352,16 @@ fn parse_cursor_transcript_metadata(path: &Path) -> (Option<String>, Option<Stri
     (title, project_root)
 }
 
-fn extract_project_root(text: &str) -> Option<String> {
+fn extract_project_root(text: &str, expected_workspace: Option<&str>) -> Option<String> {
     for token in text.split_whitespace() {
         let clean = token.trim_matches(|ch: char| ch == '"' || ch == '\'' || ch == ',' || ch == '.');
         if clean.starts_with('/') && clean.contains('/') {
+            if let Some(expected) = expected_workspace {
+                let candidate_workspace = workspace_name(clean);
+                if candidate_workspace != expected {
+                    continue;
+                }
+            }
             return Some(clean.to_string());
         }
     }
@@ -377,9 +413,15 @@ fn workspace_name(path: &str) -> String {
 }
 
 fn normalized_project_hint(project_hint: &str) -> String {
-    project_hint
-        .split('-')
-        .next_back()
+    let parts = project_hint.split('-').collect::<Vec<_>>();
+    if let Some(index) = parts.iter().position(|part| *part == "home_projects") {
+        if let Some(candidate) = parts.get(index + 1).copied() {
+            return candidate.to_string();
+        }
+    }
+    parts
+        .last()
+        .copied()
         .unwrap_or(project_hint)
         .to_string()
 }
@@ -423,4 +465,29 @@ fn stable_hash(body: &str) -> u64 {
     let mut hasher = DefaultHasher::new();
     hasher.write(body.as_bytes());
     hasher.finish()
+}
+
+fn title_case(value: &str) -> String {
+    let cleaned = value.trim().replace('_', " ");
+    let mut words = Vec::new();
+    for word in cleaned.split_whitespace() {
+        let mut chars = word.chars();
+        if let Some(first) = chars.next() {
+            words.push(format!(
+                "{}{}",
+                first.to_uppercase(),
+                chars.as_str().to_lowercase()
+            ));
+        }
+    }
+    if words.is_empty() {
+        "Cursor Helper".to_string()
+    } else {
+        words.join(" ")
+    }
+}
+
+fn is_subagent_tool_name(name: &str) -> bool {
+    let normalized = name.trim().to_ascii_lowercase();
+    matches!(normalized.as_str(), "agent" | "spawn_agent" | "subagent" | "task")
 }

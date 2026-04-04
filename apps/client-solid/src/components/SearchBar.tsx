@@ -22,7 +22,7 @@ export default function SearchBar() {
     invalid() ? 'var(--red)' : 'var(--border)';
 
   return (
-    <div style="position:relative;display:flex;align-items:center;">
+    <div style="position:relative;display:flex;align-items:center;flex:1;min-width:260px;">
       <Icon path={magnifyingGlass} style="width:14px;height:14px;position:absolute;left:8px;color:var(--text-dim);pointer-events:none;" />
       <input
         type="text"
@@ -32,7 +32,7 @@ export default function SearchBar() {
         style={[
           'height:32px;background:var(--bg-elevated);border-radius:6px;',
           'font-size:12px;padding:0 8px 0 28px;outline:none;color:var(--text-primary);',
-          'font-family:var(--font-sans);width:220px;',
+          'font-family:var(--font-sans);width:100%;',
           `border:1px solid ${borderColor()};`,
           'transition:border-color 0.15s;',
         ].join('')}

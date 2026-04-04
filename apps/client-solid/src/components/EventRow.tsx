@@ -1,7 +1,17 @@
-import { Show, createSignal } from 'solid-js';
+import { For, Show, createSignal } from 'solid-js';
 import type { HookEvent } from '../lib/types';
 import { formatTime, timeAgo } from '../lib/time';
-import { describeEvent, describeEventDetail, formatRuntimeLabel } from '../lib/describe';
+import {
+  describeEvent,
+  describeEventDetail,
+  formatPayloadScalar,
+  formatAcquisitionModeLabel,
+  formatRuntimeLabel,
+  isPayloadContainer,
+  mergeSimpleRowSummary,
+  simpleEventKindLabel,
+  sortedPayloadEntries,
+} from '../lib/describe';
 import { getEventTypeLabel, getEventTypeBgColor, getEventTypeTextColor } from '../lib/colors';
 
 interface Props {
@@ -19,6 +29,10 @@ function resolveAgentName(e: HookEvent): string {
 function resolveRuntimeDisplay(e: HookEvent): string | undefined {
   const runtimeCandidate = e.payload?.runtime_label || e.payload?.runtime_source;
   return formatRuntimeLabel(runtimeCandidate);
+}
+
+function resolveAcquisitionModeDisplay(e: HookEvent): string | undefined {
+  return formatAcquisitionModeLabel(e.payload?.acquisition_mode);
 }
 
 function resolveProjectName(e: HookEvent): string {
@@ -49,76 +63,106 @@ function resolveSummaryKind(e: HookEvent): string | undefined {
 
 export default function EventRow(props: Props) {
   const [expanded, setExpanded] = createSignal(false);
+  const [payloadView, setPayloadView] = createSignal<'parsed' | 'raw'>('parsed');
   const e = () => props.event;
   const isTool = () => e().hook_event_type.includes('Tool');
   const runtimeDisplay = () => resolveRuntimeDisplay(e());
+  const acquisitionModeDisplay = () => resolveAcquisitionModeDisplay(e());
   const description = () => describeEvent(e());
   const descriptionDetail = () => {
     const detail = describeEventDetail(e());
     return detail && detail !== description() ? detail : undefined;
   };
+  const simpleSummary = () => mergeSimpleRowSummary(e(), 160);
+  const payloadJson = () => JSON.stringify(e().payload, null, 2);
+  const payloadEntries = () => sortedPayloadEntries((e().payload as Record<string, unknown>) ?? {});
 
   const copyJson = (ev: MouseEvent) => {
     ev.stopPropagation();
-    navigator.clipboard.writeText(JSON.stringify(e().payload, null, 2));
+    navigator.clipboard.writeText(payloadJson());
   };
 
   return (
     <div
-      style="border-bottom:1px solid rgba(255,255,255,0.04);"
+      class="event-row-shell"
       onClick={() => props.detailed && setExpanded(x => !x)}
+      role={props.detailed ? 'button' : undefined}
+      tabindex={props.detailed ? 0 : undefined}
+      aria-expanded={props.detailed ? expanded() : undefined}
+      aria-label={props.detailed ? `Toggle details for ${description()}` : undefined}
+      onKeyDown={(ev) => {
+        if (!props.detailed) return;
+        if (ev.key === 'Enter' || ev.key === ' ') {
+          ev.preventDefault();
+          setExpanded((x) => !x);
+        }
+      }}
     >
       {/* Always-visible row */}
       <div
-        style={[
-          'display:flex;flex-direction:column;gap:4px;padding:8px 16px;',
-          props.detailed ? 'cursor:pointer;' : '',
-        ].join('')}
-        onMouseEnter={(ev) => { (ev.currentTarget as HTMLElement).style.background = 'var(--bg-card-hover)'; }}
-        onMouseLeave={(ev) => { (ev.currentTarget as HTMLElement).style.background = 'transparent'; }}
+        class="event-row-body"
+        classList={{ 'event-row-body-clickable': props.detailed }}
       >
-        <div style="display:flex;align-items:center;gap:8px;min-width:0;">
-          <span style="font-size:10px;font-family:var(--font-mono);color:var(--text-dim);min-width:56px;flex-shrink:0;">
+        <div class="event-row-meta">
+          <span class="event-row-time">
             {formatTime(e().timestamp)}
           </span>
-          <span style="font-size:11px;font-weight:600;color:var(--text-primary);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:0;">
+          <span class="event-row-agent" title={resolveAgentName(e())}>
             {resolveAgentName(e())}
           </span>
           <Show when={runtimeDisplay()}>
-            <span style="font-size:9px;color:var(--text-dim);flex-shrink:0;max-width:64px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+            <span class="event-row-runtime">
               {runtimeDisplay()}
             </span>
           </Show>
-          <span style={[
-            'font-size:10px;font-weight:600;text-transform:uppercase;padding:1px 6px;border-radius:3px;flex-shrink:0;',
-            `background:${getEventTypeBgColor(e().hook_event_type)};`,
-            `color:${getEventTypeTextColor(e().hook_event_type)};`,
-          ].join('')}>
-            {getEventTypeLabel(e().hook_event_type)}
-          </span>
-          <Show when={isTool()}>
-            <span style="font-size:11px;color:var(--accent);min-width:40px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+          <Show when={acquisitionModeDisplay()}>
+            <span class="event-row-mode" title="Acquisition mode">
+              {acquisitionModeDisplay()}
+            </span>
+          </Show>
+          <Show when={props.detailed}>
+            <span
+              class="event-row-type"
+              style={{
+                background: getEventTypeBgColor(e().hook_event_type),
+                color: getEventTypeTextColor(e().hook_event_type),
+              }}
+            >
+              {getEventTypeLabel(e().hook_event_type)}
+            </span>
+          </Show>
+          <Show when={props.detailed && isTool()}>
+            <span class="event-row-tool" title={e().payload?.tool_name}>
               {e().payload?.tool_name}
             </span>
           </Show>
         </div>
-        <div style="display:flex;align-items:flex-start;gap:8px;min-width:0;padding-left:64px;">
-          <div style="min-width:0;flex:1;display:flex;flex-direction:column;gap:2px;">
+        <div class="event-row-content">
+          <div class="event-row-copy">
             <Show when={resolveSummaryKind(e())}>
-              <span style="font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--text-dim);">
-                {resolveSummaryKind(e())}
-              </span>
+              <Show
+                when={props.detailed}
+                fallback={
+                  <span class="event-row-kind">
+                    {simpleEventKindLabel(e().hook_event_type)}
+                  </span>
+                }
+              >
+                <span class="event-row-kind">
+                  {resolveSummaryKind(e())}
+                </span>
+              </Show>
             </Show>
-            <span style="font-size:11px;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-              {description()}
+            <span class="event-row-summary" title={props.detailed ? description() : simpleSummary()}>
+              {props.detailed ? description() : simpleSummary()}
             </span>
-            <Show when={descriptionDetail()}>
-              <span style="font-size:10px;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+            <Show when={props.detailed && descriptionDetail()}>
+              <span class="event-row-detail" title={descriptionDetail()}>
                 {descriptionDetail()}
               </span>
             </Show>
           </div>
-          <span style="font-size:10px;color:var(--text-dim);flex-shrink:0;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+          <span class="event-row-context" title={[resolveProjectName(e()), timeAgo(e().timestamp)].join(' · ')}>
             {[resolveProjectName(e()), timeAgo(e().timestamp)].join(' · ')}
           </span>
         </div>
@@ -126,26 +170,113 @@ export default function EventRow(props: Props) {
 
       {/* Expanded payload section */}
       <Show when={props.detailed && expanded()}>
-        <div style="padding:0 16px 10px 16px;position:relative;">
-          <button
-            onClick={copyJson}
-            style={[
-              'position:absolute;top:4px;right:20px;font-size:10px;padding:2px 8px;border-radius:3px;',
-              'background:var(--bg-elevated);border:1px solid var(--border);color:var(--text-secondary);',
-              'cursor:pointer;',
-            ].join('')}
+        <div class="event-row-expanded" onClick={(ev) => ev.stopPropagation()}>
+          <div class="event-row-expanded-header">
+            <div class="event-row-payload-tabs" role="tablist" aria-label="Payload view mode">
+              <button
+                class="event-row-payload-tab"
+                classList={{ 'is-active': payloadView() === 'parsed' }}
+                role="tab"
+                type="button"
+                aria-selected={payloadView() === 'parsed'}
+                onClick={() => setPayloadView('parsed')}
+              >
+                Parsed
+              </button>
+              <button
+                class="event-row-payload-tab"
+                classList={{ 'is-active': payloadView() === 'raw' }}
+                role="tab"
+                type="button"
+                aria-selected={payloadView() === 'raw'}
+                onClick={() => setPayloadView('raw')}
+              >
+                Raw JSON
+              </button>
+            </div>
+            <button
+              onClick={copyJson}
+              type="button"
+              aria-label="Copy raw event payload as JSON"
+              class="event-row-copy-json-btn"
+            >
+              Copy JSON
+            </button>
+          </div>
+
+          <Show
+            when={payloadView() === 'parsed'}
+            fallback={
+              <pre class="event-row-raw-json">
+                {payloadJson()}
+              </pre>
+            }
           >
-            Copy
-          </button>
-          <pre style={[
-            'font-family:var(--font-mono);font-size:11px;background:var(--bg-elevated);',
-            'padding:12px;border-radius:4px;overflow-x:auto;max-height:300px;',
-            'color:var(--text-primary);margin:0;white-space:pre-wrap;word-break:break-all;',
-          ].join('')}>
-            {JSON.stringify(e().payload, null, 2)}
-          </pre>
+            <Show
+              when={payloadEntries().length > 0}
+              fallback={<p class="event-row-empty-payload">No payload fields for this event.</p>}
+            >
+              <div class="event-row-parsed-payload">
+                <For each={payloadEntries()}>
+                  {(entry) => (
+                    <PayloadField label={entry[0]} value={entry[1]} depth={0} />
+                  )}
+                </For>
+              </div>
+            </Show>
+          </Show>
         </div>
       </Show>
     </div>
+  );
+}
+
+interface PayloadFieldProps {
+  label: string;
+  value: unknown;
+  depth: number;
+}
+
+function PayloadField(props: PayloadFieldProps) {
+  const nestedEntries = () => {
+    if (Array.isArray(props.value)) {
+      return props.value.map((item, index) => [`[${index}]`, item] as const);
+    }
+    if (isPayloadContainer(props.value) && !Array.isArray(props.value)) {
+      return sortedPayloadEntries(props.value as Record<string, unknown>);
+    }
+    return [];
+  };
+  const hasChildren = () => nestedEntries().length > 0;
+  const typeLabel = () => {
+    if (Array.isArray(props.value)) return `array(${nestedEntries().length})`;
+    if (isPayloadContainer(props.value)) return `object(${nestedEntries().length})`;
+    return typeof props.value;
+  };
+
+  return (
+    <Show
+      when={hasChildren()}
+      fallback={
+        <div class="event-row-payload-leaf">
+          <span class="event-row-payload-key">{props.label}</span>
+          <span class="event-row-payload-value">{formatPayloadScalar(props.value)}</span>
+        </div>
+      }
+    >
+      <details class="event-row-payload-node" open={props.depth <= 0}>
+        <summary class="event-row-payload-summary">
+          <span class="event-row-payload-key">{props.label}</span>
+          <span class="event-row-payload-type">{typeLabel()}</span>
+        </summary>
+        <div class="event-row-payload-children">
+          <For each={nestedEntries()}>
+            {(entry) => (
+              <PayloadField label={entry[0]} value={entry[1]} depth={props.depth + 1} />
+            )}
+          </For>
+        </div>
+      </details>
+    </Show>
   );
 }

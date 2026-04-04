@@ -3,8 +3,6 @@ import { Icon } from 'solid-heroicons';
 import {
   chevronLeft,
   chevronRight,
-  folder,
-  folderOpen,
   bolt,
   clock,
 } from 'solid-heroicons/solid';
@@ -45,8 +43,93 @@ function resolveProjectTone(project: ReturnType<typeof projects>[number]): Activ
   return 'done';
 }
 
+function friendlySessionLabel(label?: string | null): string {
+  if (!label) return 'Session';
+  const cleaned = label.replace(/^<[^>]+>\s*/i, '').trim();
+  if (!cleaned) return 'Current request';
+  if (cleaned.toLowerCase() === 'pending') return 'Current request';
+  return cleaned;
+}
+
+function friendlySummary(text?: string | null): string {
+  if (!text) return 'Working on your request';
+  return text
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/^Responded:\s*/i, 'Updated: ')
+    .replace(/^Prompted:\s*/i, '')
+    .replace(/^local-command-stdout\s*/i, '')
+    .replace(/^Using a tool$/i, 'Working on your request')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function friendlyProjectSummary(text?: string | null): string | undefined {
+  if (!text) return undefined;
+  const cleaned = text
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/^Responded:\s*/i, '')
+    .replace(/^Prompted:\s*/i, '')
+    .replace(/^Updated:\s*/i, '')
+    .replace(/^local-command-stdout\s*/i, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return cleaned || undefined;
+}
+
+const DEFAULT_PROJECT_LOGO_STORAGE_KEY = 'pharos.default-project-logo';
+
+function projectFallbackIconDataUri(_projectName: string): string {
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'>
+<style>
+  .bg { fill: #F8FAFC; stroke: #CBD5E1; }
+  .core { fill: #E2E8F0; stroke: #94A3B8; }
+  .dot { fill: #334155; }
+  @media (prefers-color-scheme: dark) {
+    .bg { fill: #0F172A; stroke: #334155; }
+    .core { fill: #1E293B; stroke: #94A3B8; }
+    .dot { fill: #CBD5E1; }
+  }
+</style>
+<rect class='bg' x='1' y='1' width='22' height='22' rx='7'/>
+<rect class='core' x='6' y='6' width='12' height='12' rx='3.7' stroke-width='1.1'/>
+<circle class='dot' cx='12' cy='12' r='2.05'/>
+</svg>`;
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+}
+
+function normalizeLogoUrl(value?: string | null): string | undefined {
+  if (!value) return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('/')) {
+    return trimmed;
+  }
+  return undefined;
+}
+
+function resolveProjectLogo(project: ReturnType<typeof projects>[number]): string {
+  const custom = typeof localStorage === 'undefined'
+    ? undefined
+    : normalizeLogoUrl(localStorage.getItem(DEFAULT_PROJECT_LOGO_STORAGE_KEY));
+  return project.iconUrl || custom || projectFallbackIconDataUri(project.name);
+}
+
+function projectInitial(name: string): string {
+  const trimmed = name.trim();
+  if (!trimmed) return '?';
+  const first = trimmed.match(/[A-Za-z0-9]/)?.[0] ?? trimmed[0];
+  return first.toUpperCase();
+}
+
+function projectCollapsedTitle(project: ReturnType<typeof projects>[number]): string {
+  const state = project.isActive ? 'Active' : 'Idle';
+  return `${project.name} · ${state} · ${project.sessions.length} sessions`;
+}
+
 export default function Sidebar(props: SidebarProps) {
   const [activityFilter, setActivityFilter] = createSignal<'all' | 'active'>('all');
+  const [expandedProject, setExpandedProject] = createSignal<string | null>(null);
+  const [expandedSession, setExpandedSession] = createSignal<string | null>(null);
 
   const selectedProjectSessions = createMemo(() => {
     const proj = selectedProject();
@@ -93,7 +176,7 @@ export default function Sidebar(props: SidebarProps) {
     <Show
       when={!props.collapsed}
       fallback={
-        /* Collapsed: 40px bar with dots + toggle */
+        /* Collapsed: 40px bar with project icons + toggle */
         <div
           style="width:40px;flex-shrink:0;background:var(--bg-primary);border-right:1px solid var(--border);display:flex;flex-direction:column;align-items:center;padding-top:8px;gap:6px;"
         >
@@ -106,13 +189,30 @@ export default function Sidebar(props: SidebarProps) {
           </button>
           <For each={visibleProjects()}>
             {(p) => {
-              const palette = statusPalette(resolveProjectTone(p));
+              const isSelected = () => selectedProject() === p.name;
+              const tone = () => resolveProjectTone(p);
+              const palette = () => statusPalette(tone());
               return (
-                <span
-                  title={p.name}
-                  style={`width:6px;height:6px;border-radius:50%;display:block;flex-shrink:0;background:${palette.dot};${p.isActive ? 'box-shadow:0 0 6px var(--green);' : ''}cursor:pointer;`}
+                <button
+                  title={projectCollapsedTitle(p)}
+                  aria-label={`Open project ${p.name}`}
+                  style={[
+                    'background:none;cursor:pointer;padding:0;line-height:1;display:flex;align-items:center;justify-content:center;position:relative;',
+                    'width:24px;height:24px;border-radius:7px;border:1px solid var(--border);font-size:10px;font-weight:700;',
+                    `color:${isSelected() ? 'var(--text-primary)' : 'var(--text-secondary)'};`,
+                    `background:${isSelected() ? 'var(--bg-elevated)' : 'transparent'};`,
+                    `border-color:${isSelected() ? 'var(--accent)' : 'var(--border)'};`,
+                  ].join('')}
                   onClick={() => selectProject(p.name)}
-                />
+                >
+                  <span>{projectInitial(p.name)}</span>
+                  <span
+                    style={[
+                      'position:absolute;width:5px;height:5px;border-radius:9999px;transform:translate(8px,8px);',
+                      `background:${palette().dot};`,
+                    ].join('')}
+                  />
+                </button>
               );
             }}
           </For>
@@ -153,7 +253,7 @@ export default function Sidebar(props: SidebarProps) {
               const projectTone = () => resolveProjectTone(p);
               const projectPalette = () => statusPalette(projectTone());
               const primarySummary = () =>
-                p.summary
+                friendlyProjectSummary(p.summary)
                 || (p.isActive
                   ? `${p.activeSessionCount} session${p.activeSessionCount === 1 ? '' : 's'} active`
                   : `${p.sessions.length} session${p.sessions.length === 1 ? '' : 's'}`);
@@ -166,6 +266,7 @@ export default function Sidebar(props: SidebarProps) {
                 ]
                   .filter(Boolean)
                   .join(' · ') || undefined;
+              const isProjectExpanded = () => expandedProject() === p.name;
               return (
                 <div>
                   {/* Project row */}
@@ -184,22 +285,35 @@ export default function Sidebar(props: SidebarProps) {
                       if (!isSelected()) (e.currentTarget as HTMLDivElement).style.background = 'transparent';
                     }}
                     >
-                    <Icon
-                      path={isSelected() ? folderOpen : folder}
-                      style="width:13px;height:13px;color:var(--text-secondary);flex-shrink:0;"
-                    />
-                    {/* Active dot */}
-                    <span style={`width:6px;height:6px;border-radius:50%;flex-shrink:0;background:${projectPalette().dot};${projectTone() === 'active' ? 'box-shadow:0 0 6px var(--green);' : ''}`} />
+                    <div style="width:16px;height:16px;border-radius:5px;border:1px solid var(--border);display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0;">
+                      <img
+                        src={resolveProjectLogo(p)}
+                        alt=""
+                        style="width:100%;height:100%;object-fit:cover;"
+                      />
+                    </div>
                     {/* Name */}
                     <div style="display:flex;flex-direction:column;min-width:0;flex:1;gap:2px;">
                       <span style="font-size:12px;font-weight:500;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
                         {p.name}
                       </span>
-                      <span style="font-size:10px;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-                        {primarySummary().length > 40 ? primarySummary().slice(0, 40) + '…' : primarySummary()}
+                      <span
+                        title={primarySummary()}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setExpandedProject(isProjectExpanded() ? null : p.name);
+                        }}
+                        style={[
+                          'font-size:10px;color:var(--text-primary);cursor:pointer;',
+                          isProjectExpanded()
+                            ? 'white-space:normal;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;'
+                            : 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;',
+                        ].join('')}
+                      >
+                        {primarySummary()}
                       </span>
                       <Show when={secondarySummary()}>
-                        <span style="font-size:9px;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                        <span title={secondarySummary()} style="font-size:9px;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
                           {secondarySummary()}
                         </span>
                       </Show>
@@ -253,7 +367,6 @@ export default function Sidebar(props: SidebarProps) {
               {(s) => {
                 const sessionId = () => (s.sessionId && s.sessionId.trim() ? s.sessionId : null);
                 const isSelected = () => selectedSession() === sessionId();
-                const shortId = () => sessionId()?.slice(0, 8) ?? 'pending';
                 const statusTone = () => s.statusTone || (s.isActive ? 'active' : s.eventCount > 0 ? 'idle' : 'done');
                 const statusPaletteForSession = () => statusPalette(statusTone());
                 const statusLabel = () =>
@@ -276,12 +389,15 @@ export default function Sidebar(props: SidebarProps) {
                   [
                     s.summaryDetail,
                     s.currentActionDetail,
-                    s.runtimeLabel ? `${s.runtimeLabel} runtime` : undefined,
-                    `${s.activeAgentCount}/${s.agents.length} agents`,
-                    shortId(),
+                    s.runtimeLabel ? `Using ${s.runtimeLabel}` : undefined,
+                    s.isActive
+                      ? `${s.activeAgentCount} helper${s.activeAgentCount === 1 ? '' : 's'} active`
+                      : undefined,
+                    timeAgo(s.lastEventAt),
                   ]
                     .filter(Boolean)
                     .join(' · ') || undefined;
+                const isSessionExpanded = () => expandedSession() === (sessionId() || s.label);
                 return (
                   <div
                     onClick={() => {
@@ -301,17 +417,31 @@ export default function Sidebar(props: SidebarProps) {
                     onMouseLeave={(e) => {
                       if (!isSelected()) (e.currentTarget as HTMLDivElement).style.background = 'transparent';
                     }}
+                    aria-label={`Open session ${friendlySessionLabel(s.label)}`}
                   >
                     <Icon path={statusIcon()} style="width:12px;height:12px;color:var(--text-secondary);flex-shrink:0;" />
                     <div style="min-width:0;flex:1;display:flex;flex-direction:column;gap:2px;">
                       <span style="font-size:11px;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-                        {s.label}
+                        {friendlySessionLabel(s.label)}
                       </span>
-                      <span style="font-size:10px;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-                        {primarySummary().length > 40 ? primarySummary().slice(0, 40) + '…' : primarySummary()}
+                      <span
+                        title={friendlySummary(primarySummary())}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          const key = sessionId() || s.label;
+                          setExpandedSession(isSessionExpanded() ? null : key);
+                        }}
+                        style={[
+                          'font-size:10px;color:var(--text-primary);cursor:pointer;',
+                          isSessionExpanded()
+                            ? 'white-space:normal;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;'
+                            : 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;',
+                        ].join('')}
+                      >
+                        {friendlySummary(primarySummary())}
                       </span>
                       <Show when={secondarySummary()}>
-                        <span style="font-size:9px;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                        <span title={secondarySummary()} style="font-size:9px;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
                           {secondarySummary()}
                         </span>
                       </Show>

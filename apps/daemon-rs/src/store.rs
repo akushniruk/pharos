@@ -9,7 +9,8 @@ use std::collections::BTreeSet;
 use std::collections::HashMap;
 
 use crate::model::{
-    AgentRegistryEntry, EventEnvelope, EventKind, FilterOptions, LegacyHookEvent, SessionSummary,
+    AcquisitionMode, AgentRegistryEntry, EventEnvelope, EventKind, FilterOptions, LegacyHookEvent,
+    SessionSummary,
 };
 
 #[derive(Debug, Error)]
@@ -455,6 +456,14 @@ pub fn legacy_event_from_envelope(event: &EventEnvelope) -> Result<LegacyHookEve
         object
             .entry("project_name".to_string())
             .or_insert_with(|| serde_json::Value::String(source_app.clone()));
+        object.insert(
+            "acquisition_mode".to_string(),
+            serde_json::Value::String(match event.acquisition_mode {
+                AcquisitionMode::Managed => "managed",
+                AcquisitionMode::Observed => "observed",
+            }
+            .to_string()),
+        );
     }
 
     Ok(LegacyHookEvent {

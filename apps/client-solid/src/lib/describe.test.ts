@@ -1,7 +1,38 @@
 import { describe, expect, it } from 'vitest';
 
-import { describeEvent, describeEventDetail, formatRuntimeLabel } from './describe';
+import {
+  describeEvent,
+  describeEventDetail,
+  formatAcquisitionModeLabel,
+  formatRuntimeLabel,
+} from './describe';
 import type { HookEvent } from './types';
+
+describe('formatAcquisitionModeLabel', () => {
+  it('returns undefined for missing, empty, or unknown values', () => {
+    expect(formatAcquisitionModeLabel(undefined)).toBeUndefined();
+    expect(formatAcquisitionModeLabel(null)).toBeUndefined();
+    expect(formatAcquisitionModeLabel('')).toBeUndefined();
+    expect(formatAcquisitionModeLabel('   ')).toBeUndefined();
+    expect(formatAcquisitionModeLabel('unknown')).toBeUndefined();
+    expect(formatAcquisitionModeLabel('UNKNOWN')).toBeUndefined();
+  });
+
+  it('normalizes observed and managed labels', () => {
+    expect(formatAcquisitionModeLabel('observed')).toBe('Observed');
+    expect(formatAcquisitionModeLabel('OBSERVED')).toBe('Observed');
+    expect(formatAcquisitionModeLabel('observed-mode')).toBe('Observed');
+    expect(formatAcquisitionModeLabel('managed')).toBe('Managed');
+    expect(formatAcquisitionModeLabel('MANAGED')).toBe('Managed');
+    expect(formatAcquisitionModeLabel('managed_trust')).toBe('Managed');
+  });
+
+  it('returns undefined for unrecognized modes', () => {
+    expect(formatAcquisitionModeLabel('hybrid')).toBeUndefined();
+    expect(formatAcquisitionModeLabel('inferred')).toBeUndefined();
+    expect(formatAcquisitionModeLabel('un-known')).toBeUndefined();
+  });
+});
 
 describe('describeEvent', () => {
   it('describes command execution in plain language and keeps the command as detail', () => {
@@ -19,7 +50,7 @@ describe('describeEvent', () => {
       timestamp: 1,
     };
 
-    expect(describeEvent(event)).toBe('Running a command in client-solid');
+    expect(describeEvent(event)).toBe('Running a task in client-solid');
     expect(describeEventDetail(event)).toBe('pnpm build');
   });
 
@@ -39,7 +70,7 @@ describe('describeEvent', () => {
       timestamp: 1,
     };
 
-    expect(describeEvent(event)).toBe('Running a command in client-solid');
+    expect(describeEvent(event)).toBe('Running a task in client-solid');
     expect(describeEventDetail(event)).toBe('Claude runtime · pnpm build');
   });
 
@@ -72,8 +103,8 @@ describe('describeEvent', () => {
       timestamp: 1,
     };
 
-    expect(describeEvent(event)).toBe('Shared an update');
-    expect(describeEventDetail(event)).toBe('Updated the sidebar so the summary line now leads with plain language.');
+    expect(describeEvent(event)).toBe('Updated the sidebar so the summary line now leads with plain language.');
+    expect(describeEventDetail(event)).toBeUndefined();
   });
 
   it('adds runtime context to assistant responses when available', () => {
@@ -88,10 +119,8 @@ describe('describeEvent', () => {
       timestamp: 1,
     };
 
-    expect(describeEvent(event)).toBe('Shared an update');
-    expect(describeEventDetail(event)).toBe(
-      'Gemini runtime · Updated the sidebar so the summary line now leads with plain language.',
-    );
+    expect(describeEvent(event)).toBe('Updated the sidebar so the summary line now leads with plain language.');
+    expect(describeEventDetail(event)).toBe('Gemini runtime');
   });
 
   it('formats cursor runtime labels consistently', () => {
@@ -106,8 +135,8 @@ describe('describeEvent', () => {
       timestamp: 1,
     };
 
-    expect(describeEvent(event)).toBe('Shared an update');
-    expect(describeEventDetail(event)).toBe('Cursor runtime · Streaming transcript updates');
+    expect(describeEvent(event)).toBe('Streaming transcript updates');
+    expect(describeEventDetail(event)).toBe('Cursor runtime');
   });
 
   it('normalizes cursor runtime aliases to a single display label', () => {
@@ -133,5 +162,21 @@ describe('describeEvent', () => {
 
     expect(describeEvent(event)).toBe('Handing off work to another agent');
     expect(describeEventDetail(event)).toBe('Verify the build output and report any regressions.');
+  });
+
+  it('describes TodoWrite tool use in human-readable language', () => {
+    const event: HookEvent = {
+      source_app: 'demo',
+      session_id: 'session-1',
+      hook_event_type: 'PreToolUse',
+      payload: {
+        tool_name: 'TodoWrite',
+        runtime_label: 'cursor',
+      },
+      timestamp: 1,
+    };
+
+    expect(describeEvent(event)).toBe('Updating the plan');
+    expect(describeEventDetail(event)).toBe('Cursor runtime');
   });
 });

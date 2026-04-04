@@ -16,6 +16,21 @@ function statusDot(agent: AgentInfo): StatusColor {
   return 'var(--text-dim)';
 }
 
+function agentLabel(agent: AgentInfo): string {
+  const name = agent.displayName?.trim();
+  if (name && name.toLowerCase() !== 'unknown') {
+    return name;
+  }
+  const task = agent.assignment || agent.currentAction || agent.nextAction;
+  if (task) {
+    return task.length > 32 ? `${task.slice(0, 31)}…` : task;
+  }
+  if (agent.agentType && agent.agentType !== 'main') {
+    return agent.agentType.charAt(0).toUpperCase() + agent.agentType.slice(1);
+  }
+  return 'Helper agent';
+}
+
 export default function AgentGraph() {
   const [zoom, setZoom] = createSignal(1);
   const [pan, setPan] = createSignal({ x: 0, y: 0 });
@@ -40,8 +55,9 @@ export default function AgentGraph() {
       if (a.parentId && a.agentId) parentMap.set(a.agentId, a.parentId);
     }
     for (const e of evts) {
-      if (e.hook_event_type === 'SubagentStart' && e.agent_id && e.payload?.parent_id) {
-        parentMap.set(e.agent_id, e.payload.parent_id);
+      if (e.hook_event_type === 'SubagentStart' && e.agent_id) {
+        const parent = e.payload?.parent_agent_id || e.payload?.parent_id || e.payload?.parentId || 'main';
+        parentMap.set(e.agent_id, parent);
       }
     }
     return parentMap;
@@ -151,7 +167,9 @@ export default function AgentGraph() {
           {/* Edges */}
           <For each={children()}>
             {(child) => {
-              const parentKey = child.parentId === 'main' ? '__root__' : child.parentId!;
+              const inferredParent = child.agentId ? edges().get(child.agentId) : undefined;
+              const parentSource = child.parentId || inferredParent || 'main';
+              const parentKey = parentSource === 'main' ? '__root__' : parentSource;
               const parentPos = () => layout().rootPositions.get(parentKey) ?? layout().childPositions.get(parentKey);
               const childPos = () => nodePos(child);
               return (
@@ -183,7 +201,7 @@ export default function AgentGraph() {
                   />
                   <circle cx={pos().x + 14} cy={pos().y + 16} r="4" fill={statusDot(agent)} />
                   <text x={pos().x + 24} y={pos().y + 20} font-size="12" font-weight="600" fill="var(--text-primary)" font-family="var(--font-sans)">
-                    {agent.displayName.length > 22 ? agent.displayName.slice(0, 21) + '...' : agent.displayName}
+                    {agentLabel(agent).length > 22 ? agentLabel(agent).slice(0, 21) + '...' : agentLabel(agent)}
                   </text>
                   <text x={pos().x + 14} y={pos().y + 38} font-size="10" fill="var(--text-secondary)" font-family="var(--font-sans)">
                     {agent.eventCount} events{agent.modelName ? ` · ${agent.modelName}` : ''}

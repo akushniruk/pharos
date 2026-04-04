@@ -108,6 +108,7 @@ interface RegistryInfo {
   last_seen_at: number;
   display_name: string;
   agent_id?: string;
+  parent_id?: string;
 }
 
 const registryBySessionAgent = createMemo(() => {
@@ -119,6 +120,7 @@ const registryBySessionAgent = createMemo(() => {
       last_seen_at: entry.last_seen_at,
       display_name: entry.display_name,
       agent_id: entry.agent_id,
+      parent_id: entry.parent_id,
     });
   }
   return map;
@@ -188,10 +190,13 @@ function enrichProjectsWithActivityState(
         const displayName = registryName
           || (agent.displayName !== 'Agent' ? agent.displayName : undefined)
           || agent.displayName;
+        const parentId = agent.parentId
+          || resolveRegistryParentId(registry, session.sessionId, agent.agentId);
 
         return {
           ...agent,
           displayName,
+          parentId,
           statusLabel: status.label,
           statusTone: status.tone,
           statusDetail: status.detail,
@@ -282,6 +287,7 @@ export const projects = createMemo((): Project[] => {
         const nextActionDetail = resolveNextActionDetail(aevts);
         const agentIsActive = isRegistryActive(registry, sid, aid);
         const agentStatus = activityStateForEvents(aevts, agentIsActive);
+        const parentId = resolveParentId(aevts, registry, sid, aid);
         agentsArr.push({
           agentId: aid === '__main__' ? null : aid,
           displayName,
@@ -302,7 +308,7 @@ export const projects = createMemo((): Project[] => {
           eventCount: aevts.length,
           lastEventAt: aLast,
           isActive: agentIsActive,
-          parentId: undefined,
+          parentId,
         });
       }
 
@@ -744,11 +750,22 @@ export const selectedAgentDetailSnapshot = createMemo((): SelectedAgentDetailSna
 });
 
 function resolveAgentName(evts: HookEvent[], isMain: boolean): string {
+  const isMeaningfulName = (value?: string | null) => {
+    if (!value) return false;
+    const normalized = value.trim().toLowerCase();
+    return normalized.length > 0
+      && normalized !== 'agent'
+      && normalized !== 'session'
+      && normalized !== 'unknown'
+      && !normalized.startsWith('<user_query>');
+  };
+  const cleanName = (value: string) => value.replace(/^<[^>]+>\s*/i, '').trim();
+
   for (const e of evts) {
-    if (e.display_name) return e.display_name;
-    if (e.agent_name) return e.agent_name;
-    if (e.payload?.display_name) return e.payload.display_name;
-    if (e.payload?.agent_name) return e.payload.agent_name;
+    if (isMeaningfulName(e.display_name)) return cleanName(e.display_name!);
+    if (isMeaningfulName(e.agent_name)) return cleanName(e.agent_name!);
+    if (isMeaningfulName(e.payload?.display_name)) return cleanName(e.payload.display_name);
+    if (isMeaningfulName(e.payload?.agent_name)) return cleanName(e.payload.agent_name);
     if (e.payload?.agent_type && e.payload.agent_type !== 'main') {
       return e.payload.agent_type;
     }
@@ -768,6 +785,15 @@ function resolveAgentName(evts: HookEvent[], isMain: boolean): string {
   const eventAgentType = evts.find((e) => e.agent_type)?.agent_type;
   if (eventAgentType && eventAgentType !== 'main') {
     return eventAgentType.charAt(0).toUpperCase() + eventAgentType.slice(1);
+  }
+  const describedTask = [...evts]
+    .sort((left, right) => (right.timestamp || 0) - (left.timestamp || 0))
+    .find((event) =>
+      typeof event.payload?.description === 'string'
+      || typeof event.payload?.tool_input?.description === 'string');
+  const description = describedTask?.payload?.description || describedTask?.payload?.tool_input?.description;
+  if (!isMain && typeof description === 'string' && description.trim()) {
+    return truncate(description.trim(), 36);
   }
   return isMain ? 'Session' : 'Agent';
 }
@@ -805,6 +831,31 @@ function resolveRegistryDisplayName(
   const name = info.display_name?.trim();
   if (name && name !== 'Agent') return name;
   return undefined;
+}
+
+function resolveRegistryParentId(
+  registry: Map<string, RegistryInfo>,
+  sessionId: string,
+  agentId: string | null,
+): string | undefined {
+  const key = `${sessionId}:${agentId || MAIN_AGENT_KEY}`;
+  return registry.get(key)?.parent_id;
+}
+
+function resolveParentId(
+  evts: HookEvent[],
+  registry: Map<string, RegistryInfo>,
+  sessionId: string,
+  agentId: string,
+): string | undefined {
+  if (agentId === MAIN_AGENT_KEY) return undefined;
+  const registryParent = resolveRegistryParentId(registry, sessionId, agentId);
+  if (registryParent) return registryParent;
+  const payload = [...evts]
+    .sort((left, right) => (right.timestamp || 0) - (left.timestamp || 0))
+    .find((event) => event.hook_event_type === 'SubagentStart')
+    ?.payload;
+  return payload?.parent_agent_id || payload?.parent_id || payload?.parentId || 'main';
 }
 
 function resolveRuntimeLabel(evts: HookEvent[]): string | undefined {
@@ -1227,14 +1278,24 @@ function truncate(text: string, max: number): string {
 }
 
 function formatNowHeadline(subject: string, action?: string | null): string {
-  const trimmed = action?.trim();
+  const trimmed = sanitizeFocusText(action);
   if (!trimmed) return `${subject} has no active work yet`;
-  return `${subject} is ${trimmed[0].toLowerCase()}${trimmed.slice(1)}`;
+  return `${subject}: ${truncate(trimmed, 96)}`;
 }
 
 function formatContextLabel(label: string, value?: string | null): string | undefined {
-  const trimmed = value?.trim();
-  return trimmed ? `${label}: ${trimmed}` : undefined;
+  const trimmed = sanitizeFocusText(value);
+  return trimmed ? `${label}: ${truncate(trimmed, 110)}` : undefined;
+}
+
+function sanitizeFocusText(value?: string | null): string | undefined {
+  if (!value) return undefined;
+  const cleaned = value
+    .replace(/\[image\]/gi, 'image')
+    .replace(/\s+/g, ' ')
+    .replace(/the following images were provided by the user.*$/i, '')
+    .trim();
+  return cleaned || undefined;
 }
 
 function formatRuntimeList(runtimeLabels: string[]): string {

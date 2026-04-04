@@ -87,7 +87,10 @@ Two view modes toggled by tabs:
 - Stick-to-bottom toggle
 
 **Simple mode:**
-Each row: `timestamp | agent name | type badge | tool name | description`
+Each row: `timestamp | agent name | runtime | summary | context`
+- Prioritize readability over raw protocol labels.
+- Allow wrapped summary text for long items instead of clipping the most useful phrase.
+- Keep low-signal metadata compact (project/time context stays single-line).
 
 Type badges with colors:
 - TOOL (neutral gray)
@@ -100,9 +103,23 @@ Type badges with colors:
 
 **Detailed mode:**
 Same as simple but rows are expandable. Click to show:
-- Full event payload as formatted JSON
-- Copy button
-- Raw JSON toggle
+- Parsed payload view (default): key/value tree with expandable nested objects and arrays
+- Raw JSON view: pretty-printed JSON `pre` block
+- Copy JSON action: always available in expanded header and copies canonical raw JSON
+
+#### Event view behavior contract
+
+- Simple mode hides lifecycle noise (`SessionStart`, `SessionEnd`, `SessionTitleChanged`).
+- Detailed mode reveals all event types and allows row expansion.
+- Search applies to both human-readable description and payload-derived text.
+- Event compaction may collapse near-duplicate rows, but must not collapse delegated-agent events.
+
+#### Payload UX contract
+
+- Default tab is **Parsed** for operator readability.
+- Parsed view sorts top-level payload keys alphabetically for stable scanning.
+- Nested payload structures are collapsible by depth (top level open).
+- Raw view exists for exact debugging and copy parity.
 
 ### Status Bar (24px, bottom)
 
@@ -204,6 +221,37 @@ src/
 - Borders: #e4e4e7, #d4d4d8
 - Text: #09090b, #3f3f46, #71717a, #a1a1aa
 - Same accent colors but slightly darker
+
+## Styling System Rules (Event Surfaces)
+
+### Class-first policy
+
+- Use semantic classes in `styles.css` for layout and repeated UI patterns.
+- Avoid long inline style strings for static styling in TSX.
+- Reserve inline styles for truly dynamic values (for example dynamic event-type badge colors from data).
+
+### Why this matters
+
+The following style string is difficult to read and maintain:
+
+`display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:8px 16px;border-bottom:1px solid var(--border);flex-shrink:0`
+
+Use a class instead (`event-stream-focusbar`) with readable declarations in CSS.
+
+### Inline-style migration rule
+
+- Bad: raw style strings with many declarations inside components.
+- Good: class-based composition (`event-row-body`, `event-stream-toolbar`, `event-stream-chip`) and tokenized vars.
+- Exception: dynamic geometry and runtime-computed colors only.
+
+## Accessibility Requirements (V1)
+
+- Event row expanders are keyboard operable (`Enter`/`Space`) and expose `aria-expanded`.
+- Payload mode tabs are announced as tabs with selected state.
+- Copy JSON button has explicit accessible name.
+- Focus order flows toolbar -> focus bar controls -> list rows -> expanded payload controls.
+- Color is never the sole status signal; status text remains visible.
+- New controls must pass contrast in both dark and light themes.
 
 ## Verification
 

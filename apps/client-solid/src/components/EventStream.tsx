@@ -1,13 +1,12 @@
 import { For, Show, createSignal, createMemo, createEffect } from 'solid-js';
 import { Icon } from 'solid-heroicons';
-import { bars_3BottomLeft, queueList, signal, pauseCircle, funnel } from 'solid-heroicons/solid';
+import { bars_3BottomLeft, queueList, funnel } from 'solid-heroicons/solid';
 import {
   filteredEvents,
   selectedProjectFocusSnapshot,
   selectedProjectSnapshot,
   selectedViewedChangesSnapshot,
   acknowledgeSelectedScope,
-  selectAgent,
   selectSession,
 } from '../lib/store';
 import { getEventTypeLabel, getEventTypeBgColor, getEventTypeTextColor } from '../lib/colors';
@@ -15,6 +14,9 @@ import SearchBar, { searchQuery } from './SearchBar';
 import EventRow from './EventRow';
 import { connectionState, hasStreamData } from '../lib/ws';
 import type { HookEvent } from '../lib/types';
+import { describeEvent, describeEventDetail, mergeSimpleRowSummary, simpleEventKindLabel } from '../lib/describe';
+import { timeAgo } from '../lib/time';
+import { API_BASE } from '../lib/ws';
 
 const EVENT_TYPES = [
   'PreToolUse', 'PostToolUse', 'PostToolUseFailure',
@@ -29,6 +31,7 @@ export default function EventStream() {
   const [stick, setStick] = createSignal(true);
   const [showFilters, setShowFilters] = createSignal(false);
   const [hiddenTypes, setHiddenTypes] = createSignal<Set<string>>(new Set(SIMPLE_HIDDEN));
+  const [backendMatches, setBackendMatches] = createSignal<HookEvent[] | null>(null);
   const focus = createMemo(() => selectedProjectFocusSnapshot());
   const project = createMemo(() => selectedProjectSnapshot());
   const viewedChanges = createMemo(() => selectedViewedChangesSnapshot());
@@ -54,14 +57,6 @@ export default function EventStream() {
     });
   };
 
-  const tabStyle = (active: boolean) => [
-    'font-size:10px;padding:4px 10px;border-radius:4px;cursor:pointer;border:none;',
-    'transition:background 0.15s,color 0.15s;',
-    active
-      ? 'background:var(--bg-elevated);color:var(--text-primary);'
-      : 'background:transparent;color:var(--text-dim);',
-  ].join('');
-
   // Count events by type for badges
   const typeCounts = createMemo(() => {
     const counts = new Map<string, number>();
@@ -74,20 +69,17 @@ export default function EventStream() {
   const displayEvents = createMemo(() => {
     const query = searchQuery();
     const hidden = hiddenTypes();
-    let evts = compactEvents(filteredEvents().filter(e => !hidden.has(e.hook_event_type)));
+    const source = backendMatches() ?? filteredEvents();
+    let evts = compactEvents(source.filter(e => !hidden.has(e.hook_event_type)));
 
     if (query) {
-      try {
-        const re = new RegExp(query, 'i');
-        evts = evts.filter(e =>
-          re.test(e.hook_event_type) ||
-          re.test(e.source_app) ||
-          re.test(e.display_name || '') ||
-          re.test(e.agent_name || '') ||
-          re.test(e.payload?.tool_name || '') ||
-          re.test(searchableEventText(e))
-        );
-      } catch { /* invalid regex */ }
+      // backend search already narrowed the list; keep lightweight local fallback
+      if (!backendMatches()) {
+        try {
+          const re = new RegExp(query, 'i');
+          evts = evts.filter(e => re.test(searchableDisplayLine(e)));
+        } catch { /* invalid regex */ }
+      }
     }
     return evts.slice(-500).reverse();
   });
@@ -153,98 +145,99 @@ export default function EventStream() {
     if (stick() && containerRef) containerRef.scrollTop = 0;
   });
 
+  createEffect(() => {
+    const query = searchQuery().trim();
+    const scope = focus();
+    if (!query) {
+      setBackendMatches(null);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      try {
+        const params = new URLSearchParams({
+          query,
+          limit: '2000',
+        });
+        if (scope?.projectName) params.set('source_app', scope.projectName);
+        if (scope?.sessionId) params.set('session_id', scope.sessionId);
+        const response = await fetch(`${API_BASE}/api/events/search?${params.toString()}`);
+        if (!response.ok) {
+          setBackendMatches(null);
+          return;
+        }
+        const rows = (await response.json()) as HookEvent[];
+        setBackendMatches(Array.isArray(rows) ? rows : null);
+      } catch {
+        setBackendMatches(null);
+      }
+    }, 180);
+
+    return () => clearTimeout(timer);
+  });
+
   return (
-    <div style="display:flex;flex-direction:column;flex:1;overflow:hidden;">
+    <div class="event-stream-shell">
       {/* Toolbar */}
-      <div style="display:flex;align-items:center;gap:8px;padding:8px 16px;border-bottom:1px solid var(--border);flex-shrink:0;">
-        <button style={tabStyle(!detailed())} onClick={switchToSimple}>
-          <span style="display:flex;align-items:center;gap:6px;">
-            <Icon path={queueList} style="width:12px;height:12px;" /> Simple
+      <div class="event-stream-toolbar">
+        <button
+          class="event-stream-tab"
+          classList={{ 'is-active': !detailed() }}
+          type="button"
+          onClick={switchToSimple}
+          aria-label="Switch to simple mode"
+        >
+          <span class="event-stream-tab-content">
+            <Icon path={queueList} class="event-stream-tab-icon" /> Simple
           </span>
         </button>
-        <button style={tabStyle(detailed())} onClick={switchToDetailed}>
-          <span style="display:flex;align-items:center;gap:6px;">
-            <Icon path={bars_3BottomLeft} style="width:12px;height:12px;" /> Detailed
+        <button
+          class="event-stream-tab"
+          classList={{ 'is-active': detailed() }}
+          type="button"
+          onClick={switchToDetailed}
+          aria-label="Switch to detailed mode"
+        >
+          <span class="event-stream-tab-content">
+            <Icon path={bars_3BottomLeft} class="event-stream-tab-icon" /> Detailed
           </span>
         </button>
 
         <SearchBar />
 
         <button
-          style={tabStyle(showFilters())}
+          class="event-stream-tab event-stream-filter-toggle"
+          classList={{ 'is-active': showFilters() }}
+          type="button"
           onClick={() => setShowFilters(f => !f)}
           title="Toggle event type filters"
+          aria-pressed={showFilters()}
+          aria-label="Toggle event type filters"
         >
-          <span style="display:flex;align-items:center;gap:6px;">
-            <Icon path={funnel} style="width:12px;height:12px;" /> Filter
-          </span>
-        </button>
-
-        <button
-          onClick={() => setStick(s => !s)}
-          title={stick() ? 'Pause auto-scroll' : 'Resume auto-scroll'}
-          style={[
-            'margin-left:auto;font-size:10px;padding:4px 10px;border-radius:4px;cursor:pointer;border:none;',
-            'transition:background 0.15s,color 0.15s;',
-            stick()
-              ? 'background:var(--bg-elevated);color:var(--accent);'
-              : 'background:transparent;color:var(--text-dim);',
-          ].join('')}
-        >
-          <span style="display:flex;align-items:center;gap:6px;">
-            <Icon path={stick() ? signal : pauseCircle} style="width:12px;height:12px;" />
-            {stick() ? 'Live' : 'Paused'}
+          <span class="event-stream-tab-content">
+            <Icon path={funnel} class="event-stream-tab-icon" /> Filter
           </span>
         </button>
       </div>
 
       <Show when={focus()}>
         {(currentFocus) => (
-          <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:8px 16px;border-bottom:1px solid var(--border);flex-shrink:0;">
-            <span style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);padding-right:4px;">
-              Current focus
+          <div class="event-stream-focusbar">
+            <span class="event-stream-focus-label">
+              Focus
             </span>
-            <span style="font-size:10px;color:var(--text-dim);padding-right:6px;">
+            <span class="event-stream-focus-scope">
               {currentFocus().scopeLabel}
             </span>
-            <button
-              onClick={() => {
-                if (currentFocus().sessionId) {
-                  selectSession(currentFocus().sessionId);
-                }
-              }}
-              style="font-size:10px;padding:4px 8px;border-radius:9999px;border:1px solid var(--border);background:var(--bg-elevated);color:var(--text-secondary);cursor:pointer;"
-            >
-              Session {currentFocus().sessionLabel ?? 'n/a'}
-            </button>
-            <Show when={currentFocus().agentId}>
-              <button
-                onClick={() => {
-                  if (currentFocus().agentId) {
-                    selectAgent(currentFocus().agentId);
-                  }
-                }}
-                style="font-size:10px;padding:4px 8px;border-radius:9999px;border:1px solid var(--border);background:var(--bg-elevated);color:var(--text-secondary);cursor:pointer;"
-              >
-                Agent {currentFocus().agentLabel ?? 'n/a'}
-              </button>
-            </Show>
-            <span style="font-size:10px;color:var(--text-primary);">
-              Now: {currentFocus().headline}
-            </span>
-            <span style="font-size:10px;color:var(--text-dim);">
-              Context: {currentFocus().subheadline}
-            </span>
-            <div style="display:flex;align-items:center;gap:6px;margin-left:auto;">
+            <div class="event-stream-focus-actions">
               <Show when={viewedChanges()}>
                 {(currentViewed) => (
                   <span
-                    style={[
-                      'font-size:10px;padding:3px 8px;border-radius:9999px;border:1px solid var(--border);',
-                      currentViewed().hasUnreadChanges
-                        ? 'background:var(--green-dim);color:var(--green);'
-                        : 'background:var(--bg-elevated);color:var(--text-secondary);',
-                    ].join('')}
+                    class="event-stream-pill"
+                    classList={{
+                      'is-unread': currentViewed().hasUnreadChanges,
+                      'is-uptodate': !currentViewed().hasUnreadChanges,
+                    }}
                     title={currentViewed().body}
                   >
                     {currentViewed().hasUnreadChanges
@@ -255,13 +248,15 @@ export default function EventStream() {
               </Show>
               <button
                 onClick={acknowledgeSelectedScope}
-                style="font-size:10px;padding:4px 8px;border-radius:9999px;border:1px solid var(--border);background:var(--bg-card);color:var(--text-secondary);cursor:pointer;"
+                type="button"
+                class="event-stream-pill-button"
               >
                 Mark viewed
               </button>
               <button
                 onClick={() => selectSession(null)}
-                style="font-size:10px;padding:4px 8px;border-radius:9999px;border:1px solid var(--border);background:var(--bg-card);color:var(--text-dim);cursor:pointer;"
+                type="button"
+                class="event-stream-pill-button is-muted"
               >
                 Show all events
               </button>
@@ -272,7 +267,7 @@ export default function EventStream() {
 
       {/* Filter chips */}
       <Show when={showFilters()}>
-        <div style="display:flex;flex-wrap:wrap;gap:6px;padding:8px 16px;border-bottom:1px solid var(--border);flex-shrink:0;">
+        <div class="event-stream-filterchips">
           <For each={EVENT_TYPES}>
             {(type) => {
               const count = () => typeCounts().get(type) || 0;
@@ -280,16 +275,20 @@ export default function EventStream() {
               return (
                 <button
                   onClick={() => toggleType(type)}
-                  style={[
-                    'font-size:10px;font-weight:500;padding:3px 8px;border-radius:4px;cursor:pointer;border:none;',
-                    'transition:opacity 0.15s;display:flex;align-items:center;gap:4px;',
-                    hidden()
-                      ? 'opacity:0.35;background:var(--bg-elevated);color:var(--text-dim);'
-                      : `opacity:1;background:${getEventTypeBgColor(type)};color:${getEventTypeTextColor(type)};`,
-                  ].join('')}
+                  aria-pressed={!hidden()}
+                  aria-label={`${hidden() ? 'Show' : 'Hide'} ${getEventTypeLabel(type)} events`}
+                  type="button"
+                  class="event-stream-chip"
+                  classList={{ 'is-hidden': hidden() }}
+                  style={hidden()
+                    ? {}
+                    : {
+                      background: getEventTypeBgColor(type),
+                      color: getEventTypeTextColor(type),
+                    }}
                 >
                   {getEventTypeLabel(type)}
-                  <span style="font-size:9px;opacity:0.7;">{count()}</span>
+                  <span class="event-stream-chip-count">{count()}</span>
                 </button>
               );
             }}
@@ -298,17 +297,17 @@ export default function EventStream() {
       </Show>
 
       {/* Event list */}
-      <div ref={containerRef} style="flex:1;overflow-y:auto;">
+      <div ref={containerRef} class="event-stream-list" aria-live="polite" aria-label="Live event stream">
         <For each={displayEvents()}>
           {(e) => <EventRow event={e} detailed={detailed()} />}
         </For>
         <Show when={displayEvents().length === 0}>
-          <div style="display:flex;align-items:center;justify-content:center;padding:48px 24px;min-height:220px;">
-            <div style="max-width:420px;padding:18px 20px;border:1px solid var(--border);border-radius:14px;background:linear-gradient(180deg,rgba(255,255,255,0.02),transparent);text-align:center;">
-              <p style="font-size:14px;font-weight:600;color:var(--text-primary);margin-bottom:6px;">
+          <div class="event-stream-empty-wrap">
+            <div class="event-stream-empty-card">
+              <p class="event-stream-empty-title">
                 {emptyState()?.title}
               </p>
-              <p style="font-size:12px;line-height:1.5;color:var(--text-dim);">
+              <p class="event-stream-empty-body">
                 {emptyState()?.body}
               </p>
             </div>
@@ -331,6 +330,26 @@ function searchableEventText(event: HookEvent): string {
   if (typeof payload.project_name === 'string') textFields.push(payload.project_name);
   if (typeof payload.cwd === 'string') textFields.push(payload.cwd);
   return textFields.join(' ');
+}
+
+function searchableDisplayLine(event: HookEvent): string {
+  const parts = [
+    event.hook_event_type,
+    simpleEventKindLabel(event.hook_event_type),
+    event.source_app,
+    event.session_id,
+    event.display_name || '',
+    event.agent_name || '',
+    event.payload?.runtime_label || '',
+    event.payload?.acquisition_mode || '',
+    event.payload?.tool_name || '',
+    describeEvent(event),
+    describeEventDetail(event) || '',
+    mergeSimpleRowSummary(event, 160),
+    timeAgo(event.timestamp),
+    searchableEventText(event),
+  ];
+  return parts.filter(Boolean).join(' ');
 }
 
 function compactEvents(events: HookEvent[]): HookEvent[] {

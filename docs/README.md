@@ -1,10 +1,21 @@
-# Docs
+# Pharos Docs Portal
 
-This repo keeps only the public docs that match the current product and codebase.
+Use this page as the primary entry point for repo documentation.
 
-Current docs:
+## Start Here
 
-- [frontend-api-reference.md](frontend-api-reference.md)
-- [macos-desktop-release.md](macos-desktop-release.md)
+- [Event Stream UX Guide](event-stream-ux-guide.md)
+- [Frontend API Reference](frontend-api-reference.md)
 
-Older planning, transitional notes, and historical docs were moved out of the public repo doc surface and mirrored into the Pharos Obsidian workspace.
+## UI And Design
+
+- [Full Solid UI Design Spec](superpowers/specs/2026-04-03-solidjs-full-ui-design.md)
+
+## Operations And Release
+
+- [macOS Desktop Release](macos-desktop-release.md)
+
+## Notes
+
+- This repo keeps a focused public docs surface for implementation and operations.
+- Historical planning and broader product notes are mirrored in the Pharos Obsidian workspace.

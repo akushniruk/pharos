@@ -200,6 +200,59 @@ fn legacy_events_prefix_project_labels_with_runtime_name() {
 }
 
 #[test]
+fn legacy_events_payload_includes_acquisition_mode_observed() {
+    let store = Store::open_in_memory().expect("store");
+
+    store
+        .insert_event(&event(
+            EventKind::SessionStarted,
+            100,
+            None,
+            json!({
+                "cwd": "/Users/testuser/demo-project",
+                "entrypoint": "claude"
+            }),
+        ))
+        .expect("insert");
+
+    let legacy_events = store.list_legacy_events().expect("legacy events");
+    assert_eq!(
+        legacy_events[0]
+            .payload
+            .get("acquisition_mode")
+            .and_then(serde_json::Value::as_str),
+        Some("observed")
+    );
+}
+
+#[test]
+fn legacy_events_payload_includes_acquisition_mode_managed() {
+    let store = Store::open_in_memory().expect("store");
+
+    let mut envelope = event(
+        EventKind::SessionStarted,
+        100,
+        None,
+        json!({
+            "cwd": "/Users/testuser/demo-project",
+            "entrypoint": "claude"
+        }),
+    );
+    envelope.acquisition_mode = AcquisitionMode::Managed;
+
+    store.insert_event(&envelope).expect("insert");
+
+    let legacy_events = store.list_legacy_events().expect("legacy events");
+    assert_eq!(
+        legacy_events[0]
+            .payload
+            .get("acquisition_mode")
+            .and_then(serde_json::Value::as_str),
+        Some("managed")
+    );
+}
+
+#[test]
 fn store_dedupes_identical_events() {
     let store = Store::open_in_memory().expect("store");
     let duplicate = event(

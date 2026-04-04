@@ -33,6 +33,7 @@ export interface AgentEntry {
 /** Project derived from events */
 export interface Project {
   name: string;
+  iconUrl?: string;
   runtimeLabels: string[];
   sessions: SessionInfo[];
   summary?: string;
@@ -71,6 +72,7 @@ export interface SessionInfo {
 export interface AgentInfo {
   agentId: string | null;
   displayName: string;
+  avatarUrl?: string;
   runtimeLabel?: string;
   assignment?: string;
   assignmentDetail?: string;

@@ -322,8 +322,9 @@ fn converts_cursor_tool_use_to_envelope() {
 fn converts_cursor_subagent_start_to_envelope() {
     let event = CursorSessionEvent::SubagentStart {
         agent_id: "tool-1".to_string(),
-        display_name: "Cursor Agent".to_string(),
+        display_name: "Cursor Helper".to_string(),
         description: Some("inspect scanner dedupe behavior".to_string()),
+        parent_agent_id: Some("main".to_string()),
     };
 
     let envelope = cursor_event_to_envelope(&event, "pharos", "cursor-sess", 1_711_234_567_000);
@@ -331,5 +332,5 @@ fn converts_cursor_subagent_start_to_envelope() {
     assert_eq!(envelope.runtime_source, RuntimeSource::CursorAgent);
     assert_eq!(envelope.event_kind, EventKind::SubagentStarted);
     assert_eq!(envelope.agent_id.as_deref(), Some("tool-1"));
-    assert_eq!(envelope.payload["agent_name"], "Cursor Agent");
+    assert_eq!(envelope.payload["agent_name"], "Cursor Helper");
 }

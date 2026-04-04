@@ -780,9 +780,11 @@ fn cursor_signature(event: &crate::profiles::cursor::CursorSessionEvent) -> Stri
             agent_id,
             display_name,
             description,
+            parent_agent_id,
         } => format!(
-            "subagent:{agent_id}:{display_name}:{}",
-            description.clone().unwrap_or_default()
+            "subagent:{agent_id}:{display_name}:{}:{}",
+            description.clone().unwrap_or_default(),
+            parent_agent_id.clone().unwrap_or_default()
         ),
     }
 }

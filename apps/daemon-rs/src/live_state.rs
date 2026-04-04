@@ -59,6 +59,43 @@ impl LiveState {
         Ok(inner.events.clone())
     }
 
+    pub fn search_legacy_events(
+        &self,
+        query: &str,
+        source_app: Option<&str>,
+        session_id: Option<&str>,
+        limit: usize,
+    ) -> Result<Vec<LegacyHookEvent>, StoreError> {
+        let inner = self.inner.lock().map_err(|_| StoreError::Poisoned)?;
+        let needle = query.trim().to_ascii_lowercase();
+        if needle.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let mut matches = Vec::new();
+        for event in inner.events.iter().rev() {
+            if let Some(source) = source_app {
+                if event.source_app != source {
+                    continue;
+                }
+            }
+            if let Some(session) = session_id {
+                if event.session_id != session {
+                    continue;
+                }
+            }
+
+            if legacy_event_search_text(event).contains(&needle) {
+                matches.push(event.clone());
+                if matches.len() >= limit {
+                    break;
+                }
+            }
+        }
+        matches.reverse();
+        Ok(matches)
+    }
+
     pub fn list_agent_registry(&self) -> Result<Vec<AgentRegistryEntry>, StoreError> {
         let inner = self.inner.lock().map_err(|_| StoreError::Poisoned)?;
         let mut entries: Vec<_> = inner
@@ -183,6 +220,7 @@ impl LiveStateData {
                 resolve_project_summary(&session_snaps, &runtime_labels, active_session_count);
             projects.push(ProjectSnapshot {
                 name,
+                icon_url: resolve_project_icon_url(&session_snaps),
                 runtime_labels: runtime_labels.into_iter().collect(),
                 sessions: session_snaps,
                 summary,
@@ -249,13 +287,15 @@ impl LiveStateData {
             let runtime_label = grouped_events
                 .iter()
                 .find_map(|event| payload_string(&event.payload, "runtime_label"));
+            let display_name = resolve_agent_name(&grouped_events, agent_key == "__main__");
             agents.push(AgentSnapshot {
                 agent_id: if agent_key == "__main__" {
                     None
                 } else {
                     Some(agent_key.clone())
                 },
-                display_name: resolve_agent_name(&grouped_events, agent_key == "__main__"),
+                display_name: display_name.clone(),
+                avatar_url: resolve_agent_avatar_url(&grouped_events, &display_name),
                 runtime_label,
                 assignment: resolve_assignment(&grouped_events),
                 current_action: resolve_current_action_from_refs(&grouped_events),
@@ -515,7 +555,9 @@ fn resolve_assignment(events: &[&LegacyHookEvent]) -> Option<String> {
             payload_string(&event.payload, "prompt")
                 .or_else(|| payload_string(&event.payload, "message"))
         });
-    prompt.map(|value| truncate(&value, 100))
+    prompt
+        .and_then(|value| clean_summary_text(&value))
+        .map(|value| truncate(&value, 100))
 }
 
 fn resolve_current_action(events: &[LegacyHookEvent]) -> Option<String> {
@@ -565,6 +607,94 @@ fn resolve_session_summary(events: &[LegacyHookEvent], agents: &[AgentSnapshot])
     resolve_assignment(&refs)
         .or_else(|| resolve_current_action(events))
         .or_else(|| active_runtime_summary(events))
+}
+
+fn resolve_project_icon_url(sessions: &[SessionSnapshot]) -> Option<String> {
+    sessions
+        .iter()
+        .flat_map(|session| session.agents.iter())
+        .filter_map(|agent| agent.avatar_url.clone())
+        .next()
+        .or_else(|| Some("/pharos-mark.svg".to_string()))
+}
+
+fn resolve_agent_avatar_url(events: &[&LegacyHookEvent], display_name: &str) -> Option<String> {
+    for event in events.iter().rev() {
+        if let Some(url) = payload_string(&event.payload, "agent_avatar_url")
+            .or_else(|| payload_string(&event.payload, "avatar_url"))
+            .or_else(|| payload_string(&event.payload, "avatar"))
+        {
+            let trimmed = url.trim();
+            if !trimmed.is_empty() {
+                return Some(trimmed.to_string());
+            }
+        }
+    }
+    let runtime = events
+        .iter()
+        .rev()
+        .find_map(|event| {
+            payload_string(&event.payload, "runtime_label")
+                .or_else(|| payload_string(&event.payload, "runtime_source"))
+        })
+        .unwrap_or_else(|| "Agent".to_string());
+
+    Some(default_agent_avatar_data_uri(&runtime, display_name))
+}
+
+fn default_agent_avatar_data_uri(runtime: &str, display_name: &str) -> String {
+    let initials = avatar_initials(display_name);
+    let fill = runtime_color(runtime);
+    let svg = format!(
+        "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'>\
+<rect x='0' y='0' width='24' height='24' rx='12' fill='{fill}'/>\
+<text x='12' y='12' text-anchor='middle' dominant-baseline='central' font-family='Inter,Arial,sans-serif' font-size='9' font-weight='700' fill='white'>{initials}</text>\
+</svg>"
+    );
+    format!("data:image/svg+xml,{}", encode_data_uri_component(&svg))
+}
+
+fn avatar_initials(name: &str) -> String {
+    let parts = name
+        .split_whitespace()
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>();
+    if parts.is_empty() {
+        return "A".to_string();
+    }
+    if parts.len() == 1 {
+        return parts[0].chars().take(2).collect::<String>().to_uppercase();
+    }
+    let first = parts[0].chars().next().unwrap_or('A');
+    let second = parts[1].chars().next().unwrap_or('G');
+    format!("{}{}", first, second).to_uppercase()
+}
+
+fn runtime_color(runtime: &str) -> &'static str {
+    match runtime.to_ascii_lowercase().as_str() {
+        "claude" | "claude_code" => "#8B5CF6",
+        "codex" | "codex_cli" => "#2563EB",
+        "gemini" | "gemini_cli" => "#0EA5A8",
+        "cursor" | "cursor_agent" => "#16A34A",
+        "pi" | "pi_cli" => "#EA580C",
+        "aider" => "#DB2777",
+        "opencode" => "#0891B2",
+        _ => "#6B7280",
+    }
+}
+
+fn encode_data_uri_component(input: &str) -> String {
+    let mut encoded = String::with_capacity(input.len() * 3);
+    for byte in input.bytes() {
+        if byte.is_ascii_alphanumeric()
+            || matches!(byte, b'-' | b'_' | b'.' | b'~')
+        {
+            encoded.push(byte as char);
+        } else {
+            encoded.push_str(&format!("%{byte:02X}"));
+        }
+    }
+    encoded
 }
 
 fn resolve_project_summary(
@@ -623,6 +753,7 @@ fn latest_useful_event_summary(events: &[LegacyHookEvent]) -> Option<String> {
         .rev()
         .find_map(|event| match event.hook_event_type.as_str() {
             "AssistantResponse" => payload_string(&event.payload, "text")
+                .and_then(|text| clean_summary_text(&text))
                 .map(|text| format!("Responded: {}", truncate(&text, 96))),
             "PostToolUse" | "PostToolUseFailure" => {
                 let tool_name = payload_string(&event.payload, "tool_name")
@@ -647,6 +778,7 @@ fn latest_useful_event_summary(events: &[LegacyHookEvent]) -> Option<String> {
             }
             "UserPromptSubmit" => payload_string(&event.payload, "prompt")
                 .or_else(|| payload_string(&event.payload, "message"))
+                .and_then(|prompt| clean_summary_text(&prompt))
                 .map(|prompt| format!("Prompted: {}", truncate(&prompt, 96))),
             _ => None,
         })
@@ -755,9 +887,11 @@ fn describe_legacy_event(event: &LegacyHookEvent) -> String {
         "SubagentStop" => "Subagent finished".to_string(),
         "UserPromptSubmit" => payload_string(&event.payload, "prompt")
             .or_else(|| payload_string(&event.payload, "message"))
+            .and_then(|prompt| clean_summary_text(&prompt))
             .map(|prompt| format!("Prompted: {}", truncate(&prompt, 72)))
             .unwrap_or_else(|| "User prompt".to_string()),
         "AssistantResponse" => payload_string(&event.payload, "text")
+            .and_then(|text| clean_summary_text(&text))
             .map(|text| format!("Responded: {}", truncate(&text, 72)))
             .unwrap_or_else(|| "Response".to_string()),
         "SessionTitleChanged" => {
@@ -819,11 +953,12 @@ fn extract_patched_file(patch: &str) -> Option<String> {
 }
 
 fn content_preview(content: &str) -> Option<String> {
-    content
-        .lines()
-        .map(str::trim)
-        .find(|line| !line.is_empty())
-        .map(ToString::to_string)
+    for line in content.lines() {
+        if let Some(clean) = clean_summary_text(line) {
+            return Some(clean);
+        }
+    }
+    clean_summary_text(content)
 }
 
 fn short_path(path: &str) -> Option<String> {
@@ -869,6 +1004,46 @@ fn truncate(text: &str, max: usize) -> String {
     }
 
     format!("{}…", &text[..end])
+}
+
+fn clean_summary_text(value: &str) -> Option<String> {
+    let without_tags = strip_markup_tags(value);
+    let collapsed = without_tags
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    let trimmed = collapsed.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
+fn strip_markup_tags(value: &str) -> String {
+    let mut out = String::with_capacity(value.len());
+    let mut in_tag = false;
+    for ch in value.chars() {
+        match ch {
+            '<' => {
+                in_tag = true;
+            }
+            '>' => {
+                if in_tag {
+                    in_tag = false;
+                    out.push(' ');
+                } else {
+                    out.push(ch);
+                }
+            }
+            _ => {
+                if !in_tag {
+                    out.push(ch);
+                }
+            }
+        }
+    }
+    out
 }
 
 fn workspace_name_from_cwd(cwd: &str) -> Option<String> {
@@ -1026,6 +1201,7 @@ mod tests {
             &[AgentSnapshot {
                 agent_id: None,
                 display_name: "signal".to_string(),
+                avatar_url: None,
                 runtime_label: Some("Codex".to_string()),
                 assignment: None,
                 current_action: None,
@@ -1045,6 +1221,70 @@ mod tests {
         let text = "You’re right — thanks for the screenshot";
         let truncated = truncate(text, 12);
         assert!(truncated.ends_with('…'));
+    }
+
+    #[test]
+    fn summarize_prompt_strips_markup_wrappers() {
+        let events = vec![LegacyHookEvent {
+            source_app: "yellow".to_string(),
+            session_id: "sess-1".to_string(),
+            hook_event_type: "UserPromptSubmit".to_string(),
+            payload: json!({
+                "prompt": "<local-command-stdout>Goodbye!</local-command-stdout>"
+            }),
+            timestamp: 10,
+            agent_id: None,
+            agent_type: None,
+            model_name: None,
+            display_name: None,
+            agent_name: None,
+        }];
+
+        let summary = resolve_session_summary(&events, &[]);
+        assert_eq!(summary.as_deref(), Some("Prompted: Goodbye!"));
+    }
+
+    #[test]
+    fn generated_agent_avatar_uses_data_uri() {
+        let state = LiveState::default();
+        let event = EventEnvelope {
+            runtime_source: RuntimeSource::CodexCli,
+            acquisition_mode: AcquisitionMode::Observed,
+            event_kind: EventKind::ToolCallStarted,
+            session: SessionRef {
+                host_id: "local".to_string(),
+                workspace_id: "pharos".to_string(),
+                session_id: "sess-avatar".to_string(),
+            },
+            agent_id: Some("subagent-1".to_string()),
+            occurred_at_ms: 123,
+            capabilities: CapabilitySet {
+                can_observe: true,
+                can_start: false,
+                can_stop: false,
+                can_retry: false,
+                can_respond: false,
+            },
+            title: "tool".to_string(),
+            payload: json!({
+                "runtime_label": "Codex",
+                "display_name": "Research Agent",
+                "tool_name": "ReadFile"
+            }),
+        };
+
+        state.record_envelope(&event).expect("event recorded");
+        let project = state
+            .project("pharos")
+            .expect("project listing")
+            .expect("project exists");
+        let avatar = project
+            .sessions
+            .iter()
+            .flat_map(|session| session.agents.iter())
+            .find_map(|agent| agent.avatar_url.as_ref())
+            .expect("avatar generated");
+        assert!(avatar.starts_with("data:image/svg+xml,"));
     }
 
     #[test]
@@ -1115,6 +1355,45 @@ fn payload_string(payload: &serde_json::Value, key: &str) -> Option<String> {
         .get(key)
         .and_then(serde_json::Value::as_str)
         .map(ToString::to_string)
+}
+
+fn legacy_event_search_text(event: &LegacyHookEvent) -> String {
+    let mut parts = Vec::new();
+    parts.push(event.hook_event_type.clone());
+    parts.push(event.source_app.clone());
+    parts.push(event.session_id.clone());
+    if let Some(value) = &event.display_name {
+        parts.push(value.clone());
+    }
+    if let Some(value) = &event.agent_name {
+        parts.push(value.clone());
+    }
+    if let Some(value) = event.payload.get("runtime_label").and_then(serde_json::Value::as_str) {
+        parts.push(value.to_string());
+    }
+    if let Some(value) = event.payload.get("tool_name").and_then(serde_json::Value::as_str) {
+        parts.push(value.to_string());
+    }
+    if let Some(value) = event.payload.get("prompt").and_then(serde_json::Value::as_str) {
+        parts.push(value.to_string());
+    }
+    if let Some(value) = event.payload.get("message").and_then(serde_json::Value::as_str) {
+        parts.push(value.to_string());
+    }
+    if let Some(value) = event.payload.get("text").and_then(serde_json::Value::as_str) {
+        parts.push(value.to_string());
+    }
+    if let Some(value) = event.payload.get("content").and_then(serde_json::Value::as_str) {
+        parts.push(value.to_string());
+    }
+    if let Some(value) = event
+        .payload
+        .get("description")
+        .and_then(serde_json::Value::as_str)
+    {
+        parts.push(value.to_string());
+    }
+    parts.join(" ").to_ascii_lowercase()
 }
 
 pub fn should_broadcast_registry(event_kind: &EventKind) -> bool {

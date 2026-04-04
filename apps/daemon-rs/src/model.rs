@@ -129,6 +129,7 @@ pub struct DiscoveredSession {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ProjectSnapshot {
     pub name: String,
+    pub icon_url: Option<String>,
     pub runtime_labels: Vec<String>,
     pub sessions: Vec<SessionSnapshot>,
     pub summary: Option<String>,
@@ -157,6 +158,7 @@ pub struct SessionSnapshot {
 pub struct AgentSnapshot {
     pub agent_id: Option<String>,
     pub display_name: String,
+    pub avatar_url: Option<String>,
     pub runtime_label: Option<String>,
     pub assignment: Option<String>,
     pub current_action: Option<String>,

@@ -1,6 +1,7 @@
 use axum::{
     Json, Router,
     extract::State,
+    extract::Query,
     extract::ws::{Message, WebSocket, WebSocketUpgrade},
     http::StatusCode,
     routing::{get, post},
@@ -55,6 +56,7 @@ pub fn build_router_with_options(store: Store, options: AppOptions) -> (Router, 
             post(create_connector_event),
         )
         .route("/api/events", post(create_event).get(list_events))
+        .route("/api/events/search", get(search_events))
         .route("/api/agents", get(list_agent_registry))
         .route("/api/projects", get(list_projects))
         .route("/api/projects/{name}", get(get_project))
@@ -123,6 +125,31 @@ async fn list_events(
     let events = state
         .store
         .list_events()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(events))
+}
+
+#[derive(serde::Deserialize)]
+struct SearchEventsParams {
+    query: String,
+    source_app: Option<String>,
+    session_id: Option<String>,
+    limit: Option<usize>,
+}
+
+async fn search_events(
+    State(state): State<AppState>,
+    Query(params): Query<SearchEventsParams>,
+) -> Result<Json<Vec<LegacyHookEvent>>, StatusCode> {
+    let limit = params.limit.unwrap_or(500).clamp(1, 2000);
+    let events = state
+        .live_state
+        .search_legacy_events(
+            &params.query,
+            params.source_app.as_deref(),
+            params.session_id.as_deref(),
+            limit,
+        )
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(Json(events))
 }

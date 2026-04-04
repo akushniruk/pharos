@@ -1,6 +1,6 @@
-import { Show, For, onMount, createSignal, createMemo } from 'solid-js';
+import { Show, For, onMount, createSignal, createMemo, createEffect } from 'solid-js';
 import { Icon } from 'solid-heroicons';
-import { listBullet, share, folder, bolt, cpuChip } from 'solid-heroicons/solid';
+import { listBullet, share } from 'solid-heroicons/solid';
 import {
   selectedProject,
   selectedProjectSnapshot,
@@ -18,6 +18,7 @@ import {
 } from './lib/store';
 import { connectWs, connectionState, hasStreamData } from './lib/ws';
 import { initTheme } from './lib/theme';
+import { timeAgo } from './lib/time';
 import Header from './components/Header';
 import Sidebar from './components/Sidebar';
 import EventStream from './components/EventStream';
@@ -26,6 +27,7 @@ import AgentDetail from './components/AgentDetail';
 import type { Project } from './lib/types';
 
 type ViewMode = 'logs' | 'graph';
+const DEFAULT_PROJECT_LOGO_STORAGE_KEY = 'pharos.default-project-logo';
 
 export default function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = createSignal(false);
@@ -132,23 +134,144 @@ export default function App() {
 }
 
 
-/** Deduplicate agent badges by displayName, keeping the most active */
-function uniqueAgentBadges(p: Project): { name: string; isActive: boolean }[] {
-  const seen = new Map<string, boolean>();
+/** Deduplicate useful agent badges by displayName, keeping the most active */
+function uniqueAgentBadges(p: Project): { name: string; isActive: boolean; avatarUrl?: string }[] {
+  const seen = new Map<string, { isActive: boolean; avatarUrl?: string }>();
   for (const s of p.sessions) {
     for (const a of s.agents) {
-      const existing = seen.get(a.displayName);
+      const cleanedName = a.displayName?.trim();
+      if (!cleanedName) continue;
+      const lower = cleanedName.toLowerCase();
+      if (lower === 'unknown' || lower === 'agent' || lower === 'session') continue;
+      const existing = seen.get(cleanedName);
       if (existing === undefined || a.isActive) {
-        seen.set(a.displayName, a.isActive);
+        seen.set(cleanedName, { isActive: a.isActive, avatarUrl: a.avatarUrl });
       }
     }
   }
-  return Array.from(seen, ([name, isActive]) => ({ name, isActive })).slice(0, 6);
+  return Array.from(seen, ([name, details]) => ({
+    name,
+    isActive: details.isActive,
+    avatarUrl: details.avatarUrl,
+  })).slice(0, 4);
+}
+
+function sanitizeDashboardText(value?: string | null): string | undefined {
+  if (!value) return undefined;
+  const cleaned = value
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\[image\]/gi, 'image')
+    .replace(/<image_files>/gi, '')
+    .replace(/the following images were provided by the user.*$/i, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return cleaned || undefined;
+}
+
+function projectCardHeadline(p: Project): string {
+  const summary = sanitizeDashboardText(p.summary);
+  if (summary) {
+    const concise = summary
+      .replace(/^(responded|prompted|updated)\s*:\s*/i, '')
+      .replace(/^local-command-stdout\s*/i, '')
+      .trim();
+    return concise.length > 92 ? `${concise.slice(0, 91)}…` : concise;
+  }
+  if (p.isActive) {
+    return `${p.activeSessionCount} active session${p.activeSessionCount === 1 ? '' : 's'}`;
+  }
+  return 'No live activity right now';
+}
+
+function projectCardSubline(p: Project): string {
+  const runtime = p.runtimeLabels.length > 0 ? p.runtimeLabels.join(', ') : 'Unknown runtime';
+  const last = p.lastEventAt > 0 ? `Updated ${timeAgo(p.lastEventAt)}` : 'No events yet';
+  return `${runtime} · ${last}`;
+}
+
+function projectStatusLabel(p: Project): string {
+  if (p.isActive) return 'Active';
+  if (p.eventCount > 0) return 'Idle';
+  return 'New';
+}
+
+function projectFallbackIconDataUri(_projectName: string): string {
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'>
+<style>
+  .bg { fill: #F8FAFC; stroke: #CBD5E1; }
+  .core { fill: #E2E8F0; stroke: #94A3B8; }
+  .dot { fill: #334155; }
+  @media (prefers-color-scheme: dark) {
+    .bg { fill: #0F172A; stroke: #334155; }
+    .core { fill: #1E293B; stroke: #94A3B8; }
+    .dot { fill: #CBD5E1; }
+  }
+</style>
+<rect class='bg' x='1' y='1' width='30' height='30' rx='9'/>
+<rect class='core' x='8' y='8' width='16' height='16' rx='5' stroke-width='1.25'/>
+<circle class='dot' cx='16' cy='16' r='2.9'/>
+</svg>`;
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+}
+
+function normalizeLogoUrl(value?: string | null): string | undefined {
+  if (!value) return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('/')) {
+    return trimmed;
+  }
+  return undefined;
+}
+
+function resolveProjectLogo(project: Project, configuredLogo?: string): string {
+  return project.iconUrl || configuredLogo || projectFallbackIconDataUri(project.name);
+}
+
+function agentInitials(name: string): string {
+  const parts = name
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (parts.length === 0) return '?';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return `${parts[0][0] || ''}${parts[1][0] || ''}`.toUpperCase();
 }
 
 /** Inline home view — shown when no project selected */
 function ProjectsHome() {
+  const [projectQuery, setProjectQuery] = createSignal('');
+  const [sortMode, setSortMode] = createSignal<'activity' | 'name'>('activity');
+  const [defaultProjectLogo, setDefaultProjectLogo] = createSignal<string | undefined>(undefined);
   const projectList = createMemo(() => projects());
+  const orderedProjects = createMemo(() =>
+    [...projectList()].sort((left, right) => {
+      if (sortMode() === 'name') {
+        return left.name.localeCompare(right.name);
+      }
+      if (left.isActive !== right.isActive) return left.isActive ? -1 : 1;
+      return right.lastEventAt - left.lastEventAt;
+    }),
+  );
+  const filteredProjectList = createMemo(() => {
+    const query = projectQuery().trim().toLowerCase();
+    if (!query) return orderedProjects();
+    return orderedProjects().filter((project) => {
+      const fields = [
+        project.name,
+        project.summary || '',
+        project.runtimeLabels.join(' '),
+      ].join(' ').toLowerCase();
+      return fields.includes(query);
+    });
+  });
+  const activeCount = createMemo(() => projectList().filter((project) => project.isActive).length);
+  const totalEvents = createMemo(() =>
+    projectList().reduce((accumulator, project) => accumulator + project.eventCount, 0),
+  );
+  const totalAgents = createMemo(() =>
+    projectList().reduce((accumulator, project) => accumulator + project.agentCount, 0),
+  );
   const streamStateText = createMemo(() => {
     if (connectionState() === 'connecting') {
       return hasStreamData() ? 'Reconnecting to live data' : 'Loading live data';
@@ -175,32 +298,93 @@ function ProjectsHome() {
     return 'Start the daemon, or reconnect it, to populate this workspace.';
   });
 
+  const sortButtonStyle = (mode: 'activity' | 'name') => [
+    'height:30px;padding:0 10px;border-radius:9999px;border:1px solid var(--border);font-size:11px;cursor:pointer;',
+    'transition:background 0.15s,color 0.15s,border-color 0.15s;',
+    sortMode() === mode
+      ? 'background:var(--bg-elevated);color:var(--text-primary);border-color:var(--border-hover);font-weight:600;'
+      : 'background:transparent;color:var(--text-secondary);',
+  ].join('');
+
+  onMount(() => {
+    if (typeof localStorage === 'undefined') return;
+    setDefaultProjectLogo(
+      normalizeLogoUrl(localStorage.getItem(DEFAULT_PROJECT_LOGO_STORAGE_KEY)),
+    );
+  });
+
+  createEffect(() => {
+    if (typeof localStorage === 'undefined') return;
+    const value = defaultProjectLogo();
+    if (value) {
+      localStorage.setItem(DEFAULT_PROJECT_LOGO_STORAGE_KEY, value);
+    } else {
+      localStorage.removeItem(DEFAULT_PROJECT_LOGO_STORAGE_KEY);
+    }
+  });
+
   return (
-    <div style="padding:32px;max-width:1200px;margin:0 auto;overflow-y:auto;flex:1">
+    <div style="padding:24px 28px;max-width:1400px;margin:0 auto;overflow-y:auto;flex:1;width:100%;">
       <Show when={helpVisible()}>
         <ReadingGuide mode="home" />
       </Show>
 
-      <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:24px">
-        <h1 style="font-size:24px;font-weight:600;letter-spacing:-0.03em">Projects</h1>
-        <span style="font-size:13px;color:var(--text-tertiary)">{projectList().length} projects</span>
-      </div>
-
-      <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:20px;padding:16px 18px;border:1px solid var(--border);border-radius:12px;background:var(--bg-card);">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
-          <p style="font-size:14px;font-weight:600;color:var(--text-primary);">
-            Nothing selected yet
-          </p>
+      <div style="display:flex;flex-direction:column;gap:14px;margin-bottom:20px;">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+          <div style="display:flex;align-items:baseline;gap:12px;">
+            <h1 style="font-size:24px;font-weight:600;letter-spacing:-0.03em">Overview</h1>
+            <span style="font-size:13px;color:var(--text-tertiary)">{projectList().length} projects</span>
+          </div>
           <span style="font-size:11px;color:var(--text-dim);font-family:var(--font-mono);">
             {streamStateText()}
           </span>
         </div>
-        <p style="font-size:13px;color:var(--text-secondary);line-height:1.5;">
-          {streamStateDetail()}
-        </p>
-        <p style="font-size:12px;color:var(--text-dim);line-height:1.5;">
-          Select a project from the left sidebar to populate the timeline, event stream, and agent graph.
-        </p>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <div style="flex:1;min-width:240px;">
+            <input
+              type="text"
+              value={projectQuery()}
+              onInput={(event) => setProjectQuery(event.currentTarget.value)}
+              placeholder="Search projects..."
+              style="width:100%;height:34px;border-radius:8px;border:1px solid var(--border);background:var(--bg-card);color:var(--text-primary);padding:0 12px;font-size:12px;"
+            />
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <button
+              onClick={() => setSortMode('activity')}
+              aria-pressed={sortMode() === 'activity'}
+              style={sortButtonStyle('activity')}
+            >
+              Activity
+            </button>
+            <button
+              onClick={() => setSortMode('name')}
+              aria-pressed={sortMode() === 'name'}
+              style={sortButtonStyle('name')}
+            >
+              Name
+            </button>
+          </div>
+          <button
+            onClick={() => {
+              const current = defaultProjectLogo() || '';
+              const next = window.prompt('Default project logo URL (https://... or /path)', current);
+              if (next === null) return;
+              setDefaultProjectLogo(normalizeLogoUrl(next));
+            }}
+            style="height:34px;border-radius:8px;border:1px solid var(--border);background:var(--bg-card);color:var(--text-primary);padding:0 10px;font-size:12px;cursor:pointer;"
+          >
+            Set logo
+          </button>
+          <Show when={defaultProjectLogo()}>
+            <button
+              onClick={() => setDefaultProjectLogo(undefined)}
+              style="height:34px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text-secondary);padding:0 10px;font-size:12px;cursor:pointer;"
+            >
+              Reset logo
+            </button>
+          </Show>
+        </div>
       </div>
 
       <Show when={projectList().length === 0}>
@@ -210,64 +394,179 @@ function ProjectsHome() {
         </div>
       </Show>
 
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px">
-        <For each={projectList()}>
-          {(p) => (
-            <div
-              style="background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:20px;cursor:pointer;transition:border-color 0.15s"
-              onMouseOver={(el) => el.currentTarget.style.borderColor = 'var(--border-hover)'}
-              onMouseOut={(el) => el.currentTarget.style.borderColor = 'var(--border)'}
-              onClick={() => selectProject(p.name)}
-            >
-              <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
-                <Icon path={folder} style="width:16px;height:16px;color:var(--text-secondary);" />
-                <span style={`width:8px;height:8px;border-radius:50%;background:${p.isActive ? 'var(--green)' : 'var(--text-dim)'}`} />
-                <span style="font-size:15px;font-weight:600">{p.name}</span>
-              </div>
-              <div style="display:flex;gap:24px;margin-bottom:12px">
-                <div>
-                  <div style="font-size:20px;font-weight:600">{p.sessions.length}</div>
-                  <div style="font-size:11px;color:var(--text-tertiary);text-transform:uppercase;letter-spacing:0.05em">sessions</div>
+      <div style="display:flex;align-items:center;gap:12px;margin:0 0 10px 0;flex-wrap:wrap;">
+        <span style="font-size:11px;color:var(--text-secondary);">
+          {activeCount()} active projects
+        </span>
+        <span style="font-size:11px;color:var(--text-secondary);">
+          {totalAgents()} agents
+        </span>
+        <span style="font-size:11px;color:var(--text-secondary);">
+          {totalEvents()} events
+        </span>
+        <span style="font-size:11px;color:var(--text-dim);">
+          {streamStateDetail()}
+        </span>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:10px;min-width:0;">
+        <p style="font-size:12px;font-weight:600;color:var(--text-primary);">Projects</p>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;align-items:stretch;">
+          <For each={filteredProjectList()}>
+            {(p) => (
+              <div
+                style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:14px;cursor:pointer;transition:border-color 0.15s;min-height:188px;display:flex;flex-direction:column;gap:8px;"
+                onMouseOver={(el) => el.currentTarget.style.borderColor = 'var(--border-hover)'}
+                onMouseOut={(el) => el.currentTarget.style.borderColor = 'var(--border)'}
+                onClick={() => selectProject(p.name)}
+              >
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+                  <div style="display:flex;align-items:center;gap:8px;min-width:0;">
+                    <div
+                      style={[
+                        'width:32px;height:32px;border-radius:9px;border:1px solid var(--border);display:flex;align-items:center;justify-content:center;flex-shrink:0;',
+                        'background:linear-gradient(135deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01));',
+                      ].join('')}
+                    >
+                      <img
+                        src={resolveProjectLogo(p, defaultProjectLogo())}
+                        alt=""
+                        style="width:16px;height:16px;opacity:0.95;"
+                      />
+                    </div>
+                    <div style="min-width:0;display:flex;flex-direction:column;gap:2px;">
+                      <span style="font-size:15px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{p.name}</span>
+                      <span style="font-size:10px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.06em;">
+                        Project
+                      </span>
+                    </div>
+                  </div>
+                  <span style={`font-size:10px;padding:2px 8px;border-radius:9999px;border:1px solid var(--border);background:${p.isActive ? 'var(--green-dim)' : 'var(--bg-elevated)'};color:${p.isActive ? 'var(--green)' : 'var(--text-secondary)'};font-weight:600;flex-shrink:0;`}>
+                    {projectStatusLabel(p)}
+                  </span>
                 </div>
-                <div>
-                  <div style="font-size:20px;font-weight:600">{p.agentCount}</div>
-                  <div style="font-size:11px;color:var(--text-tertiary);text-transform:uppercase;letter-spacing:0.05em">agents</div>
+
+                <div style="display:flex;gap:14px;">
+                  <div style="font-size:11px;color:var(--text-secondary);">{p.sessions.length} sessions</div>
+                  <div style="font-size:11px;color:var(--text-secondary);">{p.agentCount} agents</div>
+                  <div style="font-size:11px;color:var(--text-secondary);">{p.eventCount} events</div>
                 </div>
-                <div>
-                  <div style="font-size:20px;font-weight:600">{p.eventCount}</div>
-                  <div style="font-size:11px;color:var(--text-tertiary);text-transform:uppercase;letter-spacing:0.05em">events</div>
+
+                <div style="font-size:12px;color:var(--text-primary);line-height:1.5;min-height:36px;">
+                  {projectCardHeadline(p)}
+                </div>
+
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:auto;">
+                  <div style="font-size:11px;color:var(--text-secondary);line-height:1.4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                    {projectCardSubline(p)}
+                  </div>
+                  <Show when={uniqueAgentBadges(p).length > 0}>
+                    <div style="display:flex;align-items:center;margin-right:4px;">
+                      <For each={uniqueAgentBadges(p).slice(0, 4)}>
+                        {(badge, index) => (
+                          <div
+                            title={badge.name}
+                            style={[
+                              'width:20px;height:20px;border-radius:9999px;border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:var(--text-primary);',
+                              'background:var(--bg-elevated);',
+                              `margin-left:${index() === 0 ? 0 : -6}px;`,
+                              'overflow:hidden;',
+                            ].join('')}
+                          >
+                            <Show
+                              when={badge.avatarUrl}
+                              fallback={agentInitials(badge.name)}
+                            >
+                              <img
+                                src={badge.avatarUrl}
+                                alt=""
+                                style="width:100%;height:100%;object-fit:cover;"
+                              />
+                            </Show>
+                          </div>
+                        )}
+                      </For>
+                    </div>
+                  </Show>
                 </div>
               </div>
-              <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">
-                <For each={uniqueAgentBadges(p)}>
-                  {(badge) => (
-                    <span style={`font-size:11px;padding:2px 8px;border-radius:4px;border:1px solid var(--border);background:${badge.isActive ? 'var(--green-dim)' : 'var(--bg-elevated)'};color:${badge.isActive ? 'var(--green)' : 'var(--text-secondary)'};display:inline-flex;align-items:center;gap:5px;`}>
-                      <Icon path={badge.isActive ? bolt : cpuChip} style="width:11px;height:11px;" />
-                      <span>{badge.name}</span>
-                    </span>
-                  )}
-                </For>
-              </div>
-              <div style="font-size:12px;color:var(--text-tertiary)">
-                {p.summary
-                  ? p.summary
-                  : p.isActive
-                    ? 'Active now'
-                    : `Last activity ${Math.floor((Date.now() - p.lastEventAt) / 60000)}m ago`}
-              </div>
-            </div>
-          )}
-        </For>
+            )}
+          </For>
+        </div>
       </div>
     </div>
   );
 }
 
 type GuideMode = 'home' | 'project';
+type ReadingPanel = 'guide' | 'docs';
+
+interface DocsPortalEntry {
+  title: string;
+  path: string;
+  summary: string;
+}
 
 function ReadingGuide(props: { mode: GuideMode }) {
   const project = createMemo(() => selectedProjectSnapshot());
   const focus = createMemo(() => selectedProjectFocusSnapshot());
+  const [panel, setPanel] = createSignal<ReadingPanel>('docs');
+  const [copiedValue, setCopiedValue] = createSignal<string | null>(null);
+
+  const docsPortalSections = createMemo((): Array<{ title: string; entries: DocsPortalEntry[] }> => [
+    {
+      title: 'Start Here',
+      entries: [
+        {
+          title: 'Docs Portal Index',
+          path: 'docs/README.md',
+          summary: 'Primary entry point for all project documentation.',
+        },
+        {
+          title: 'Event Stream UX Guide',
+          path: 'docs/event-stream-ux-guide.md',
+          summary: 'Simple/Detailed behavior, payload modes, and style rules.',
+        },
+      ],
+    },
+    {
+      title: 'UI And Design',
+      entries: [
+        {
+          title: 'Full Solid UI Design Spec',
+          path: 'docs/superpowers/specs/2026-04-03-solidjs-full-ui-design.md',
+          summary: 'Design contract for layout, interaction, and accessibility.',
+        },
+      ],
+    },
+    {
+      title: 'Operations And Release',
+      entries: [
+        {
+          title: 'macOS Desktop Release',
+          path: 'docs/macos-desktop-release.md',
+          summary: 'Release flow and operational runbook for desktop shipping.',
+        },
+      ],
+    },
+  ]);
+
+  const quickRunCommands = [
+    'make daemon',
+    'make client',
+    'make test',
+  ];
+
+  const copyToClipboard = async (value: string) => {
+    if (typeof navigator === 'undefined' || !navigator.clipboard) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopiedValue(value);
+      window.setTimeout(() => setCopiedValue(null), 1500);
+    } catch {
+      // No-op if clipboard write fails in current environment.
+    }
+  };
 
   const content = createMemo(() => {
     const currentProject = project();
@@ -325,55 +624,127 @@ function ReadingGuide(props: { mode: GuideMode }) {
   });
 
   return (
-    <div
-      style={[
-        'margin-bottom:16px;padding:16px 18px;border:1px solid var(--border);border-radius:14px;',
-        'background:linear-gradient(135deg,rgba(59,130,246,0.10),rgba(255,255,255,0.02));',
-        'box-shadow:inset 0 1px 0 rgba(255,255,255,0.04);',
-      ].join('')}
-    >
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px;">
-        <div style="min-width:0;max-width:840px;">
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
-            <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:var(--accent);">
-              {content().eyebrow}
+    <div class="reading-guide-shell">
+      <div class="reading-guide-header">
+        <div class="reading-guide-headcopy">
+          <div class="reading-guide-eyebrow-row">
+            <span class="reading-guide-eyebrow">
+              {panel() === 'docs' ? 'Docs portal' : content().eyebrow}
             </span>
-            <span style="width:6px;height:6px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px rgba(59,130,246,0.45);" />
+            <span class="reading-guide-dot" />
           </div>
-          <div style="font-size:16px;font-weight:700;color:var(--text-primary);line-height:1.35;">
-            {content().title}
+          <div class="reading-guide-title">
+            {panel() === 'docs' ? 'Pharos platform docs portal' : content().title}
           </div>
-          <div style="margin-top:5px;font-size:12px;line-height:1.55;color:var(--text-secondary);max-width:900px;">
-            {content().summary}
+          <div class="reading-guide-summary">
+            {panel() === 'docs'
+              ? 'Browse implementation docs and copy exact run commands from inside the platform.'
+              : content().summary}
           </div>
         </div>
 
-        <button
-          onClick={toggleHelpVisible}
-          style="background:none;border:1px solid var(--border);border-radius:9999px;padding:6px 10px;cursor:pointer;font-size:11px;font-weight:600;color:var(--text-secondary);flex-shrink:0;transition:border-color 0.15s,color 0.15s,background 0.15s;"
-          onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border-hover)'; }}
-          onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border)'; }}
-        >
-          Hide guide
-        </button>
+        <div class="reading-guide-actions">
+          <div class="reading-guide-tabs" role="tablist" aria-label="Guide panel switcher">
+            <button
+              type="button"
+              role="tab"
+              class="reading-guide-tab"
+              classList={{ 'is-active': panel() === 'docs' }}
+              aria-selected={panel() === 'docs'}
+              onClick={() => setPanel('docs')}
+            >
+              Docs
+            </button>
+            <button
+              type="button"
+              role="tab"
+              class="reading-guide-tab"
+              classList={{ 'is-active': panel() === 'guide' }}
+              aria-selected={panel() === 'guide'}
+              onClick={() => setPanel('guide')}
+            >
+              Guide
+            </button>
+          </div>
+          <button
+            onClick={toggleHelpVisible}
+            class="reading-guide-hide"
+            type="button"
+          >
+            Hide
+          </button>
+        </div>
       </div>
 
-      <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;">
-        <For each={content().steps}>
-          {(step, index) => (
-            <div
-              style="padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--bg-card);min-height:72px;"
-            >
-              <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);margin-bottom:6px;">
-                {index() + 1}
-              </div>
-              <div style="font-size:12px;line-height:1.5;color:var(--text-primary);">
-                {step}
-              </div>
+      <Show
+        when={panel() === 'docs'}
+        fallback={
+          <div class="reading-guide-steps-grid">
+            <For each={content().steps}>
+              {(step, index) => (
+                <div class="reading-guide-step">
+                  <div class="reading-guide-step-index">
+                    {index() + 1}
+                  </div>
+                  <div class="reading-guide-step-text">
+                    {step}
+                  </div>
+                </div>
+              )}
+            </For>
+          </div>
+        }
+      >
+        <div class="docs-portal-grid">
+          <For each={docsPortalSections()}>
+            {(section) => (
+              <section class="docs-portal-section">
+                <h3 class="docs-portal-section-title">{section.title}</h3>
+                <div class="docs-portal-section-items">
+                  <For each={section.entries}>
+                    {(entry) => (
+                      <article class="docs-portal-entry">
+                        <div class="docs-portal-entry-title">{entry.title}</div>
+                        <p class="docs-portal-entry-summary">{entry.summary}</p>
+                        <div class="docs-portal-entry-footer">
+                          <code class="docs-portal-entry-path">{entry.path}</code>
+                          <button
+                            type="button"
+                            class="docs-portal-copy"
+                            onClick={() => void copyToClipboard(entry.path)}
+                          >
+                            {copiedValue() === entry.path ? 'Copied' : 'Copy path'}
+                          </button>
+                        </div>
+                      </article>
+                    )}
+                  </For>
+                </div>
+              </section>
+            )}
+          </For>
+
+          <section class="docs-portal-section">
+            <h3 class="docs-portal-section-title">Run The Platform</h3>
+            <div class="docs-portal-runlist">
+              <For each={quickRunCommands}>
+                {(command) => (
+                  <div class="docs-portal-runitem">
+                    <code class="docs-portal-runcommand">{command}</code>
+                    <button
+                      type="button"
+                      class="docs-portal-copy"
+                      onClick={() => void copyToClipboard(command)}
+                    >
+                      {copiedValue() === command ? 'Copied' : 'Copy'}
+                    </button>
+                  </div>
+                )}
+              </For>
             </div>
-          )}
-        </For>
-      </div>
+          </section>
+        </div>
+      </Show>
     </div>
   );
 }

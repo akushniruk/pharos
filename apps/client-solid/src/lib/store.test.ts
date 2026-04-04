@@ -67,7 +67,7 @@ describe('buildProjectFocusSnapshot', () => {
       agentSummary: 'Verifying canary metrics',
       scopeLabel: 'Agent focus',
       breadcrumb: 'pharos · Deploy review · Operator',
-      headline: 'Operator is verifying canary metrics',
+      headline: 'Operator: Verifying canary metrics',
       subheadline: 'Next action: Own the release checklist',
       eventCount: 24,
       sessionCount: 1,
@@ -105,7 +105,7 @@ describe('buildProjectFocusSnapshot', () => {
       agentSummary: null,
       scopeLabel: 'Project overview',
       breadcrumb: 'pharos',
-      headline: 'pharos is coordinating a handoff',
+      headline: 'pharos: Coordinating a handoff',
       subheadline: 'Runtime: Claude',
       eventCount: 2,
       sessionCount: 0,
@@ -194,8 +194,8 @@ describe('buildRecentChangesSnapshot', () => {
       lastEventAt: 400,
       items: [
         {
-          label: 'Shared an update',
-          detail: 'Updated the digest strip.',
+          label: 'Updated the digest strip.',
+          detail: undefined,
           timestamp: 400,
         },
         {
@@ -204,7 +204,7 @@ describe('buildRecentChangesSnapshot', () => {
           timestamp: 300,
         },
         {
-          label: 'Running a command in client-solid',
+          label: 'Running a task in client-solid',
           detail: 'pnpm build',
           timestamp: 200,
         },
@@ -275,8 +275,8 @@ describe('buildViewedChangesSnapshot', () => {
       hasUnreadChanges: true,
       items: [
         {
-          label: 'Shared an update',
-          detail: 'Updated the digest strip.',
+          label: 'Updated the digest strip.',
+          detail: undefined,
           timestamp: 400,
         },
         {
@@ -374,7 +374,7 @@ describe('resolveActivityState', () => {
     ], { isActive: false, now })).toEqual({
       label: 'Needs attention',
       tone: 'attention',
-      detail: 'No progress for 15m after Running a command',
+      detail: 'No progress for 15m after Running a task',
     });
   });
 });
@@ -398,10 +398,10 @@ describe('resolveConservativeStatusDetail', () => {
     ] satisfies HookEvent[];
 
     expect(resolveConservativeStatusDetail('blocked', undefined, events)).toBe(
-      'Waiting on the last step to finish after Running a command',
+      'Waiting on the last step to finish after Running a task',
     );
     expect(resolveConservativeStatusDetail('attention', undefined, events)).toBe(
-      'No new progress after Running a command',
+      'No new progress after Running a task',
     );
   });
 });

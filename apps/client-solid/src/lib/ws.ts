@@ -6,7 +6,7 @@ const SERVER_PORT = import.meta.env.VITE_API_PORT || '4000';
 const DEFAULT_HOST = resolveApiHost(
   typeof window !== 'undefined' ? window.location.hostname : undefined,
 );
-const API_BASE =
+export const API_BASE =
   import.meta.env.VITE_API_URL || `http://${DEFAULT_HOST}:${SERVER_PORT}`;
 const WS_URL =
   import.meta.env.VITE_WS_URL || `ws://${DEFAULT_HOST}:${SERVER_PORT}/stream`;
@@ -107,6 +107,7 @@ function normalizeProjects(value: unknown): Project[] {
 
   return value.map((project: any) => ({
     name: project.name,
+    iconUrl: stringField(project.icon_url, project.iconUrl),
     runtimeLabels: normalizeRuntimeLabels(
       Array.isArray(project.runtime_labels)
         ? project.runtime_labels
@@ -156,6 +157,7 @@ function normalizeAgents(value: unknown) {
   return value.map((agent: any) => ({
     agentId: agent.agent_id ?? agent.agentId ?? null,
     displayName: agent.display_name ?? agent.displayName ?? 'Agent',
+    avatarUrl: stringField(agent.avatar_url, agent.avatarUrl),
     runtimeLabel: normalizeRuntimeLabel(agent.runtime_label ?? agent.runtimeLabel),
     assignment: agent.assignment ?? undefined,
     currentAction: agent.current_action ?? agent.currentAction ?? undefined,
@@ -171,6 +173,13 @@ function normalizeAgents(value: unknown) {
 function numberField(primary: unknown, fallback: unknown): number {
   const value = primary ?? fallback;
   return typeof value === 'number' ? value : 0;
+}
+
+function stringField(primary: unknown, fallback: unknown): string | undefined {
+  const value = primary ?? fallback;
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : undefined;
 }
 
 function normalizeRuntimeLabel(value: unknown): string | undefined {

@@ -5,6 +5,82 @@ export interface EventDescription {
   secondary?: string;
 }
 
+export function sortedPayloadEntries(
+  payload: Record<string, unknown> | null | undefined,
+): Array<[string, unknown]> {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return [];
+  return Object.entries(payload).sort(([left], [right]) => left.localeCompare(right));
+}
+
+export function isPayloadContainer(value: unknown): value is Record<string, unknown> | unknown[] {
+  return Array.isArray(value) || (typeof value === 'object' && value !== null);
+}
+
+export function formatPayloadScalar(value: unknown): string {
+  if (value === null) return 'null';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (typeof value === 'undefined') return 'undefined';
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+export function simpleEventKindLabel(type: string): string {
+  switch (type) {
+    case 'UserPromptSubmit':
+      return 'You';
+    case 'AssistantResponse':
+      return 'Reply';
+    case 'PreToolUse':
+      return 'Doing';
+    case 'PostToolUse':
+      return 'Done';
+    case 'PostToolUseFailure':
+      return 'Failed';
+    case 'SubagentStart':
+      return 'Delegated';
+    case 'SubagentStop':
+      return 'Completed';
+    default:
+      return 'Update';
+  }
+}
+
+export function mergeSimpleRowSummary(event: HookEvent, maxLen = 120): string {
+  const description = describeEventDescription(event);
+  const primary = description.primary.trim();
+  const secondary = description.secondary?.trim();
+  if (!secondary || primary.toLowerCase().includes(secondary.toLowerCase())) {
+    return truncate(primary, maxLen);
+  }
+  const joined = `${primary} - ${secondary}`;
+  if (joined.length <= maxLen) return joined;
+  return truncate(joined, maxLen);
+}
+
+/** Trust signal: observed vs managed acquisition; unknown or absent values yield no label */
+export function formatAcquisitionModeLabel(mode?: string | null): string | undefined {
+  if (typeof mode !== 'string') return undefined;
+  const normalized = mode
+    .trim()
+    .toLowerCase()
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!normalized) return undefined;
+
+  const first = normalized.split(' ')[0];
+  if (!first || first === 'unknown') return undefined;
+
+  if (first === 'observed') return 'Observed';
+  if (first === 'managed') return 'Managed';
+
+  return undefined;
+}
+
 export function formatRuntimeLabel(label?: string | null): string | undefined {
   if (typeof label !== 'string') return undefined;
   const normalized = label.trim().toLowerCase().replace(/[_-]+/g, ' ');
@@ -43,16 +119,16 @@ export function describeEventDescription(event: HookEvent): EventDescription {
   switch (type) {
     case 'PreToolUse': {
       const command = extractCommand(toolInput);
-      if ((toolName === 'Bash' || toolName === 'exec_command') && command) {
+      if ((toolName === 'Bash' || toolName === 'exec_command' || toolName === 'Shell') && command) {
         const workdir = typeof toolInput?.workdir === 'string' ? basename(toolInput.workdir) : null;
         if (workdir) {
           return {
-            primary: `Running a command in ${workdir}`,
+            primary: `Running a task in ${workdir}`,
             secondary: composeRuntimeDetail(runtime, command),
           };
         }
         return {
-          primary: 'Running a command',
+          primary: 'Running a task',
           secondary: composeRuntimeDetail(runtime, command),
         };
       }
@@ -101,9 +177,15 @@ export function describeEventDescription(event: HookEvent): EventDescription {
           secondary: composeRuntimeDetail(runtime),
         };
       }
+      if (toolName === 'TodoWrite') {
+        return {
+          primary: 'Updating the plan',
+          secondary: composeRuntimeDetail(runtime),
+        };
+      }
       return {
-        primary: 'Using a tool',
-        secondary: composeRuntimeDetail(runtime, toolName !== 'unknown' ? toolName : undefined),
+        primary: toolName !== 'unknown' ? `Using ${friendlyToolName(toolName)}` : 'Working on your request',
+        secondary: composeRuntimeDetail(runtime),
       };
     }
     case 'PostToolUse': {
@@ -121,8 +203,8 @@ export function describeEventDescription(event: HookEvent): EventDescription {
         };
       }
       return {
-        primary: 'Finished using a tool',
-        secondary: composeRuntimeDetail(runtime, toolName !== 'unknown' ? toolName : undefined),
+        primary: 'Step finished',
+        secondary: composeRuntimeDetail(runtime),
       };
     }
     case 'PostToolUseFailure': {
@@ -134,8 +216,8 @@ export function describeEventDescription(event: HookEvent): EventDescription {
         };
       }
       return {
-        primary: toolName === 'exec_command' ? 'Command failed' : 'A tool call failed',
-        secondary: composeRuntimeDetail(runtime, toolName !== 'unknown' ? toolName : undefined),
+        primary: toolName === 'exec_command' ? 'Command failed' : 'Step failed',
+        secondary: composeRuntimeDetail(runtime),
       };
     }
     case 'SessionStart':
@@ -171,15 +253,15 @@ export function describeEventDescription(event: HookEvent): EventDescription {
     case 'UserPromptSubmit': {
       const prompt = p.prompt || p.message || '';
       return {
-        primary: 'Captured a request',
-        secondary: composeRuntimeDetail(runtime, prompt ? truncate(prompt, 80) : undefined),
+        primary: prompt ? `You asked: ${truncate(prompt, 72)}` : 'You asked for help',
+        secondary: composeRuntimeDetail(runtime),
       };
     }
     case 'AssistantResponse': {
       const text = p.text || '';
       return {
-        primary: 'Shared an update',
-        secondary: composeRuntimeDetail(runtime, text ? truncate(text, 80) : undefined),
+        primary: text ? truncate(text, 90) : 'Shared an update',
+        secondary: composeRuntimeDetail(runtime),
       };
     }
     case 'SessionTitleChanged':
@@ -256,4 +338,22 @@ function composeRuntimeDetail(runtime: string | undefined, detail?: string | nul
     return `${runtime} runtime`;
   }
   return trimmedDetail || undefined;
+}
+
+function friendlyToolName(toolName: string): string {
+  const map: Record<string, string> = {
+    readfile: 'file read',
+    read: 'file read',
+    edit: 'file edit',
+    write: 'file write',
+    shell: 'terminal command',
+    exec_command: 'terminal command',
+    grep: 'search',
+    glob: 'file search',
+    todowrite: 'plan update',
+    agent: 'helper delegation',
+    subagent: 'helper delegation',
+  };
+  const normalized = toolName.trim().toLowerCase();
+  return map[normalized] || toolName;
 }

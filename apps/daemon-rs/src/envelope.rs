@@ -365,6 +365,7 @@ pub fn cursor_event_to_envelope(
             agent_id: _,
             display_name,
             description,
+            parent_agent_id,
         } => (
             EventKind::SubagentStarted,
             format!("subagent started: {display_name}"),
@@ -373,7 +374,7 @@ pub fn cursor_event_to_envelope(
                 "agent_name": display_name,
                 "display_name": display_name,
                 "description": description,
-                "parent_agent_id": "main",
+                "parent_agent_id": parent_agent_id.clone().unwrap_or_else(|| "main".to_string()),
             }),
         ),
     };
