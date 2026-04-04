@@ -47,6 +47,11 @@ export function connectWs() {
     ws = null;
     setTimeout(connectWs, 3000);
   };
+  ws.onerror = (event) => {
+    console.error('[ws] WebSocket error:', event);
+    setConnected(false);
+    setConnectionState('disconnected');
+  };
 
   ws.onmessage = (e) => {
     try {
@@ -67,7 +72,9 @@ export function connectWs() {
           setAgents(msg.data);
         }
       }
-    } catch {}
+    } catch (err) {
+      console.error('[ws] Failed to parse message:', err);
+    }
   };
 }
 

@@ -6,4 +6,7 @@ export default defineConfig({
   server: {
     port: parseInt(process.env.VITE_PORT || '5173'),
   },
+  test: {
+    environment: 'node',
+  },
 });
