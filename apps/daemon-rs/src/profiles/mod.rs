@@ -1,5 +1,6 @@
 pub mod claude;
 pub mod codex;
+pub mod cursor;
 pub mod gemini;
 pub mod process;
 
@@ -29,6 +30,7 @@ pub struct DiscoveryOptions {
     pub claude_home: Option<PathBuf>,
     pub codex_home: Option<PathBuf>,
     pub gemini_home: Option<PathBuf>,
+    pub cursor_home: Option<PathBuf>,
     pub runtime_matchers: Vec<RuntimeMatcherConfig>,
 }
 
@@ -53,6 +55,27 @@ pub fn discover_all_sessions(options: &DiscoveryOptions) -> Vec<DetectedSession>
     if let Some(gemini_home) = options.gemini_home.clone() {
         let native_sessions = gemini::GeminiProfile::new(gemini_home).discover_native_sessions();
         gemini::enrich_detected_sessions(&mut process_sessions, &native_sessions);
+    }
+
+    if let Some(cursor_home) = options.cursor_home.clone() {
+        let profile = cursor::CursorProfile::new(cursor_home);
+        let native_sessions = profile.discover_native_sessions();
+        cursor::enrich_detected_sessions(&mut process_sessions, &native_sessions);
+        let already_seen_native_ids = process_sessions
+            .iter()
+            .filter_map(|session| session.native_session_id.clone())
+            .collect::<std::collections::HashSet<_>>();
+        let cursor_native_sessions = profile
+            .discover_sessions()
+            .into_iter()
+            .filter(|session| {
+                session
+                    .native_session_id
+                    .as_ref()
+                    .is_none_or(|native_id| !already_seen_native_ids.contains(native_id))
+            })
+            .collect::<Vec<_>>();
+        sessions.extend(cursor_native_sessions);
     }
 
     sessions.extend(process_sessions);

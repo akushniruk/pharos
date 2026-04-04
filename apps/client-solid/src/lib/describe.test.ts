@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { describeEvent, describeEventDetail } from './describe';
+import { describeEvent, describeEventDetail, formatRuntimeLabel } from './describe';
 import type { HookEvent } from './types';
 
 describe('describeEvent', () => {
@@ -92,6 +92,29 @@ describe('describeEvent', () => {
     expect(describeEventDetail(event)).toBe(
       'Gemini runtime · Updated the sidebar so the summary line now leads with plain language.',
     );
+  });
+
+  it('formats cursor runtime labels consistently', () => {
+    const event: HookEvent = {
+      source_app: 'demo',
+      session_id: 'session-1',
+      hook_event_type: 'AssistantResponse',
+      payload: {
+        runtime_label: 'cursor_agent',
+        text: 'Streaming transcript updates',
+      },
+      timestamp: 1,
+    };
+
+    expect(describeEvent(event)).toBe('Shared an update');
+    expect(describeEventDetail(event)).toBe('Cursor runtime · Streaming transcript updates');
+  });
+
+  it('normalizes cursor runtime aliases to a single display label', () => {
+    expect(formatRuntimeLabel('cursor')).toBe('Cursor');
+    expect(formatRuntimeLabel('Cursor Agent')).toBe('Cursor');
+    expect(formatRuntimeLabel('cursor-runtime')).toBe('Cursor');
+    expect(formatRuntimeLabel('cursor_agent')).toBe('Cursor');
   });
 
   it('describes delegated work as a next action for non-technical readers', () => {

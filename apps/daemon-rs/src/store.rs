@@ -509,6 +509,7 @@ fn runtime_source_label(runtime_source: &crate::model::RuntimeSource) -> &'stati
         crate::model::RuntimeSource::ClaudeCode => "Claude",
         crate::model::RuntimeSource::CodexCli => "Codex",
         crate::model::RuntimeSource::GeminiCli => "Gemini",
+        crate::model::RuntimeSource::CursorAgent => "Cursor",
         crate::model::RuntimeSource::PiCli => "Pi",
         crate::model::RuntimeSource::OpenCode => "OpenCode",
         crate::model::RuntimeSource::Aider => "Aider",

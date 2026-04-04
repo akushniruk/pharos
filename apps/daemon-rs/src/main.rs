@@ -19,6 +19,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 claude_home: config.claude_home.clone(),
                 codex_home: config.codex_home.clone(),
                 gemini_home: config.gemini_home.clone(),
+                cursor_home: config.cursor_home.clone(),
                 runtime_matchers: pharos_daemon::profiles::process::load_runtime_matchers(
                     config.runtime_matchers_path.as_deref(),
                 ),
@@ -34,6 +35,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             if discovery_options.claude_home.is_some()
                 || discovery_options.codex_home.is_some()
                 || discovery_options.gemini_home.is_some()
+                || discovery_options.cursor_home.is_some()
                 || !discovery_options.runtime_matchers.is_empty()
             {
                 let scanner_store = state.store.clone();

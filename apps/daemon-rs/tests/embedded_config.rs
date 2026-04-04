@@ -28,6 +28,10 @@ fn embedded_discovery_options_include_supported_runtime_homes() {
         options.gemini_home,
         Some(PathBuf::from("/Users/tester/.gemini")),
     );
+    assert_eq!(
+        options.cursor_home,
+        Some(PathBuf::from("/Users/tester/.cursor")),
+    );
 }
 
 #[test]

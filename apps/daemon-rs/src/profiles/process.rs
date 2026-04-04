@@ -164,6 +164,14 @@ fn classify_process_details(
                 fallback_cwd: fallback_cwd(snapshot),
             });
         }
+        "cursor-agent" | "cursor-agent-cli" => {
+            return Some(ProcessClassification {
+                runtime_source: RuntimeSource::CursorAgent,
+                entrypoint: snapshot.name.clone(),
+                display_title: None,
+                fallback_cwd: fallback_cwd(snapshot),
+            });
+        }
         "opencode" => {
             return Some(ProcessClassification {
                 runtime_source: RuntimeSource::OpenCode,
@@ -188,7 +196,7 @@ fn classify_process_details(
                 fallback_cwd: fallback_cwd(snapshot),
             });
         }
-        "cursor-agent" | "goose" | "copilot-agent" => {
+        "goose" | "copilot-agent" => {
             return Some(ProcessClassification {
                 runtime_source: RuntimeSource::GenericAgentCli,
                 entrypoint: snapshot.name.clone(),

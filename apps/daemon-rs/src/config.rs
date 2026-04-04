@@ -17,6 +17,7 @@ const CLAUDE_SESSIONS_DIR_ENV: &str = "PHAROS_CLAUDE_SESSIONS_DIR";
 const CLAUDE_HOME_ENV: &str = "PHAROS_CLAUDE_HOME";
 const CODEX_HOME_ENV: &str = "PHAROS_CODEX_HOME";
 const GEMINI_HOME_ENV: &str = "PHAROS_GEMINI_HOME";
+const CURSOR_HOME_ENV: &str = "PHAROS_CURSOR_HOME";
 const RUNTIME_MATCHERS_PATH_ENV: &str = "PHAROS_RUNTIME_MATCHERS_PATH";
 const HOME_ENV: &str = "HOME";
 const APPDATA_ENV: &str = "APPDATA";
@@ -40,6 +41,7 @@ pub struct Config {
     pub claude_home: Option<PathBuf>,
     pub codex_home: Option<PathBuf>,
     pub gemini_home: Option<PathBuf>,
+    pub cursor_home: Option<PathBuf>,
     pub runtime_matchers_path: Option<PathBuf>,
 }
 
@@ -98,6 +100,10 @@ impl Config {
             .get(GEMINI_HOME_ENV)
             .map(PathBuf::from)
             .or_else(|| default_gemini_home(&env_map));
+        let cursor_home = env_map
+            .get(CURSOR_HOME_ENV)
+            .map(PathBuf::from)
+            .or_else(|| default_cursor_home(&env_map));
         let runtime_matchers_path = env_map
             .get(RUNTIME_MATCHERS_PATH_ENV)
             .map(PathBuf::from)
@@ -111,6 +117,7 @@ impl Config {
             claude_home,
             codex_home,
             gemini_home,
+            cursor_home,
             runtime_matchers_path,
         })
     }
@@ -138,6 +145,9 @@ impl Config {
         }
         if let Ok(gemini_home) = env::var(GEMINI_HOME_ENV) {
             env_map.insert(GEMINI_HOME_ENV.to_string(), gemini_home);
+        }
+        if let Ok(cursor_home) = env::var(CURSOR_HOME_ENV) {
+            env_map.insert(CURSOR_HOME_ENV.to_string(), cursor_home);
         }
         if let Ok(runtime_matchers_path) = env::var(RUNTIME_MATCHERS_PATH_ENV) {
             env_map.insert(RUNTIME_MATCHERS_PATH_ENV.to_string(), runtime_matchers_path);
@@ -168,6 +178,7 @@ impl Config {
             claude_home: self.claude_home.clone(),
             codex_home: self.codex_home.clone(),
             gemini_home: self.gemini_home.clone(),
+            cursor_home: self.cursor_home.clone(),
             runtime_matchers: load_runtime_matchers(self.runtime_matchers_path.as_deref()),
         }
     }
@@ -218,6 +229,12 @@ fn default_gemini_home(env_map: &BTreeMap<String, String>) -> Option<PathBuf> {
     env_map
         .get(HOME_ENV)
         .map(|home| PathBuf::from(home).join(".gemini"))
+}
+
+fn default_cursor_home(env_map: &BTreeMap<String, String>) -> Option<PathBuf> {
+    env_map
+        .get(HOME_ENV)
+        .map(|home| PathBuf::from(home).join(".cursor"))
 }
 
 fn default_runtime_matchers_path(env_map: &BTreeMap<String, String>) -> Option<PathBuf> {

@@ -58,6 +58,16 @@ fn classifies_agent_like_unknown_process_as_generic() {
 
     assert_eq!(
         classify_process(&snapshot, &[]),
+        Some(RuntimeSource::CursorAgent)
+    );
+}
+
+#[test]
+fn classifies_other_agent_like_process_as_generic() {
+    let snapshot = snapshot("goose", &["goose", "--project", "."]);
+
+    assert_eq!(
+        classify_process(&snapshot, &[]),
         Some(RuntimeSource::GenericAgentCli)
     );
 }

@@ -1,6 +1,9 @@
-use pharos_daemon::envelope::{codex_event_to_envelope, transcript_event_to_envelope};
+use pharos_daemon::envelope::{
+    codex_event_to_envelope, cursor_event_to_envelope, transcript_event_to_envelope,
+};
 use pharos_daemon::model::{AcquisitionMode, EventKind, RuntimeSource};
 use pharos_daemon::profiles::codex::CodexSessionEvent;
+use pharos_daemon::profiles::cursor::CursorSessionEvent;
 use pharos_daemon::profiles::gemini::GeminiSessionEvent;
 use pharos_daemon::tailer::TranscriptEvent;
 use serde_json::json;
@@ -297,4 +300,36 @@ fn converts_gemini_tool_result_to_envelope() {
     assert_eq!(envelope.title, "tool call completed: shell");
     assert_eq!(envelope.payload["tool_name"], "shell");
     assert_eq!(envelope.payload["tool_use_id"], "tool-1");
+}
+
+#[test]
+fn converts_cursor_tool_use_to_envelope() {
+    let event = CursorSessionEvent::ToolUse {
+        tool_name: "ReadFile".to_string(),
+        tool_use_id: "tool-2".to_string(),
+        input: json!({"path":"apps/daemon-rs/src/scanner.rs"}),
+    };
+
+    let envelope = cursor_event_to_envelope(&event, "pharos", "cursor-sess", 1_711_234_567_000);
+
+    assert_eq!(envelope.runtime_source, RuntimeSource::CursorAgent);
+    assert_eq!(envelope.event_kind, EventKind::ToolCallStarted);
+    assert_eq!(envelope.payload["tool_name"], "ReadFile");
+    assert_eq!(envelope.payload["tool_use_id"], "tool-2");
+}
+
+#[test]
+fn converts_cursor_subagent_start_to_envelope() {
+    let event = CursorSessionEvent::SubagentStart {
+        agent_id: "tool-1".to_string(),
+        display_name: "Cursor Agent".to_string(),
+        description: Some("inspect scanner dedupe behavior".to_string()),
+    };
+
+    let envelope = cursor_event_to_envelope(&event, "pharos", "cursor-sess", 1_711_234_567_000);
+
+    assert_eq!(envelope.runtime_source, RuntimeSource::CursorAgent);
+    assert_eq!(envelope.event_kind, EventKind::SubagentStarted);
+    assert_eq!(envelope.agent_id.as_deref(), Some("tool-1"));
+    assert_eq!(envelope.payload["agent_name"], "Cursor Agent");
 }

@@ -8,14 +8,14 @@ use tokio::sync::broadcast;
 use tokio::time::interval;
 
 use crate::api::OutboundWsMessage;
-use crate::envelope::{codex_event_to_envelope, transcript_event_to_envelope};
+use crate::envelope::{codex_event_to_envelope, cursor_event_to_envelope, transcript_event_to_envelope};
 use crate::live_state::{LiveState, should_broadcast_registry};
 use crate::model::{
     AcquisitionMode, CapabilitySet, EventEnvelope, EventKind, RuntimeSource, SessionRef,
 };
 use crate::profiles::{
-    DiscoveryOptions, claude::ClaudeProfile, codex::CodexProfile, discover_all_sessions,
-    gemini::GeminiProfile,
+    DiscoveryOptions, claude::ClaudeProfile, codex::CodexProfile, cursor::CursorProfile,
+    discover_all_sessions, gemini::GeminiProfile,
 };
 use crate::store::Store;
 use crate::tailer::parse_jsonl_line;
@@ -37,6 +37,7 @@ struct TrackedSession {
     recent_codex_signatures: Vec<String>,
     gemini_log_offset: usize,
     recent_gemini_signatures: Vec<String>,
+    recent_cursor_signatures: Vec<String>,
     known_subagents: Vec<TrackedSubagent>,
     /// Maps tool_use_id → tool_name so ToolResult events can inherit the tool name.
     tool_name_map: HashMap<String, String>,
@@ -61,6 +62,10 @@ pub async fn run_scanner(
         .gemini_home
         .clone()
         .map(GeminiProfile::new);
+    let cursor_profile = discovery_options
+        .cursor_home
+        .clone()
+        .map(CursorProfile::new);
     let mut tracked: HashMap<String, TrackedSession> = HashMap::new();
     let mut tick = interval(Duration::from_secs(1));
     let mut ticks_since_discovery = usize::MAX;
@@ -165,6 +170,7 @@ pub async fn run_scanner(
                             &gemini_log_offset_key(&workspace_id, &session_id),
                         ),
                         recent_gemini_signatures: Vec::new(),
+                        recent_cursor_signatures: Vec::new(),
                         known_subagents: Vec::new(),
                         tool_name_map: HashMap::new(),
                     },
@@ -251,6 +257,11 @@ pub async fn run_scanner(
                             tail_gemini_activity(ts, profile, &store, &live_state, &sender);
                         }
                     }
+                    RuntimeSource::CursorAgent => {
+                        if let Some(profile) = cursor_profile.as_ref() {
+                            tail_cursor_activity(ts, profile, &store, &live_state, &sender);
+                        }
+                    }
                     _ => {}
                 }
             }
@@ -307,6 +318,7 @@ mod tests {
             recent_codex_signatures: Vec::new(),
             gemini_log_offset: 0,
             recent_gemini_signatures: Vec::new(),
+            recent_cursor_signatures: Vec::new(),
             known_subagents: Vec::new(),
             tool_name_map: HashMap::new(),
         };
@@ -350,6 +362,7 @@ mod tests {
             recent_codex_signatures: Vec::new(),
             gemini_log_offset: 0,
             recent_gemini_signatures: Vec::new(),
+            recent_cursor_signatures: Vec::new(),
             known_subagents: Vec::new(),
             tool_name_map: HashMap::new(),
         };
@@ -446,6 +459,7 @@ mod tests {
             recent_codex_signatures: Vec::new(),
             gemini_log_offset: 0,
             recent_gemini_signatures: Vec::new(),
+            recent_cursor_signatures: Vec::new(),
             known_subagents: Vec::new(),
             tool_name_map: HashMap::new(),
         };
@@ -605,6 +619,65 @@ fn tail_gemini_activity(
     }
 }
 
+fn tail_cursor_activity(
+    ts: &mut TrackedSession,
+    _profile: &CursorProfile,
+    store: &Store,
+    live_state: &LiveState,
+    sender: &broadcast::Sender<OutboundWsMessage>,
+) {
+    let Some(transcript_path) = ts.session.transcript_path.as_ref() else {
+        return;
+    };
+    let Ok(file) = std::fs::File::open(transcript_path) else {
+        return;
+    };
+
+    let mut reader = BufReader::new(file);
+    if reader.seek(SeekFrom::Start(ts.file_offset)).is_err() {
+        return;
+    }
+
+    let workspace_id = workspace_id_from_cwd(&ts.session.cwd);
+    let now_ms = now_millis();
+    let mut line = String::new();
+    loop {
+        line.clear();
+        match reader.read_line(&mut line) {
+            Ok(0) | Err(_) => break,
+            Ok(_) => {
+                let trimmed = line.trim();
+                if trimmed.is_empty() {
+                    continue;
+                }
+                for event in crate::profiles::cursor::parse_cursor_jsonl_line(trimmed) {
+                    if !remember_cursor_signature(ts, &event) {
+                        continue;
+                    }
+
+                    let envelope = cursor_event_to_envelope(
+                        &event,
+                        &workspace_id,
+                        &ts.session.session_id,
+                        now_ms,
+                    );
+                    if let Ok(true) = store.insert_event(&envelope) {
+                        broadcast_envelope(live_state, sender, &envelope);
+                    }
+                }
+            }
+        }
+    }
+
+    if let Ok(pos) = reader.stream_position() {
+        ts.file_offset = pos;
+        let _ = store.save_scanner_offset(
+            &transcript_offset_key(&workspace_id, &ts.session.session_id),
+            i64::try_from(pos).unwrap_or(i64::MAX),
+        );
+    }
+}
+
 const MAX_CODEX_SIGNATURES: usize = 256;
 
 fn remember_codex_signature(
@@ -639,6 +712,23 @@ fn remember_gemini_signature(
     true
 }
 
+const MAX_CURSOR_SIGNATURES: usize = 256;
+
+fn remember_cursor_signature(
+    session: &mut TrackedSession,
+    event: &crate::profiles::cursor::CursorSessionEvent,
+) -> bool {
+    let signature = cursor_signature(event);
+    if session.recent_cursor_signatures.contains(&signature) {
+        return false;
+    }
+    session.recent_cursor_signatures.push(signature);
+    if session.recent_cursor_signatures.len() > MAX_CURSOR_SIGNATURES {
+        session.recent_cursor_signatures.remove(0);
+    }
+    true
+}
+
 fn gemini_signature(event: &crate::profiles::gemini::GeminiSessionEvent) -> String {
     match event {
         crate::profiles::gemini::GeminiSessionEvent::UserPrompt { text } => {
@@ -660,6 +750,39 @@ fn gemini_signature(event: &crate::profiles::gemini::GeminiSessionEvent) -> Stri
         } => format!(
             "tool_result:{tool_use_id}:{}:{is_error}:{content}",
             tool_name.clone().unwrap_or_default()
+        ),
+    }
+}
+
+fn cursor_signature(event: &crate::profiles::cursor::CursorSessionEvent) -> String {
+    match event {
+        crate::profiles::cursor::CursorSessionEvent::UserPrompt { text } => {
+            format!("prompt:{text}")
+        }
+        crate::profiles::cursor::CursorSessionEvent::AssistantText { text } => {
+            format!("assistant:{text}")
+        }
+        crate::profiles::cursor::CursorSessionEvent::ToolUse {
+            tool_name,
+            tool_use_id,
+            input,
+        } => format!("tool_use:{tool_use_id}:{tool_name}:{input}"),
+        crate::profiles::cursor::CursorSessionEvent::ToolResult {
+            tool_use_id,
+            tool_name,
+            is_error,
+            content,
+        } => format!(
+            "tool_result:{tool_use_id}:{}:{is_error}:{content}",
+            tool_name.clone().unwrap_or_default()
+        ),
+        crate::profiles::cursor::CursorSessionEvent::SubagentStart {
+            agent_id,
+            display_name,
+            description,
+        } => format!(
+            "subagent:{agent_id}:{display_name}:{}",
+            description.clone().unwrap_or_default()
         ),
     }
 }

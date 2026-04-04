@@ -28,6 +28,7 @@ pub async fn start_server(
     if discovery_options.claude_home.is_some()
         || discovery_options.codex_home.is_some()
         || discovery_options.gemini_home.is_some()
+        || discovery_options.cursor_home.is_some()
         || !discovery_options.runtime_matchers.is_empty()
     {
         let scanner_store = state.store.clone();

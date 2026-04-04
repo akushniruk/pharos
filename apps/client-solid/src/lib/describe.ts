@@ -13,6 +13,7 @@ export function formatRuntimeLabel(label?: string | null): string | undefined {
   if (normalized.includes('claude')) return 'Claude';
   if (normalized.includes('codex')) return 'Codex';
   if (normalized.includes('gemini')) return 'Gemini';
+  if (normalized.includes('cursor')) return 'Cursor';
 
   return normalized
     .split(/\s+/)

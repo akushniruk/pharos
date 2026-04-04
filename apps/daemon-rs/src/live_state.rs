@@ -825,11 +825,19 @@ fn basename_from_path(path: &str) -> Option<String> {
 }
 
 fn truncate(text: &str, max: usize) -> String {
-    if text.len() > max {
-        format!("{}…", &text[..max.saturating_sub(1)])
-    } else {
-        text.to_string()
+    if text.len() <= max {
+        return text.to_string();
     }
+    if max == 0 {
+        return String::new();
+    }
+
+    let mut end = max.saturating_sub(1);
+    while end > 0 && !text.is_char_boundary(end) {
+        end -= 1;
+    }
+
+    format!("{}…", &text[..end])
 }
 
 fn workspace_name_from_cwd(cwd: &str) -> Option<String> {
@@ -917,7 +925,7 @@ fn resolve_lifecycle_status(hook_event_type: &str) -> &'static str {
 mod tests {
     use serde_json::json;
 
-    use super::{AgentSnapshot, resolve_session_summary};
+    use super::{AgentSnapshot, resolve_session_summary, truncate};
     use crate::model::LegacyHookEvent;
 
     #[test]
@@ -996,6 +1004,13 @@ mod tests {
             }],
         );
         assert_eq!(summary.as_deref(), Some("Codex active in signal"));
+    }
+
+    #[test]
+    fn truncate_handles_unicode_char_boundaries() {
+        let text = "You’re right — thanks for the screenshot";
+        let truncated = truncate(text, 12);
+        assert!(truncated.ends_with('…'));
     }
 }
 

@@ -7,6 +7,7 @@ pub enum RuntimeSource {
     ClaudeCode,
     CodexCli,
     GeminiCli,
+    CursorAgent,
     PiCli,
     OpenCode,
     Aider,

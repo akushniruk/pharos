@@ -1,6 +1,6 @@
 # Pharos Agent Monitor
 
-Real-time observability for AI coding agents. See what Claude, Codex, and other AI agents are doing on your machine — zero setup, no hooks, no per-project config.
+Real-time observability for AI coding agents. See what Claude, Codex, Cursor, and other AI agents are doing on your machine — zero setup, no hooks, no per-project config.
 
 ## How It Works
 
@@ -13,6 +13,7 @@ Pharos uses a mixed observation model:
 - Claude: native session files plus JSONL transcript tailing for rich event visibility
 - Codex CLI: process detection plus native session index/session-file enrichment for titles and project-root hints
 - Gemini CLI: process detection plus native `logs.json` enrichment for titles and workspace hints
+- Cursor Agent: process detection plus native `agent-transcripts/*.jsonl` enrichment for titles and live activity
 - Other agent CLIs: process-based live session detection for supported runtimes and unknown agent-like tools
 
 Today, first-pass process detection covers:
@@ -57,12 +58,14 @@ Pharos auto-discovers native runtime homes from your user profile:
 - Claude: `~/.claude`
 - Codex: `~/.codex`
 - Gemini: `~/.gemini`
+- Cursor: `~/.cursor`
 
 You can override them with:
 
 - `PHAROS_CLAUDE_HOME`
 - `PHAROS_CODEX_HOME`
 - `PHAROS_GEMINI_HOME`
+- `PHAROS_CURSOR_HOME`
 
 You can also add custom process matchers with a JSON file pointed to by
 `PHAROS_RUNTIME_MATCHERS_PATH`.
