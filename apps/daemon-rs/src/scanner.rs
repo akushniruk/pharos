@@ -863,6 +863,7 @@ fn scan_subagents(
                 "agent_type": agent_type,
                 "description": description,
                 "agent_name": agent_type,
+                "parent_agent_id": "main",
             }),
         };
 
