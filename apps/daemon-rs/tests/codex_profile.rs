@@ -313,13 +313,17 @@ fn codex_live_log_body_parses_tool_use_and_workdir() {
             );",
         )
         .expect("create logs");
+    let now_secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
     connection
         .execute(
             "INSERT INTO logs (id, ts, level, target, feedback_log_body, thread_id)
              VALUES (?1, ?2, 'INFO', 'codex_core::stream_events_utils', ?3, ?4)",
             rusqlite::params![
                 1_i64,
-                1_775_226_325_i64,
+                now_secs,
                 "session_loop{thread_id=thread-1}:submission_dispatch{otel.name=\"op.dispatch.user_input\"}:turn{otel.name=\"session_task.turn\" thread.id=thread-1 turn.id=turn-1 model=gpt-5.4}: ToolCall: exec_command {\"cmd\":\"sed -n '1,240p' src/main.tsx\",\"workdir\":\"/Users/tester/work/demo/signal\"}",
                 "thread-1",
             ],
@@ -345,7 +349,7 @@ fn codex_live_log_body_parses_tool_use_and_workdir() {
     let events = profile.read_live_events("thread-1", 0);
     assert_eq!(events.len(), 1);
     assert_eq!(events[0].row_id, 1);
-    assert_eq!(events[0].occurred_at_ms, 1_775_226_325_000);
+    assert_eq!(events[0].occurred_at_ms, now_secs * 1000);
     assert_eq!(
         events[0].event,
         CodexSessionEvent::ToolUse {

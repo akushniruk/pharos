@@ -106,6 +106,7 @@ struct CodexDiscoveryFingerprint {
     sessions_modified_ms: u128,
     state_modified_ms: u128,
     session_file_count: usize,
+    logs_modified_ms: u128,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -378,11 +379,14 @@ impl CodexProfile {
             }
         }
 
+        let logs_modified_ms = modified_ms(self.codex_home.join("logs_1.sqlite"));
+
         CodexDiscoveryFingerprint {
             index_modified_ms,
             sessions_modified_ms,
             state_modified_ms,
             session_file_count,
+            logs_modified_ms,
         }
     }
 
