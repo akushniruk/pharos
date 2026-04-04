@@ -98,14 +98,28 @@ export function clearSelection() {
   setSelectedAgent(null);
 }
 
-const ACTIVE_THRESHOLD_MS = 30_000;
+const ACTIVE_THRESHOLD_MS = 60_000;
+const IDLE_THRESHOLD_MS = 10 * 60_000;
+const REGISTRY_GRACE_MS = 5 * 60_000;
 const MAIN_AGENT_KEY = '__main__';
 
+interface RegistryInfo {
+  lifecycle_status: string;
+  last_seen_at: number;
+  display_name: string;
+  agent_id?: string;
+}
+
 const registryBySessionAgent = createMemo(() => {
-  const map = new Map<string, string>();
+  const map = new Map<string, RegistryInfo>();
   for (const entry of agents()) {
     const agentKey = entry.agent_id || MAIN_AGENT_KEY;
-    map.set(`${entry.session_id}:${agentKey}`, entry.lifecycle_status);
+    map.set(`${entry.session_id}:${agentKey}`, {
+      lifecycle_status: entry.lifecycle_status,
+      last_seen_at: entry.last_seen_at,
+      display_name: entry.display_name,
+      agent_id: entry.agent_id,
+    });
   }
   return map;
 });
@@ -148,7 +162,7 @@ function activityStateForEvents(evts: HookEvent[], isActive: boolean): ActivityS
 
 function enrichProjectsWithActivityState(
   snapshotProjects: Project[],
-  registry: Map<string, string>,
+  registry: Map<string, RegistryInfo>,
   evts: HookEvent[],
 ): Project[] {
   return snapshotProjects.map((project) => {
@@ -165,8 +179,19 @@ function enrichProjectsWithActivityState(
           || agent.isActive;
         const status = activityStateForEvents(agentEvents, agentIsActive);
 
+        // Prefer registry display name over snapshot name
+        const registryName = resolveRegistryDisplayName(
+          registry,
+          session.sessionId,
+          agent.agentId,
+        );
+        const displayName = registryName
+          || (agent.displayName !== 'Agent' ? agent.displayName : undefined)
+          || agent.displayName;
+
         return {
           ...agent,
+          displayName,
           statusLabel: status.label,
           statusTone: status.tone,
           statusDetail: status.detail,
@@ -243,7 +268,14 @@ export const projects = createMemo((): Project[] => {
       const agentsArr: AgentInfo[] = [];
       for (const [aid, aevts] of agentMap) {
         const aLast = Math.max(...aevts.map((e) => e.timestamp || 0));
-        const displayName = resolveAgentName(aevts, aid === '__main__');
+        const eventName = resolveAgentName(aevts, aid === '__main__');
+        // Prefer registry display_name over event-derived name
+        const registryName = resolveRegistryDisplayName(
+          registry,
+          sid,
+          aid === '__main__' ? null : aid,
+        );
+        const displayName = registryName || eventName;
         const currentProgress = resolveCurrentProgress(aevts);
         const currentProgressDetail = resolveCurrentProgressDetail(aevts);
         const nextAction = resolveNextAction(aevts);
@@ -727,22 +759,52 @@ function resolveAgentName(evts: HookEvent[], isMain: boolean): string {
       if (cwdName) return cwdName;
     }
   }
+  // Check agent_type from events as a fallback before using generic names
   const agentType = evts.find((e) => e.payload?.agent_type)?.payload.agent_type;
-  if (agentType && agentType !== 'main') return agentType;
+  if (agentType && agentType !== 'main') {
+    // Capitalize the agent_type (e.g. "builder" -> "Builder")
+    return agentType.charAt(0).toUpperCase() + agentType.slice(1);
+  }
+  const eventAgentType = evts.find((e) => e.agent_type)?.agent_type;
+  if (eventAgentType && eventAgentType !== 'main') {
+    return eventAgentType.charAt(0).toUpperCase() + eventAgentType.slice(1);
+  }
   return isMain ? 'Session' : 'Agent';
 }
 
 function isRegistryActive(
-  registry: Map<string, string>,
+  registry: Map<string, RegistryInfo>,
   sessionId: string,
   agentId: string | null,
+  now?: number,
 ): boolean {
   const key = `${sessionId}:${agentId || MAIN_AGENT_KEY}`;
-  const status = registry.get(key);
-  if (status) {
-    return status === 'active';
-  }
+  const info = registry.get(key);
+  if (!info) return false;
+
+  const currentTime = now ?? Date.now();
+  const elapsed = Math.max(0, currentTime - info.last_seen_at);
+
+  // Active if last seen within 60 seconds
+  if (elapsed <= ACTIVE_THRESHOLD_MS) return true;
+
+  // Registry says "active" AND last seen within 5 minutes => still active
+  if (info.lifecycle_status === 'active' && elapsed <= REGISTRY_GRACE_MS) return true;
+
   return false;
+}
+
+function resolveRegistryDisplayName(
+  registry: Map<string, RegistryInfo>,
+  sessionId: string,
+  agentId: string | null,
+): string | undefined {
+  const key = `${sessionId}:${agentId || MAIN_AGENT_KEY}`;
+  const info = registry.get(key);
+  if (!info) return undefined;
+  const name = info.display_name?.trim();
+  if (name && name !== 'Agent') return name;
+  return undefined;
 }
 
 function resolveRuntimeLabel(evts: HookEvent[]): string | undefined {
@@ -1045,9 +1107,26 @@ export function resolveActivityState(
   }
 
   if (evts.length > 0) {
+    const latestTs = Math.max(...evts.map((e) => e.timestamp || 0));
+    const elapsed = Math.max(0, now - latestTs);
+
+    if (elapsed <= ACTIVE_THRESHOLD_MS) {
+      return {
+        label: 'Active',
+        tone: 'active',
+      };
+    }
+
+    if (elapsed <= IDLE_THRESHOLD_MS) {
+      return {
+        label: 'Idle',
+        tone: 'idle',
+      };
+    }
+
     return {
-      label: 'Idle',
-      tone: 'idle',
+      label: 'Done',
+      tone: 'done',
     };
   }
 
