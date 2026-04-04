@@ -116,7 +116,20 @@ fn parse_iso8601_ms(s: &str) -> Option<i64> {
     for y in 1970..year {
         days += if is_leap(y) { 366 } else { 365 };
     }
-    let month_days = [31, if is_leap(year) { 29 } else { 28 }, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    let month_days = [
+        31,
+        if is_leap(year) { 29 } else { 28 },
+        31,
+        30,
+        31,
+        30,
+        31,
+        31,
+        30,
+        31,
+        30,
+        31,
+    ];
     for m in 0..(month - 1) as usize {
         days += month_days.get(m).copied().unwrap_or(30) as i64;
     }

@@ -41,8 +41,8 @@ pub fn discover_all_sessions(options: &DiscoveryOptions) -> Vec<DetectedSession>
     }
 
     // Process-based detection for non-Claude runtimes (exact name matching only)
-    let mut process_sessions = process::ProcessProfile::new(options.runtime_matchers.clone())
-        .discover_sessions();
+    let mut process_sessions =
+        process::ProcessProfile::new(options.runtime_matchers.clone()).discover_sessions();
 
     // Enrich process-detected sessions with native metadata
     if let Some(codex_home) = options.codex_home.clone() {

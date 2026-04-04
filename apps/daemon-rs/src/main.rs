@@ -1,8 +1,8 @@
 use clap::Parser;
-use pharos_daemon::api::{build_router_with_options, AppOptions};
+use pharos_daemon::api::{AppOptions, build_router_with_options};
 use pharos_daemon::config::Config;
 use pharos_daemon::profiles::DiscoveryOptions;
-use pharos_daemon::replay::{replay_file, Cli, Command};
+use pharos_daemon::replay::{Cli, Command, replay_file};
 use pharos_daemon::scanner;
 use pharos_daemon::store::Store;
 

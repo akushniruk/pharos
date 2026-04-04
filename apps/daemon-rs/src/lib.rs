@@ -1,6 +1,6 @@
 pub mod api;
-pub mod connector;
 pub mod config;
+pub mod connector;
 pub mod discovery;
 pub mod envelope;
 pub mod legacy;

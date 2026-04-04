@@ -196,11 +196,11 @@ export default function Sidebar(props: SidebarProps) {
                         {p.name}
                       </span>
                       <span style="font-size:10px;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-                        Now: {primarySummary()}
+                        {primarySummary().length > 40 ? primarySummary().slice(0, 40) + '…' : primarySummary()}
                       </span>
                       <Show when={secondarySummary()}>
                         <span style="font-size:9px;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-                          Context: {secondarySummary()}
+                          {secondarySummary()}
                         </span>
                       </Show>
                     </div>
@@ -210,17 +210,17 @@ export default function Sidebar(props: SidebarProps) {
                       `color:${projectPalette().text};`,
                     ].join('')}>
                       <Icon path={projectTone() === 'active' ? bolt : clock} style="width:10px;height:10px;" />
-                      <span>
-                        {projectTone() === 'active'
-                          ? 'Active'
-                          : projectTone() === 'blocked'
-                            ? 'Blocked'
-                            : projectTone() === 'attention'
-                              ? 'Needs attention'
+                      <Show when={projectTone() !== 'attention'}>
+                        <span>
+                          {projectTone() === 'active'
+                            ? 'Active'
+                            : projectTone() === 'blocked'
+                              ? 'Blocked'
                               : projectTone() === 'idle'
                                 ? 'Idle'
                                 : 'Done'}
-                      </span>
+                        </span>
+                      </Show>
                     </div>
                   </div>
 
@@ -308,11 +308,11 @@ export default function Sidebar(props: SidebarProps) {
                         {s.label}
                       </span>
                       <span style="font-size:10px;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-                        Now: {primarySummary()}
+                        {primarySummary().length > 40 ? primarySummary().slice(0, 40) + '…' : primarySummary()}
                       </span>
                       <Show when={secondarySummary()}>
                         <span style="font-size:9px;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-                          Context: {secondarySummary()}
+                          {secondarySummary()}
                         </span>
                       </Show>
                     </div>
@@ -323,7 +323,9 @@ export default function Sidebar(props: SidebarProps) {
                       `color:${statusPaletteForSession().text};`,
                     ].join('')}>
                       <Icon path={statusIcon()} style="width:10px;height:10px;" />
-                      <span>{statusLabel()}</span>
+                      <Show when={statusTone() !== 'attention'}>
+                        <span>{statusLabel()}</span>
+                      </Show>
                     </div>
                   </div>
                 );

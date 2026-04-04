@@ -2,7 +2,7 @@ use std::{fs, path::PathBuf};
 
 use clap::{Parser, Subcommand};
 
-use crate::connector::{resolve_connector, ConnectorError};
+use crate::connector::{ConnectorError, resolve_connector};
 
 #[derive(Debug, Parser)]
 #[command(name = "pharos-daemon")]

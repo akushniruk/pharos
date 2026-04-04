@@ -1,7 +1,7 @@
 use thiserror::Error;
 
 use crate::{
-    legacy::claude::{normalize_claude_event, ClaudeNormalizeError},
+    legacy::claude::{ClaudeNormalizeError, normalize_claude_event},
     model::{EventEnvelope, LegacyHookEvent},
 };
 
@@ -53,7 +53,7 @@ impl Connector for ClaudeConnector {
                 return Err(ConnectorError::UnsupportedLegacyHookEvent {
                     connector: self.key(),
                     event_type: event.hook_event_type.clone(),
-                })
+                });
             }
         };
 

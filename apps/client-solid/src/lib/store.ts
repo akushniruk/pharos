@@ -25,7 +25,7 @@ export const [selectedSession, setSelectedSession] = createSignal<string | null>
 export const [selectedAgent, setSelectedAgent] = createSignal<string | null>(null);
 
 const HELP_STORAGE_KEY = 'pharos-help-visible';
-export const [helpVisible, setHelpVisible] = createSignal(true);
+export const [helpVisible, setHelpVisible] = createSignal(false);
 
 const VIEWED_STORAGE_KEY = 'pharos-viewed-scopes-v1';
 type ViewedScopeMap = Record<string, number>;

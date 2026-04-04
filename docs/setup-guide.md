@@ -173,6 +173,7 @@ This checks that the server is reachable, posts a test event, and verifies the W
 
 ## Related Docs
 
+- [macOS desktop release](./macos-desktop-release.md) — build and share the internal Apple Silicon DMG
 - [[architecture]] — How all the components fit together
 - [[hook-events]] — Event type reference with payload schemas
 - [[api-reference]] — Server API endpoint reference

@@ -126,7 +126,10 @@ pub fn discovered_session_events(
     session_id: &str,
 ) -> Result<Vec<LegacyHookEvent>, DiscoveryError> {
     let archives = load_claude_session_archives(dir)?;
-    let Some(archive) = archives.into_iter().find(|archive| archive.session_id == session_id) else {
+    let Some(archive) = archives
+        .into_iter()
+        .find(|archive| archive.session_id == session_id)
+    else {
         return Ok(Vec::new());
     };
 
@@ -161,7 +164,9 @@ struct LoadedClaudeSessionArchive {
     modified_at_ms: i64,
 }
 
-fn load_claude_session_archives(dir: &Path) -> Result<Vec<LoadedClaudeSessionArchive>, DiscoveryError> {
+fn load_claude_session_archives(
+    dir: &Path,
+) -> Result<Vec<LoadedClaudeSessionArchive>, DiscoveryError> {
     let entries = fs::read_dir(dir).map_err(|source| DiscoveryError::ReadDir {
         path: dir.display().to_string(),
         source,

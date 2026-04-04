@@ -1,6 +1,6 @@
 use pharos_daemon::config::RuntimeMatcherConfig;
 use pharos_daemon::model::RuntimeSource;
-use pharos_daemon::profiles::process::{classify_process, load_runtime_matchers, ProcessSnapshot};
+use pharos_daemon::profiles::process::{ProcessSnapshot, classify_process, load_runtime_matchers};
 use tempfile::NamedTempFile;
 
 #[test]

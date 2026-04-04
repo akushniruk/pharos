@@ -1,6 +1,6 @@
 use pharos_daemon::model::RuntimeSource;
 use pharos_daemon::profiles::process::{
-    classify_process, detected_session_from_snapshot, ProcessSnapshot,
+    ProcessSnapshot, classify_process, detected_session_from_snapshot,
 };
 
 fn snapshot(name: &str, cmd: &[&str]) -> ProcessSnapshot {

@@ -1,8 +1,8 @@
-use pharos_daemon::profiles::claude::ClaudeProfile;
-use pharos_daemon::tailer::parse_jsonl_line;
 use pharos_daemon::envelope::transcript_event_to_envelope;
 use pharos_daemon::model::{EventKind, RuntimeSource};
+use pharos_daemon::profiles::claude::ClaudeProfile;
 use pharos_daemon::store::Store;
+use pharos_daemon::tailer::parse_jsonl_line;
 use tempfile::tempdir;
 
 /// Simulates the full scanner cycle: discover session → tail transcript → produce events.
@@ -40,7 +40,8 @@ fn full_scan_cycle_discovers_session_and_tails_transcript() {
     std::fs::write(
         subagent_dir.join("agent-abc123.meta.json"),
         r#"{"agentType":"Explore","description":"Explore codebase"}"#,
-    ).expect("write subagent meta");
+    )
+    .expect("write subagent meta");
 
     // 4. Discover sessions
     let profile = ClaudeProfile::new(claude_home.to_path_buf());
@@ -53,10 +54,7 @@ fn full_scan_cycle_discovers_session_and_tails_transcript() {
     // 5. Parse transcript
     let transcript = std::fs::read_to_string(session.transcript_path.as_ref().unwrap())
         .expect("read transcript");
-    let events: Vec<_> = transcript
-        .lines()
-        .flat_map(parse_jsonl_line)
-        .collect();
+    let events: Vec<_> = transcript.lines().flat_map(parse_jsonl_line).collect();
     assert_eq!(events.len(), 4); // prompt, tool_use, tool_result, ai-title
 
     // 6. Convert to envelopes and insert into store

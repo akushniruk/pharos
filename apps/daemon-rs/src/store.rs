@@ -105,7 +105,11 @@ impl Store {
         Ok(offset)
     }
 
-    pub fn save_scanner_offset(&self, cursor_key: &str, offset_value: i64) -> Result<(), StoreError> {
+    pub fn save_scanner_offset(
+        &self,
+        cursor_key: &str,
+        offset_value: i64,
+    ) -> Result<(), StoreError> {
         let connection = self.connection.lock().map_err(|_| StoreError::Poisoned)?;
         connection.execute(
             "INSERT INTO scanner_offsets (cursor_key, offset_value)

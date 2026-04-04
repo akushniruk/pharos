@@ -83,11 +83,7 @@ impl ClaudeProfile {
             .join("projects")
             .join(&slug)
             .join(format!("{session_id}.jsonl"));
-        if jsonl.exists() {
-            Some(jsonl)
-        } else {
-            None
-        }
+        if jsonl.exists() { Some(jsonl) } else { None }
     }
 }
 

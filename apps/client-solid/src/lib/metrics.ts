@@ -42,8 +42,11 @@ export function createMetrics(events: Accessor<HookEvent[]>) {
     const sec = Math.floor((last - first) / 1000);
     if (sec < 60) return `${sec}s`;
     const min = Math.floor(sec / 60);
-    const s = sec % 60;
-    return `${min}m ${s}s`;
+    if (min < 60) return `${min}m ${sec % 60}s`;
+    const hr = Math.floor(min / 60);
+    if (hr < 24) return `${hr}h ${min % 60}m`;
+    const day = Math.floor(hr / 24);
+    return `${day}d ${hr % 24}h`;
   });
 
   const errorRate = createMemo(() => {

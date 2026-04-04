@@ -112,8 +112,7 @@ async fn create_event(
         .insert_event(&event)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     if inserted {
-        broadcast_compat_updates(&state, &event)
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        broadcast_compat_updates(&state, &event).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     }
     Ok((StatusCode::CREATED, Json(event)))
 }
@@ -240,8 +239,7 @@ async fn create_legacy_claude_event(
         .insert_event(&event)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     if inserted {
-        broadcast_compat_updates(&state, &event)
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        broadcast_compat_updates(&state, &event).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     }
     Ok((StatusCode::CREATED, Json(event)))
 }
@@ -279,8 +277,7 @@ async fn create_connector_event(
         .insert_event(&event)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     if inserted {
-        broadcast_compat_updates(&state, &event)
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        broadcast_compat_updates(&state, &event).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     }
     Ok((StatusCode::CREATED, Json(event)))
 }

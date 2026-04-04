@@ -7,8 +7,8 @@ use thiserror::Error;
 
 use crate::api::AppOptions;
 use crate::model::RuntimeSource;
-use crate::profiles::process::load_runtime_matchers;
 use crate::profiles::DiscoveryOptions;
+use crate::profiles::process::load_runtime_matchers;
 
 const HOST_ENV: &str = "PHAROS_DAEMON_HOST";
 const PORT_ENV: &str = "PHAROS_DAEMON_PORT";

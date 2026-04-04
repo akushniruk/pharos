@@ -51,7 +51,9 @@ fn computes_project_slug_from_cwd() {
     );
     // Claude also replaces underscores with hyphens
     assert_eq!(
-        pharos_daemon::profiles::claude::cwd_to_project_slug("/Users/testuser/home_projects/pharos"),
+        pharos_daemon::profiles::claude::cwd_to_project_slug(
+            "/Users/testuser/home_projects/pharos"
+        ),
         "-Users-testuser-home-projects-pharos"
     );
 }

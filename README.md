@@ -90,6 +90,21 @@ cd apps/desktop/src-tauri && cargo tauri dev
 
 Single binary — daemon + dashboard in one window.
 
+For the first installable macOS release, build an Apple Silicon DMG from the same Tauri app:
+
+```bash
+cd apps/desktop/src-tauri
+cargo tauri build --bundles dmg --target aarch64-apple-darwin
+```
+
+The installable artifact is written under:
+
+```text
+apps/desktop/src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/
+```
+
+This first release is intentionally an unsigned internal tester build. See [docs/macos-desktop-release.md](/Users/akushniruk/home_projects/pharos/docs/macos-desktop-release.md) for maintainer build steps and tester install instructions.
+
 ## What You See
 
 - **Live sessions** — detected the moment an agent starts
