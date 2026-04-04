@@ -1178,11 +1178,42 @@ fn subagent_offset_key(workspace_id: &str, session_id: &str, file_name: &str) ->
 }
 
 fn workspace_id_from_cwd(cwd: &str) -> String {
-    std::path::Path::new(cwd)
+    let raw = std::path::Path::new(cwd)
         .file_name()
         .and_then(|n| n.to_str())
         .unwrap_or("unknown")
-        .to_string()
+        .to_string();
+
+    if is_project_like_workspace(&raw) {
+        return raw;
+    }
+
+    let hint = raw.split('-').next_back().unwrap_or("unknown").to_string();
+    if is_project_like_workspace(&hint) {
+        return hint;
+    }
+
+    "unknown".to_string()
+}
+
+fn is_project_like_workspace(value: &str) -> bool {
+    let normalized = value.trim().to_ascii_lowercase();
+    !normalized.is_empty()
+        && !matches!(
+            normalized.as_str(),
+            "unknown"
+                | "macos"
+                | "resources"
+                | "data"
+                | "libexec"
+                | "sbin"
+                | "bin"
+                | "system"
+                | "contents"
+                | "workbench"
+                | "app"
+                | "out"
+        )
 }
 
 fn observed_capabilities() -> CapabilitySet {

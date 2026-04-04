@@ -809,8 +809,12 @@ function resolveRegistryDisplayName(
 
 function resolveRuntimeLabel(evts: HookEvent[]): string | undefined {
   for (const e of evts) {
-    if (typeof e.payload?.runtime_label === 'string' && e.payload.runtime_label.trim()) {
-      return e.payload.runtime_label;
+    const runtimeCandidate =
+      (typeof e.payload?.runtime_label === 'string' ? e.payload.runtime_label : undefined)
+      ?? (typeof e.payload?.runtime_source === 'string' ? e.payload.runtime_source : undefined);
+    const formatted = formatRuntimeLabel(runtimeCandidate);
+    if (formatted) {
+      return formatted;
     }
   }
   return undefined;

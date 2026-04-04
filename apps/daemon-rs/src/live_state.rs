@@ -351,6 +351,10 @@ impl LiveStateData {
                 seen_agents: BTreeSet::new(),
             });
 
+        if should_upgrade_project_label(&state.summary.source_app, &event.source_app) {
+            state.summary.source_app = event.source_app.clone();
+        }
+
         state.summary.last_event_at = state.summary.last_event_at.max(event.timestamp);
         state.summary.started_at = state.summary.started_at.min(event.timestamp);
         state.summary.event_count += 1;
@@ -367,6 +371,33 @@ impl LiveStateData {
             state.summary.agents.push(event.source_app.clone());
         }
     }
+}
+
+fn should_upgrade_project_label(current: &str, candidate: &str) -> bool {
+    let current_is_project = is_project_like_name(current);
+    let candidate_is_project = is_project_like_name(candidate);
+
+    candidate_is_project && (!current_is_project || current.eq_ignore_ascii_case("unknown"))
+}
+
+fn is_project_like_name(value: &str) -> bool {
+    let normalized = value.trim().to_ascii_lowercase();
+    !normalized.is_empty()
+        && !matches!(
+            normalized.as_str(),
+            "unknown"
+                | "macos"
+                | "resources"
+                | "data"
+                | "libexec"
+                | "sbin"
+                | "bin"
+                | "system"
+                | "contents"
+                | "workbench"
+                | "app"
+                | "out"
+        )
 }
 
 fn resolve_agent_active(
@@ -925,8 +956,11 @@ fn resolve_lifecycle_status(hook_event_type: &str) -> &'static str {
 mod tests {
     use serde_json::json;
 
-    use super::{AgentSnapshot, resolve_session_summary, truncate};
-    use crate::model::LegacyHookEvent;
+    use super::{AgentSnapshot, LiveState, resolve_session_summary, truncate};
+    use crate::model::{
+        AcquisitionMode, CapabilitySet, EventEnvelope, EventKind, LegacyHookEvent, RuntimeSource,
+        SessionRef,
+    };
 
     #[test]
     fn prefers_assistant_response_for_session_summary() {
@@ -1011,6 +1045,68 @@ mod tests {
         let text = "You’re right — thanks for the screenshot";
         let truncated = truncate(text, 12);
         assert!(truncated.ends_with('…'));
+    }
+
+    #[test]
+    fn session_project_upgrades_from_unknown_to_real_project() {
+        let state = LiveState::default();
+        let base_session = SessionRef {
+            host_id: "local".to_string(),
+            workspace_id: "unknown".to_string(),
+            session_id: "sess-unknown".to_string(),
+        };
+
+        let unknown_event = EventEnvelope {
+            runtime_source: RuntimeSource::CursorAgent,
+            acquisition_mode: AcquisitionMode::Observed,
+            event_kind: EventKind::SessionStarted,
+            session: base_session.clone(),
+            agent_id: None,
+            occurred_at_ms: 10,
+            capabilities: CapabilitySet {
+                can_observe: true,
+                can_start: false,
+                can_stop: false,
+                can_retry: false,
+                can_respond: false,
+            },
+            title: "session started".to_string(),
+            payload: json!({}),
+        };
+        let improved_event = EventEnvelope {
+            runtime_source: RuntimeSource::CursorAgent,
+            acquisition_mode: AcquisitionMode::Observed,
+            event_kind: EventKind::AssistantResponse,
+            session: base_session,
+            agent_id: None,
+            occurred_at_ms: 20,
+            capabilities: CapabilitySet {
+                can_observe: true,
+                can_start: false,
+                can_stop: false,
+                can_retry: false,
+                can_respond: false,
+            },
+            title: "assistant response".to_string(),
+            payload: json!({
+                "cwd": "/Users/tester/home_projects/pharos",
+                "text": "runtime update",
+            }),
+        };
+
+        state
+            .record_envelope(&unknown_event)
+            .expect("first event recorded");
+        state
+            .record_envelope(&improved_event)
+            .expect("second event recorded");
+
+        let projects = state.list_projects().expect("projects");
+        assert!(projects.iter().any(|project| project.name == "pharos"));
+        assert!(!projects.iter().any(|project| {
+            project.name == "unknown"
+                && project.sessions.iter().any(|session| session.session_id == "sess-unknown")
+        }));
     }
 }
 

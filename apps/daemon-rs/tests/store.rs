@@ -136,6 +136,34 @@ fn legacy_events_fallback_to_runtime_label_when_workspace_is_not_project_like() 
 }
 
 #[test]
+fn legacy_events_normalize_cursor_workspace_hint_into_project_name() {
+    let store = Store::open_in_memory().expect("store");
+
+    store
+        .insert_event(&EventEnvelope {
+            runtime_source: RuntimeSource::CursorAgent,
+            acquisition_mode: AcquisitionMode::Observed,
+            event_kind: EventKind::SessionStarted,
+            session: SessionRef {
+                host_id: "local".to_string(),
+                workspace_id: "Users-akushniruk-home_projects-pharos".to_string(),
+                session_id: "sess-cursor".to_string(),
+            },
+            agent_id: None,
+            occurred_at_ms: 100,
+            capabilities: observed_capabilities(),
+            title: "session started".to_string(),
+            payload: json!({
+                "entrypoint": "cursor-agent"
+            }),
+        })
+        .expect("insert session start");
+
+    let legacy_events = store.list_legacy_events().expect("legacy events");
+    assert_eq!(legacy_events[0].source_app, "pharos");
+}
+
+#[test]
 fn legacy_events_prefix_project_labels_with_runtime_name() {
     let store = Store::open_in_memory().expect("store");
 

@@ -14,6 +14,7 @@ import { getEventTypeLabel, getEventTypeBgColor, getEventTypeTextColor } from '.
 import SearchBar, { searchQuery } from './SearchBar';
 import EventRow from './EventRow';
 import { connectionState, hasStreamData } from '../lib/ws';
+import type { HookEvent } from '../lib/types';
 
 const EVENT_TYPES = [
   'PreToolUse', 'PostToolUse', 'PostToolUseFailure',
@@ -73,7 +74,7 @@ export default function EventStream() {
   const displayEvents = createMemo(() => {
     const query = searchQuery();
     const hidden = hiddenTypes();
-    let evts = filteredEvents().filter(e => !hidden.has(e.hook_event_type));
+    let evts = compactEvents(filteredEvents().filter(e => !hidden.has(e.hook_event_type)));
 
     if (query) {
       try {
@@ -84,7 +85,7 @@ export default function EventStream() {
           re.test(e.display_name || '') ||
           re.test(e.agent_name || '') ||
           re.test(e.payload?.tool_name || '') ||
-          re.test(JSON.stringify(e.payload))
+          re.test(searchableEventText(e))
         );
       } catch { /* invalid regex */ }
     }
@@ -316,4 +317,51 @@ export default function EventStream() {
       </div>
     </div>
   );
+}
+
+function searchableEventText(event: HookEvent): string {
+  const payload = event.payload || {};
+  const textFields: string[] = [];
+  if (typeof payload.prompt === 'string') textFields.push(payload.prompt);
+  if (typeof payload.message === 'string') textFields.push(payload.message);
+  if (typeof payload.text === 'string') textFields.push(payload.text);
+  if (typeof payload.content === 'string') textFields.push(payload.content);
+  if (typeof payload.description === 'string') textFields.push(payload.description);
+  if (typeof payload.title === 'string') textFields.push(payload.title);
+  if (typeof payload.project_name === 'string') textFields.push(payload.project_name);
+  if (typeof payload.cwd === 'string') textFields.push(payload.cwd);
+  return textFields.join(' ');
+}
+
+function compactEvents(events: HookEvent[]): HookEvent[] {
+  const result: HookEvent[] = [];
+  for (const event of events) {
+    const previous = result[result.length - 1];
+    if (!previous) {
+      result.push(event);
+      continue;
+    }
+    if (canCollapse(previous, event)) {
+      result[result.length - 1] = event;
+      continue;
+    }
+    result.push(event);
+  }
+  return result;
+}
+
+function canCollapse(previous: HookEvent, current: HookEvent): boolean {
+  if (previous.hook_event_type !== current.hook_event_type) return false;
+  if (previous.session_id !== current.session_id) return false;
+  if ((previous.agent_id || '__main__') !== (current.agent_id || '__main__')) return false;
+  if ((previous.payload?.tool_name || '') !== (current.payload?.tool_name || '')) return false;
+  if (previous.hook_event_type === 'PreToolUse' && previous.payload?.tool_name === 'Agent') return false;
+
+  const previousTimestamp = previous.timestamp || 0;
+  const currentTimestamp = current.timestamp || 0;
+  if (Math.abs(currentTimestamp - previousTimestamp) > 1500) return false;
+
+  const previousSignature = searchableEventText(previous).slice(0, 120);
+  const currentSignature = searchableEventText(current).slice(0, 120);
+  return previousSignature === currentSignature;
 }

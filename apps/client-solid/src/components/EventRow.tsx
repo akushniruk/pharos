@@ -17,11 +17,8 @@ function resolveAgentName(e: HookEvent): string {
 }
 
 function resolveRuntimeDisplay(e: HookEvent): string | undefined {
-  return formatRuntimeLabel(
-    e.payload?.runtime_label ||
-      e.payload?.runtime_source ||
-      e.source_app,
-  );
+  const runtimeCandidate = e.payload?.runtime_label || e.payload?.runtime_source;
+  return formatRuntimeLabel(runtimeCandidate);
 }
 
 function resolveProjectName(e: HookEvent): string {

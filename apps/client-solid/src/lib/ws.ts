@@ -1,5 +1,6 @@
 import { createSignal } from 'solid-js';
 import type { HookEvent, AgentEntry, Project } from './types';
+import { formatRuntimeLabel } from './describe';
 
 const SERVER_PORT = import.meta.env.VITE_API_PORT || '4000';
 const DEFAULT_HOST = resolveApiHost(
@@ -106,11 +107,13 @@ function normalizeProjects(value: unknown): Project[] {
 
   return value.map((project: any) => ({
     name: project.name,
-    runtimeLabels: Array.isArray(project.runtime_labels)
-      ? project.runtime_labels
-      : Array.isArray(project.runtimeLabels)
-        ? project.runtimeLabels
-        : [],
+    runtimeLabels: normalizeRuntimeLabels(
+      Array.isArray(project.runtime_labels)
+        ? project.runtime_labels
+        : Array.isArray(project.runtimeLabels)
+          ? project.runtimeLabels
+          : [],
+    ),
     sessions: normalizeSessions(project.sessions),
     summary: project.summary ?? undefined,
     eventCount: numberField(project.event_count, project.eventCount),
@@ -134,7 +137,7 @@ function normalizeSessions(value: unknown) {
         ? `session-${index}-${session.label.trim().toLowerCase().replace(/\s+/g, '-')}`
         : `session-${index}`),
     label: session.label ?? 'Session',
-    runtimeLabel: session.runtime_label ?? session.runtimeLabel ?? undefined,
+    runtimeLabel: normalizeRuntimeLabel(session.runtime_label ?? session.runtimeLabel),
     summary: session.summary ?? undefined,
     currentAction: session.current_action ?? session.currentAction ?? undefined,
     eventCount: numberField(session.event_count, session.eventCount),
@@ -153,7 +156,7 @@ function normalizeAgents(value: unknown) {
   return value.map((agent: any) => ({
     agentId: agent.agent_id ?? agent.agentId ?? null,
     displayName: agent.display_name ?? agent.displayName ?? 'Agent',
-    runtimeLabel: agent.runtime_label ?? agent.runtimeLabel ?? undefined,
+    runtimeLabel: normalizeRuntimeLabel(agent.runtime_label ?? agent.runtimeLabel),
     assignment: agent.assignment ?? undefined,
     currentAction: agent.current_action ?? agent.currentAction ?? undefined,
     agentType: agent.agent_type ?? agent.agentType ?? undefined,
@@ -168,4 +171,18 @@ function normalizeAgents(value: unknown) {
 function numberField(primary: unknown, fallback: unknown): number {
   const value = primary ?? fallback;
   return typeof value === 'number' ? value : 0;
+}
+
+function normalizeRuntimeLabel(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  return formatRuntimeLabel(value);
+}
+
+function normalizeRuntimeLabels(values: unknown[]): string[] {
+  const labels = values
+    .map((value) => normalizeRuntimeLabel(value))
+    .filter((value): value is string => Boolean(value));
+  return Array.from(new Set(labels));
 }

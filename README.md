@@ -1,5 +1,9 @@
 # Pharos Agent Monitor
 
+<p align="center">
+  <img src="apps/client-solid/public/pharos-mark.svg" alt="Pharos logo mark" width="88" />
+</p>
+
 Real-time observability for AI coding agents. See what Claude, Codex, Cursor, and other AI agents are doing on your machine — zero setup, no hooks, no per-project config.
 
 ## How It Works

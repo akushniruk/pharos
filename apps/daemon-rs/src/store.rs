@@ -472,19 +472,49 @@ pub fn legacy_event_from_envelope(event: &EventEnvelope) -> Result<LegacyHookEve
 }
 
 fn project_label_for_event(event: &EventEnvelope) -> String {
-    if is_project_like_name(&event.session.workspace_id) {
-        return event.session.workspace_id.clone();
+    if let Some(project_name) = payload_string(&event.payload, "project_name")
+        .and_then(normalize_project_label)
+    {
+        return project_name;
+    }
+
+    if let Some(project_name) = normalize_project_label(event.session.workspace_id.clone()) {
+        return project_name;
     }
 
     if let Some(cwd) = payload_string(&event.payload, "cwd") {
         if let Some(workspace_name) = workspace_name_from_cwd(&cwd) {
-            if is_project_like_name(&workspace_name) {
-                return workspace_name;
+            if let Some(project_name) = normalize_project_label(workspace_name) {
+                return project_name;
             }
         }
     }
 
     "unknown".to_string()
+}
+
+fn normalize_project_label(value: String) -> Option<String> {
+    if let Some(workspace_hint) = normalize_workspace_hint(&value) {
+        return Some(workspace_hint);
+    }
+
+    if is_project_like_name(&value) {
+        return Some(value);
+    }
+
+    None
+}
+
+fn normalize_workspace_hint(value: &str) -> Option<String> {
+    if !value.contains("-home_projects-") {
+        return None;
+    }
+    let candidate = value.split('-').next_back()?.trim();
+    if is_project_like_name(candidate) {
+        Some(candidate.to_string())
+    } else {
+        None
+    }
 }
 
 fn is_project_like_name(value: &str) -> bool {
