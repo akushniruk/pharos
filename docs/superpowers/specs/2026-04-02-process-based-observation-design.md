@@ -4,6 +4,8 @@ Date: 2026-04-02
 Status: Draft for review
 Supersedes: 2026-04-02-claude-no-hook-observation-design.md
 
+Back to [Docs Portal](../../README.md).
+
 ## Goal
 
 Pharos should detect and observe AI coding agents (Claude, Codex, Copilot, etc.) running on the local machine through process detection and native file observation — no hooks, no per-project setup, no project mutation.

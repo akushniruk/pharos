@@ -29,7 +29,7 @@ export function resolveApiHost(hostname?: string): string {
   if (normalized !== 'localhost' && normalized.endsWith('.localhost')) {
     return '127.0.0.1';
   }
-  return hostname!;
+  return normalized;
 }
 
 export function connectWs() {
@@ -52,6 +52,9 @@ export function connectWs() {
     console.error('[ws] WebSocket error:', event);
     setConnected(false);
     setConnectionState('disconnected');
+    if (ws) {
+      ws.close();
+    }
   };
 
   ws.onmessage = (e) => {
@@ -82,18 +85,33 @@ export function connectWs() {
 export async function fetchAgents() {
   try {
     const res = await fetch(`${API_BASE}/api/agents`);
-    if (res.ok) setAgents(await res.json());
-  } catch {}
+    if (!res.ok) {
+      console.error('[ws] Failed to fetch agents:', res.status);
+      return;
+    }
+    const data = await res.json();
+    if (Array.isArray(data)) {
+      setAgents(data);
+      return;
+    }
+    console.error('[ws] Invalid agents payload: expected array');
+  } catch (error) {
+    console.error('[ws] Failed to fetch agents:', error);
+  }
 }
 
 export async function fetchProjects() {
   try {
     const res = await fetch(`${API_BASE}/api/projects`);
-    if (res.ok) {
-      const data = await res.json();
-      setProjectSnapshots(normalizeProjects(data));
+    if (!res.ok) {
+      console.error('[ws] Failed to fetch projects:', res.status);
+      return;
     }
-  } catch {}
+    const data = await res.json();
+    setProjectSnapshots(normalizeProjects(data));
+  } catch (error) {
+    console.error('[ws] Failed to fetch projects:', error);
+  }
 }
 
 export function clearEvents() {
@@ -166,7 +184,7 @@ function normalizeAgents(value: unknown) {
     eventCount: numberField(agent.event_count, agent.eventCount),
     lastEventAt: numberField(agent.last_event_at, agent.lastEventAt),
     isActive: Boolean(agent.is_active ?? agent.isActive),
-    parentId: agent.parent_id ?? agent.parentId ?? undefined,
+    parentId: agent.parent_agent_id ?? agent.parent_id ?? agent.parentId ?? undefined,
   }));
 }
 

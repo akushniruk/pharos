@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+Back to [Docs Portal](../../README.md).
+
 **Goal:** Replace hook-dependent observation with process-based detection that reads Claude's native files (`~/.claude/sessions/`, `~/.claude/projects/`) to achieve hook-equivalent fidelity with zero per-project setup.
 
 **Architecture:** A scanner loop in the Rust daemon discovers active Claude sessions by watching `~/.claude/sessions/{pid}.json` files. For each discovered session, a transcript tailer reads the append-only JSONL at `~/.claude/projects/{slug}/{sessionId}.jsonl`, parsing user prompts, tool calls, and tool results into `EventEnvelope` objects that flow through the existing Store → WebSocket pipeline unchanged. An `AgentProfile` trait makes this extensible to non-Claude agents.

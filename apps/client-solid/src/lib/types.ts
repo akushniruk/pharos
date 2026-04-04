@@ -24,6 +24,7 @@ export interface AgentEntry {
   agent_type?: string;
   model_name?: string;
   parent_id?: string;
+  team_name?: string;
   lifecycle_status: string;
   first_seen_at: number;
   last_seen_at: number;

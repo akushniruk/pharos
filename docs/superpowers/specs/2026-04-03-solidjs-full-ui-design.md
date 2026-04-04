@@ -3,6 +3,8 @@
 Date: 2026-04-03
 Status: Approved
 
+Back to [Docs Portal](../../README.md).
+
 ## Goal
 
 Rebuild the Pharos dashboard in SolidJS with a sidebar + live feed layout, bringing back all critical features lost in the Vue-to-Solid migration. The UI should feel like a Vercel/Railway monitoring tool — dark, clean, information-dense, zero clicks to see what's happening.

@@ -2,6 +2,8 @@
 
 This document describes the current daemon endpoints and websocket messages that the frontend can use.
 
+Back to [Docs Portal](README.md).
+
 Base assumptions:
 
 - Local daemon base URL: `http://localhost:4000`
@@ -46,6 +48,7 @@ Response shape:
 ```ts
 type ProjectSnapshot = {
   name: string;
+  icon_url: string | null;
   runtime_labels: string[];
   sessions: SessionSnapshot[];
   summary: string | null;
@@ -71,6 +74,7 @@ Response shape:
 ```ts
 type ProjectSnapshot = {
   name: string;
+  icon_url: string | null;
   runtime_labels: string[];
   sessions: SessionSnapshot[];
   summary: string | null;
@@ -110,6 +114,7 @@ type SessionSnapshot = {
 type AgentSnapshot = {
   agent_id: string | null;
   display_name: string;
+  avatar_url: string | null;
   runtime_label: string | null;
   assignment: string | null;
   current_action: string | null;
@@ -556,4 +561,4 @@ If you are adding or updating frontend code, these are the safest canonical shap
 - `SessionSnapshot` for selected-session state
 - `FilterOptions` for filter controls
 
-The existing Solid client types in [apps/client-solid/src/lib/types.ts](/Users/akushniruk/home_projects/pharos/apps/client-solid/src/lib/types.ts) are a good reference, but this document should be treated as the backend contract summary.
+The existing Solid client types in [`apps/client-solid/src/lib/types.ts`](../apps/client-solid/src/lib/types.ts) are a good reference, but this document should be treated as the backend contract summary.

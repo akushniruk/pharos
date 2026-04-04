@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+Back to [Docs Portal](../../README.md).
+
 **Goal:** Parse Gemini `logs.json` entries into prompt, assistant, tool call, and tool result events, normalize them into the existing event model, and tail them from the scanner without changing Claude behavior.
 
 **Architecture:** Keep Gemini logic inside `apps/daemon-rs/src/profiles/gemini.rs` with a small live-event parser that returns the existing `CodexSessionEvent`-style event shape or a Gemini-specific equivalent mapped in `envelope.rs`. Extend `scanner.rs` with a Gemini branch that tracks file progress for `logs.json`, de-duplicates already-seen records, and feeds normalized events through the same store/broadcast path used for other runtimes.

@@ -2,6 +2,8 @@
 
 This guide covers the first installable Pharos desktop release:
 
+Back to [Docs Portal](README.md).
+
 - platform: macOS only
 - architecture: Apple Silicon (`aarch64-apple-darwin`)
 - artifact: unsigned internal `.dmg`

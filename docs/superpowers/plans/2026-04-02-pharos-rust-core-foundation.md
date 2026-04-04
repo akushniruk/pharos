@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+Back to [Docs Portal](../../README.md).
+
 **Goal:** Build the first repo-side Rust slice of Pharos: a host-agnostic daemon foundation with a canonical event model, a Claude-compatibility normalizer, a replay-based verification tool, and a minimal read/write API backed by SQLite.
 
 **Architecture:** Add a new Rust daemon under `apps/daemon-rs` beside the existing Go and Vue apps. Keep the current product working while introducing a parallel Rust core that can ingest normalized events, persist them to SQLite, replay captured Claude traces through a compatibility adapter, and expose a minimal HTTP API for observability-only flows.

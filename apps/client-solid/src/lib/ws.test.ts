@@ -14,6 +14,12 @@ describe('resolveApiHost', () => {
   });
 
   it('defaults to loopback when no hostname is available', () => {
+    expect(resolveApiHost(undefined)).toBe('127.0.0.1');
     expect(resolveApiHost('')).toBe('127.0.0.1');
+  });
+
+  it('normalizes ipv6 localhost addresses to ipv4 loopback', () => {
+    expect(resolveApiHost('::1')).toBe('127.0.0.1');
+    expect(resolveApiHost('[::1]')).toBe('127.0.0.1');
   });
 });
