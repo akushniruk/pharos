@@ -1,5 +1,11 @@
 import { For, Show, createMemo, createSignal } from 'solid-js';
-import { graphAgents, filteredEvents, selectAgent, selectedAgent } from '../lib/store';
+import {
+  graphAgents,
+  filteredEvents,
+  runtimeBridgeCandidates,
+  selectAgent,
+  selectedAgent,
+} from '../lib/store';
 import type { AgentInfo } from '../lib/types';
 import { mapAgentTypeLabel } from '../lib/agentNaming';
 
@@ -19,6 +25,7 @@ const METRO_COLORS = [
 ];
 
 type StatusColor = 'var(--green)' | 'var(--yellow)' | 'var(--accent)' | 'var(--text-dim)';
+type ConnectionMode = 'parent_child' | 'session_bridge';
 type GraphNode = AgentInfo & {
   graphId: string;
   parentGraphId?: string;
@@ -96,6 +103,7 @@ export default function AgentGraph() {
   const [dragging, setDragging] = createSignal(false);
   const [dragStart, setDragStart] = createSignal({ x: 0, y: 0 });
   const [filter, setFilter] = createSignal<'active' | 'idle' | 'all'>('all');
+  const [connectionMode, setConnectionMode] = createSignal<ConnectionMode>('parent_child');
   const [selectedGraphId, setSelectedGraphId] = createSignal<string | null>(null);
   const graphNodes = createMemo<GraphNode[]>(() => {
     const all = graphAgents();
@@ -228,6 +236,43 @@ export default function AgentGraph() {
     if (!parentPos || !childPos) return undefined;
     return `M ${parentPos.x + NODE_W / 2} ${parentPos.y + NODE_H} C ${parentPos.x + NODE_W / 2} ${(parentPos.y + NODE_H + childPos.y) / 2}, ${childPos.x + NODE_W / 2} ${(parentPos.y + NODE_H + childPos.y) / 2}, ${childPos.x + NODE_W / 2} ${childPos.y}`;
   };
+  const bridgePath = (fromId: string, toId: string) => {
+    const fromPos = layout().rootPositions.get(fromId) ?? layout().childPositions.get(fromId);
+    const toPos = layout().rootPositions.get(toId) ?? layout().childPositions.get(toId);
+    if (!fromPos || !toPos) return undefined;
+    const left = fromPos.x <= toPos.x ? fromPos : toPos;
+    const right = fromPos.x <= toPos.x ? toPos : fromPos;
+    const leftY = left.y + NODE_H / 2;
+    const rightY = right.y + NODE_H / 2;
+    const arcY = Math.min(leftY, rightY) - 28;
+    return `M ${left.x + NODE_W} ${leftY} C ${left.x + NODE_W + 28} ${arcY}, ${right.x - 28} ${arcY}, ${right.x} ${rightY}`;
+  };
+  const graphIdByAgentId = createMemo(() => {
+    const map = new Map<string, string>();
+    for (const node of nodes()) {
+      if (node.agentId) map.set(node.agentId, node.graphId);
+    }
+    return map;
+  });
+  const bridgeEdges = createMemo(() => {
+    if (connectionMode() !== 'session_bridge') {
+      return [] as Array<{ key: string; fromId: string; toId: string; lineColor: string }>;
+    }
+    const mapped = runtimeBridgeCandidates()
+      .map((bridge) => {
+        const fromId = graphIdByAgentId().get(bridge.fromAgentId);
+        const toId = graphIdByAgentId().get(bridge.toAgentId);
+        if (!fromId || !toId || fromId === toId) return undefined;
+        return {
+          key: bridge.key,
+          fromId,
+          toId,
+          lineColor: nodeLineColor(fromId),
+        };
+      })
+      .filter((edge): edge is { key: string; fromId: string; toId: string; lineColor: string } => Boolean(edge));
+    return mapped;
+  });
   const peerEdges = createMemo(() => {
     const activeChildren = children()
       .filter((node) => (node.isActive || node.statusTone === 'active') && node.parentGraphId)
@@ -287,22 +332,40 @@ export default function AgentGraph() {
       onMouseLeave={onMouseUp}
     >
       {/* Filter buttons top-left */}
-      <div style="position:absolute;top:12px;left:12px;display:flex;gap:4px;z-index:10;">
-        <For each={[
-          { key: 'active' as const, label: `Active (${activeCount()})` },
-          { key: 'idle' as const, label: `Idle (${idleCount()})` },
-          { key: 'all' as const, label: `All (${graphAgents().length})` },
-        ]}>
-          {(f) => (
-            <button
-              class="graph-zoom-btn"
-              style={`font-size:10px;width:auto;padding:0 10px;${filter() === f.key ? 'background:var(--bg-elevated);color:var(--text-primary);border-color:var(--accent);' : ''}`}
-              onClick={() => setFilter(f.key)}
-            >
-              {f.label}
-            </button>
-          )}
-        </For>
+      <div style="position:absolute;top:12px;left:12px;display:flex;flex-direction:column;gap:4px;z-index:10;">
+        <div style="display:flex;gap:4px;">
+          <For each={[
+            { key: 'active' as const, label: `Active (${activeCount()})` },
+            { key: 'idle' as const, label: `Idle (${idleCount()})` },
+            { key: 'all' as const, label: `All (${graphAgents().length})` },
+          ]}>
+            {(f) => (
+              <button
+                class="graph-zoom-btn"
+                style={`font-size:10px;width:auto;padding:0 10px;${filter() === f.key ? 'background:var(--bg-elevated);color:var(--text-primary);border-color:var(--accent);' : ''}`}
+                onClick={() => setFilter(f.key)}
+              >
+                {f.label}
+              </button>
+            )}
+          </For>
+        </div>
+        <div style="display:flex;gap:4px;">
+          <For each={[
+            { key: 'parent_child' as const, label: 'Hierarchy' },
+            { key: 'session_bridge' as const, label: `Session bridges (${runtimeBridgeCandidates().length})` },
+          ]}>
+            {(mode) => (
+              <button
+                class="graph-zoom-btn"
+                style={`font-size:10px;width:auto;padding:0 10px;${connectionMode() === mode.key ? 'background:var(--bg-elevated);color:var(--text-primary);border-color:var(--accent);' : ''}`}
+                onClick={() => setConnectionMode(mode.key)}
+              >
+                {mode.label}
+              </button>
+            )}
+          </For>
+        </div>
       </div>
 
       {/* Zoom controls bottom-right */}
@@ -335,6 +398,38 @@ export default function AgentGraph() {
               </feMerge>
             </filter>
           </defs>
+
+          <Show when={connectionMode() === 'session_bridge'}>
+            <For each={bridgeEdges()}>
+              {(edge, index) => {
+                const pathD = () => bridgePath(edge.fromId, edge.toId);
+                return (
+                  <Show when={pathD()}>
+                    <>
+                      <path
+                        class="graph-bridge-edge"
+                        d={pathD()!}
+                        fill="none"
+                        stroke={edge.lineColor}
+                        stroke-width="1.4"
+                        stroke-linecap="round"
+                      />
+                      <path
+                        class="graph-bridge-flow"
+                        style={{ 'animation-delay': `${index() * 260}ms` }}
+                        d={pathD()!}
+                        fill="none"
+                        stroke={edge.lineColor}
+                        stroke-width="1.2"
+                        stroke-linecap="round"
+                        stroke-dasharray="6 16"
+                      />
+                    </>
+                  </Show>
+                );
+              }}
+            </For>
+          </Show>
 
           {/* Edges */}
           <For each={edges()}>

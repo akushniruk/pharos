@@ -109,6 +109,7 @@ const ACTIVE_THRESHOLD_MS = 60_000;
 const IDLE_THRESHOLD_MS = 10 * 60_000;
 const REGISTRY_GRACE_MS = 5 * 60_000;
 const MAIN_AGENT_KEY = '__main__';
+const SESSION_BRIDGE_WINDOW_MS = 120_000;
 
 interface RegistryInfo {
   lifecycle_status: string;
@@ -1377,6 +1378,119 @@ export const graphAgents = createMemo((): AgentInfo[] => {
     if (left.isActive !== right.isActive) return left.isActive ? -1 : 1;
     return right.lastEventAt - left.lastEventAt;
   });
+});
+
+export interface RuntimeBridgeCandidate {
+  key: string;
+  fromAgentId: string;
+  toAgentId: string;
+  fromRuntime: string;
+  toRuntime: string;
+  fromLastEventAt: number;
+  toLastEventAt: number;
+}
+
+interface RuntimeRepresentative {
+  runtimeLabel: string;
+  runtimeKey: string;
+  agentId: string;
+  lastEventAt: number;
+}
+
+function runtimeKey(runtimeLabel: string): string {
+  return runtimeLabel.trim().toLowerCase();
+}
+
+function resolveAgentRuntimeLabel(
+  agent: AgentInfo,
+  runtimeByAgentId: Map<string, string>,
+): string | undefined {
+  const direct = agent.runtimeLabel?.trim();
+  if (direct) return direct;
+  const fallback = runtimeByAgentId.get(agent.agentId || MAIN_AGENT_KEY)?.trim();
+  return fallback || undefined;
+}
+
+function resolveRuntimeByAgentId(scopedEvents: HookEvent[]): Map<string, string> {
+  const runtimeByAgent = new Map<string, string>();
+  for (const event of scopedEvents) {
+    const key = event.agent_id || MAIN_AGENT_KEY;
+    const runtime = event.payload?.runtime_label || event.payload?.runtime_source;
+    if (typeof runtime === 'string' && runtime.trim()) {
+      runtimeByAgent.set(key, runtime.trim());
+    }
+  }
+  return runtimeByAgent;
+}
+
+function deriveRuntimeRepresentatives(
+  agentsList: AgentInfo[],
+  scopedEvents: HookEvent[],
+): RuntimeRepresentative[] {
+  const runtimeByAgent = resolveRuntimeByAgentId(scopedEvents);
+  const perRuntime = new Map<string, RuntimeRepresentative>();
+  for (const agent of agentsList) {
+    if (!agent.agentId) continue;
+    if (!agent.isActive && agent.statusTone !== 'active') continue;
+    const runtimeLabel = resolveAgentRuntimeLabel(agent, runtimeByAgent);
+    if (!runtimeLabel) continue;
+    const key = runtimeKey(runtimeLabel);
+    const previous = perRuntime.get(key);
+    if (!previous || agent.lastEventAt > previous.lastEventAt) {
+      perRuntime.set(key, {
+        runtimeLabel,
+        runtimeKey: key,
+        agentId: agent.agentId,
+        lastEventAt: agent.lastEventAt || 0,
+      });
+    }
+  }
+  return Array.from(perRuntime.values()).sort((left, right) => right.lastEventAt - left.lastEventAt);
+}
+
+export function deriveRuntimeBridgeCandidates(
+  agentsList: AgentInfo[],
+  scopedEvents: HookEvent[],
+  windowMs: number = SESSION_BRIDGE_WINDOW_MS,
+): RuntimeBridgeCandidate[] {
+  const runtimeHeads = deriveRuntimeRepresentatives(agentsList, scopedEvents);
+  if (runtimeHeads.length < 2) return [];
+
+  const bridges: RuntimeBridgeCandidate[] = [];
+  const seenPairs = new Set<string>();
+  for (let index = 0; index < runtimeHeads.length; index += 1) {
+    const left = runtimeHeads[index];
+    for (let inner = index + 1; inner < runtimeHeads.length; inner += 1) {
+      const right = runtimeHeads[inner];
+      if (Math.abs(left.lastEventAt - right.lastEventAt) > windowMs) continue;
+      const pairKey = [left.runtimeKey, right.runtimeKey].sort().join('<->');
+      if (seenPairs.has(pairKey)) continue;
+      seenPairs.add(pairKey);
+      bridges.push({
+        key: pairKey,
+        fromAgentId: left.agentId,
+        toAgentId: right.agentId,
+        fromRuntime: left.runtimeLabel,
+        toRuntime: right.runtimeLabel,
+        fromLastEventAt: left.lastEventAt,
+        toLastEventAt: right.lastEventAt,
+      });
+    }
+  }
+  return bridges;
+}
+
+const graphScopeEvents = createMemo((): HookEvent[] => {
+  let scoped = events();
+  const project = selectedProject();
+  const session = selectedSession();
+  if (project) scoped = scoped.filter((event) => event.source_app === project);
+  if (session) scoped = scoped.filter((event) => event.session_id === session);
+  return scoped;
+});
+
+export const runtimeBridgeCandidates = createMemo((): RuntimeBridgeCandidate[] => {
+  return deriveRuntimeBridgeCandidates(graphAgents(), graphScopeEvents());
 });
 
 function registryEntryToGraphAgent(entry: AgentEntry): AgentInfo {

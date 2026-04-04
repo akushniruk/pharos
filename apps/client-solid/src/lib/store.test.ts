@@ -4,6 +4,7 @@ import {
   buildProjectFocusSnapshot,
   buildRecentChangesSnapshot,
   buildViewedChangesSnapshot,
+  deriveRuntimeBridgeCandidates,
   resolveActivityState,
   resolveConservativeStatusDetail,
 } from './store';
@@ -403,5 +404,178 @@ describe('resolveConservativeStatusDetail', () => {
     expect(resolveConservativeStatusDetail('attention', undefined, events)).toBe(
       'No new progress after Running a task',
     );
+  });
+});
+
+describe('deriveRuntimeBridgeCandidates', () => {
+  const baseAgent = {
+    statusLabel: 'Active',
+    statusTone: 'active',
+    eventCount: 1,
+    isActive: true,
+  } satisfies Partial<AgentInfo>;
+
+  it('creates runtime bridge candidates for overlapping active runtimes', () => {
+    const agents = [
+      {
+        ...baseAgent,
+        agentId: 'claude-1',
+        displayName: 'Claude Lead',
+        runtimeLabel: 'Claude',
+        lastEventAt: 1_000,
+      },
+      {
+        ...baseAgent,
+        agentId: 'cursor-1',
+        displayName: 'Cursor Helper',
+        runtimeLabel: 'Cursor',
+        lastEventAt: 1_060,
+      },
+      {
+        ...baseAgent,
+        agentId: 'codex-1',
+        displayName: 'Codex Reviewer',
+        runtimeLabel: 'Codex',
+        lastEventAt: 1_090,
+      },
+    ] satisfies AgentInfo[];
+
+    const events = [
+      {
+        source_app: 'pharos',
+        session_id: 's-1',
+        hook_event_type: 'AssistantResponse',
+        payload: { runtime_label: 'Claude' },
+        timestamp: 1_000,
+        agent_id: 'claude-1',
+      },
+      {
+        source_app: 'pharos',
+        session_id: 's-1',
+        hook_event_type: 'AssistantResponse',
+        payload: { runtime_label: 'Cursor' },
+        timestamp: 1_060,
+        agent_id: 'cursor-1',
+      },
+      {
+        source_app: 'pharos',
+        session_id: 's-1',
+        hook_event_type: 'AssistantResponse',
+        payload: { runtime_label: 'Codex' },
+        timestamp: 1_090,
+        agent_id: 'codex-1',
+      },
+    ] satisfies HookEvent[];
+
+    const bridges = deriveRuntimeBridgeCandidates(agents, events, 120);
+    expect(bridges.map((bridge) => bridge.key).sort()).toEqual([
+      'claude<->codex',
+      'claude<->cursor',
+      'codex<->cursor',
+    ]);
+  });
+
+  it('does not create bridges when only one runtime is active', () => {
+    const agents = [
+      {
+        ...baseAgent,
+        agentId: 'claude-1',
+        displayName: 'Claude Lead',
+        runtimeLabel: 'Claude',
+        lastEventAt: 1_000,
+      },
+      {
+        ...baseAgent,
+        agentId: 'claude-2',
+        displayName: 'Claude Worker',
+        runtimeLabel: 'Claude',
+        lastEventAt: 1_020,
+      },
+    ] satisfies AgentInfo[];
+
+    const events = [
+      {
+        source_app: 'pharos',
+        session_id: 's-1',
+        hook_event_type: 'AssistantResponse',
+        payload: { runtime_label: 'Claude' },
+        timestamp: 1_000,
+        agent_id: 'claude-1',
+      },
+    ] satisfies HookEvent[];
+
+    expect(deriveRuntimeBridgeCandidates(agents, events, 120)).toEqual([]);
+  });
+
+  it('deduplicates runtime pairs and skips non-overlapping windows', () => {
+    const agents = [
+      {
+        ...baseAgent,
+        agentId: 'cursor-a',
+        displayName: 'Cursor A',
+        runtimeLabel: 'Cursor',
+        lastEventAt: 5_000,
+      },
+      {
+        ...baseAgent,
+        agentId: 'cursor-b',
+        displayName: 'Cursor B',
+        runtimeLabel: 'Cursor',
+        lastEventAt: 4_950,
+      },
+      {
+        ...baseAgent,
+        agentId: 'claude-a',
+        displayName: 'Claude A',
+        runtimeLabel: 'Claude',
+        lastEventAt: 4_980,
+      },
+      {
+        ...baseAgent,
+        agentId: 'gemini-a',
+        displayName: 'Gemini A',
+        runtimeLabel: 'Gemini',
+        lastEventAt: 3_000,
+      },
+    ] satisfies AgentInfo[];
+
+    const events = [
+      {
+        source_app: 'pharos',
+        session_id: 's-1',
+        hook_event_type: 'AssistantResponse',
+        payload: { runtime_label: 'Cursor' },
+        timestamp: 5_000,
+        agent_id: 'cursor-a',
+      },
+      {
+        source_app: 'pharos',
+        session_id: 's-1',
+        hook_event_type: 'AssistantResponse',
+        payload: { runtime_label: 'Cursor' },
+        timestamp: 4_950,
+        agent_id: 'cursor-b',
+      },
+      {
+        source_app: 'pharos',
+        session_id: 's-1',
+        hook_event_type: 'AssistantResponse',
+        payload: { runtime_label: 'Claude' },
+        timestamp: 4_980,
+        agent_id: 'claude-a',
+      },
+      {
+        source_app: 'pharos',
+        session_id: 's-1',
+        hook_event_type: 'AssistantResponse',
+        payload: { runtime_label: 'Gemini' },
+        timestamp: 3_000,
+        agent_id: 'gemini-a',
+      },
+    ] satisfies HookEvent[];
+
+    const bridges = deriveRuntimeBridgeCandidates(agents, events, 120);
+    expect(bridges).toHaveLength(1);
+    expect(bridges[0]?.key).toBe('claude<->cursor');
   });
 });

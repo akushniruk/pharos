@@ -264,6 +264,15 @@ body {
   animation-direction: reverse;
 }
 
+.graph-bridge-edge {
+  opacity: 0.34;
+}
+
+.graph-bridge-flow {
+  opacity: 0.62;
+  animation: graphBridgeFlow 4.2s linear infinite;
+}
+
 @keyframes graphEdgeFlow {
   from {
     stroke-dashoffset: 0;
@@ -282,9 +291,19 @@ body {
   }
 }
 
+@keyframes graphBridgeFlow {
+  from {
+    stroke-dashoffset: 0;
+  }
+  to {
+    stroke-dashoffset: -88;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .graph-edge-flow,
-  .graph-peer-flow {
+  .graph-peer-flow,
+  .graph-bridge-flow {
     animation: none !important;
   }
 }
