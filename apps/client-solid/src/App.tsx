@@ -259,10 +259,10 @@ function ProjectTimeline() {
                     <button
                       onClick={() => selectSession(session.sessionId)}
                       style={[
-                        'min-width:210px;max-width:260px;text-align:left;display:flex;flex-direction:column;gap:7px;padding:10px 12px;border-radius:10px;border:1px solid var(--border);cursor:pointer;',
-                        'background:var(--bg-card);transition:background 0.15s,border-color 0.15s,transform 0.15s;',
+                        'display:flex;align-items:center;gap:8px;padding:4px 10px;border-radius:6px;border:1px solid var(--border);cursor:pointer;',
+                        'background:var(--bg-card);transition:background 0.15s,border-color 0.15s;white-space:nowrap;flex-shrink:0;',
                         isSelected()
-                          ? 'border-color:var(--accent);background:var(--bg-elevated);transform:translateY(-1px);'
+                          ? 'border-color:var(--accent);background:var(--bg-elevated);'
                           : '',
                       ].join('')}
                       onMouseEnter={(e) => {
@@ -272,26 +272,24 @@ function ProjectTimeline() {
                         if (!isSelected()) (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg-card)';
                       }}
                     >
-                      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:0;">
-                        <span style="font-size:12px;font-weight:600;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-                          {title()}
-                        </span>
-                        <span
-                          style={[
-                            'font-size:9px;font-weight:600;padding:1px 6px;border-radius:9999px;flex-shrink:0;',
-                            session.isActive
-                              ? 'background:var(--green-dim);color:var(--green);'
-                              : 'background:var(--bg-elevated);color:var(--text-dim);',
-                          ].join('')}
-                        >
-                          {session.isActive ? 'Active' : 'Idle'}
-                        </span>
-                      </div>
-                      <span style="font-size:11px;color:var(--text-secondary);line-height:1.35;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                      <span
+                        style={[
+                          'font-size:9px;font-weight:600;padding:1px 6px;border-radius:9999px;flex-shrink:0;',
+                          session.isActive
+                            ? 'background:var(--green-dim);color:var(--green);'
+                            : 'background:var(--bg-elevated);color:var(--text-dim);',
+                        ].join('')}
+                      >
+                        {session.isActive ? 'Active' : 'Idle'}
+                      </span>
+                      <span style="font-size:11px;font-weight:600;color:var(--text-primary);font-family:var(--font-mono);">
+                        {session.sessionId.slice(0, 8)}
+                      </span>
+                      <span style="font-size:11px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;max-width:200px;">
                         {primaryContext()}
                       </span>
-                      <span style="font-size:10px;color:var(--text-dim);line-height:1.35;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-                        {secondaryContext()} · {session.sessionId.slice(0, 8)}
+                      <span style="font-size:10px;color:var(--text-dim);">
+                        {timeAgo(session.lastEventAt)}
                       </span>
                     </button>
                   );
