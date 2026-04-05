@@ -16,6 +16,7 @@ import {
   resolveHybridAgentName,
   responsibilityFromPayload,
 } from './agentNaming';
+import { buildAttentionSuggestions } from './attentionHints';
 
 /** Navigation state (legacy, kept for compatibility) */
 export const [view, setView] = createSignal<View>({ page: 'projects' });
@@ -37,6 +38,59 @@ export const [helpVisible, setHelpVisible] = createSignal(false);
 const VIEWED_STORAGE_KEY = 'pharos-viewed-scopes-v1';
 type ViewedScopeMap = Record<string, number>;
 export const [viewedScopes, setViewedScopes] = createSignal<ViewedScopeMap>(loadViewedScopes());
+
+const ATTENTION_BANNER_DISMISS_KEY = 'pharos.attention-banner.dismissed-v1';
+const MAX_ATTENTION_DISMISS_KEYS = 400;
+
+function loadAttentionBannerDismissed(): Set<string> {
+  if (typeof localStorage === 'undefined') return new Set();
+  try {
+    const raw = localStorage.getItem(ATTENTION_BANNER_DISMISS_KEY);
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return new Set();
+    return new Set(parsed.filter((entry): entry is string => typeof entry === 'string'));
+  } catch {
+    return new Set();
+  }
+}
+
+function saveAttentionBannerDismissed(keys: Set<string>) {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    const list = [...keys];
+    const trimmed =
+      list.length > MAX_ATTENTION_DISMISS_KEYS ? list.slice(-MAX_ATTENTION_DISMISS_KEYS) : list;
+    localStorage.setItem(ATTENTION_BANNER_DISMISS_KEY, JSON.stringify(trimmed));
+  } catch {
+    /* quota or private mode */
+  }
+}
+
+/** Fingerprints include live fields from the daemon so dismiss resets when status or events change. */
+export function attentionBannerFingerprint(projectName: string, session: SessionInfo): string {
+  const tone = session.statusTone ?? '';
+  const detail =
+    session.statusDetail?.trim() || session.summary?.trim() || '';
+  return `${projectName}\u001f${session.sessionId}\u001f${tone}\u001f${detail}\u001f${session.lastEventAt}`;
+}
+
+export const [dismissedAttentionBanners, setDismissedAttentionBanners] = createSignal<
+  Set<string>
+>(loadAttentionBannerDismissed());
+
+/** Persist dismissal so banner and log highlights clear until daemon status changes. */
+export function markAttentionSolved(fingerprint: string) {
+  setDismissedAttentionBanners((previous) => {
+    const next = new Set(previous);
+    next.add(fingerprint);
+    saveAttentionBannerDismissed(next);
+    return next;
+  });
+}
+
+/** @deprecated Use markAttentionSolved */
+export const dismissAttentionBanner = markAttentionSolved;
 
 export function initHelpState() {
   if (typeof localStorage !== 'undefined') {
@@ -396,6 +450,53 @@ export const selectedSessionSnapshot = createMemo((): SessionInfo | null => {
   return project.sessions.find((session) => session.sessionId === sessionId) ?? null;
 });
 
+/** Sessions in the current logs scope that need attention (for in-stream banner). */
+export interface LogsAttentionAlert {
+  sessionId: string;
+  sessionTitle: string;
+  tone: 'attention' | 'blocked';
+  headline: string;
+  detail: string;
+  fingerprint: string;
+  suggestions: string[];
+}
+
+export const logsAttentionAlerts = createMemo((): LogsAttentionAlert[] => {
+  const project = selectedProjectSnapshot();
+  if (!project) return [];
+
+  const dismissed = dismissedAttentionBanners();
+  const focusedSessionId = selectedSession();
+  const candidates = focusedSessionId
+    ? project.sessions.filter((session) => session.sessionId === focusedSessionId)
+    : project.sessions;
+
+  const alerts: LogsAttentionAlert[] = [];
+  for (const session of candidates) {
+    const tone = session.statusTone;
+    if (tone !== 'attention' && tone !== 'blocked') continue;
+    const idx = project.sessions.findIndex((entry) => entry.sessionId === session.sessionId);
+    const sessionTitle = idx >= 0 ? `Session #${idx + 1}` : session.sessionId.slice(0, 8);
+    const headline = tone === 'blocked' ? 'Blocked' : 'Needs attention';
+    const detail =
+      session.statusDetail?.trim()
+      || session.summary?.trim()
+      || 'Review the latest tool results and prompts in the timeline below.';
+    const fingerprint = attentionBannerFingerprint(project.name, session);
+    if (dismissed.has(fingerprint)) continue;
+    alerts.push({
+      sessionId: session.sessionId,
+      sessionTitle,
+      tone,
+      headline,
+      detail,
+      fingerprint,
+      suggestions: buildAttentionSuggestions(detail, tone),
+    });
+  }
+  return alerts;
+});
+
 export const selectedAgentSnapshot = createMemo((): AgentInfo | null => {
   const agentId = selectedAgent();
   if (!agentId) return null;
@@ -411,6 +512,37 @@ export const selectedAgentSnapshot = createMemo((): AgentInfo | null => {
 });
 
 export type ActivityTone = 'active' | 'blocked' | 'attention' | 'idle' | 'done';
+
+const SIDEBAR_SESSION_ACTIVE_WINDOW_MS = 90_000;
+const SIDEBAR_SESSION_IDLE_WINDOW_MS = 10 * 60_000;
+
+/**
+ * Session tone for sidebar (and project roll-up): shows daemon attention/blocked unless the user
+ * marked that exact status fingerprint Solved in the log banner.
+ */
+export function sidebarSessionActivityTone(projectName: string, session: SessionInfo): ActivityTone {
+  const explicit = session.statusTone;
+  const dismissed = dismissedAttentionBanners();
+  if (
+    (explicit === 'attention' || explicit === 'blocked')
+    && !dismissed.has(attentionBannerFingerprint(projectName, session))
+  ) {
+    return explicit;
+  }
+
+  const now = Date.now();
+  const age = Math.max(0, now - (session.lastEventAt || 0));
+  if ((session.isActive || session.activeAgentCount > 0) && age <= SIDEBAR_SESSION_ACTIVE_WINDOW_MS) {
+    return 'active';
+  }
+  if (session.eventCount > 0 && age <= SIDEBAR_SESSION_IDLE_WINDOW_MS) {
+    return 'idle';
+  }
+  if (session.eventCount > 0) {
+    return 'done';
+  }
+  return 'done';
+}
 
 export interface ActivityState {
   label: string;

@@ -1,4 +1,4 @@
-import { For, Show, createMemo, createSignal } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
 import {
   graphAgents,
   filteredEvents,
@@ -7,13 +7,19 @@ import {
 } from '../lib/store';
 import type { AgentInfo } from '../lib/types';
 import { mapAgentTypeLabel } from '../lib/agentNaming';
+import GraphAgentFilterTabPanel, {
+  PANEL_ID,
+  TAB_IDS,
+  type GraphAgentFilter,
+} from './GraphAgentFilterTabPanel';
 
 const NODE_W = 248;
 const NODE_H = 94;
 const H_GAP = 30;
 const V_GAP = 86;
 const MAX_PER_ROW = 5;
-const MAX_PEER_PULSES = 6;
+const PAD = 40;
+const CLUSTER_GAP = 36;
 const METRO_COLORS = [
   '#22c55e',
   '#3b82f6',
@@ -107,13 +113,66 @@ function wrapLabel(label: string): [string, string?] {
   return second ? [first, second] : [first];
 }
 
+function computeClusterLayout(
+  rootsList: GraphNode[],
+  childrenList: GraphNode[],
+): { width: number; height: number; rootPositions: Map<string, { x: number; y: number }>; childPositions: Map<string, { x: number; y: number }> } {
+  const rootPositions = new Map<string, { x: number; y: number }>();
+  const childPositions = new Map<string, { x: number; y: number }>();
+
+  if (rootsList.length === 0) {
+    return { width: PAD * 2 + NODE_W, height: PAD * 2 + NODE_H, rootPositions, childPositions };
+  }
+
+  let xCursor = PAD;
+  let maxBottom = PAD + NODE_H;
+
+  for (const root of rootsList) {
+    const kids = childrenList.filter((child) => child.parentGraphId === root.graphId);
+    const kidCount = kids.length;
+    const colsForWidth = kidCount === 0 ? 1 : Math.min(MAX_PER_ROW, kidCount);
+    const clusterW = Math.max(NODE_W, colsForWidth * (NODE_W + H_GAP) - H_GAP);
+
+    const rootX = xCursor + (clusterW - NODE_W) / 2;
+    rootPositions.set(root.graphId, { x: rootX, y: PAD });
+
+    let clusterBottom = PAD + NODE_H;
+    if (kidCount > 0) {
+      const rows = Math.ceil(kidCount / MAX_PER_ROW);
+      for (let row = 0; row < rows; row += 1) {
+        const slice = kids.slice(row * MAX_PER_ROW, (row + 1) * MAX_PER_ROW);
+        const rowCols = slice.length;
+        const rowW = rowCols * (NODE_W + H_GAP) - H_GAP;
+        const rowStartX = xCursor + (clusterW - rowW) / 2;
+        slice.forEach((kid, j) => {
+          childPositions.set(kid.graphId, {
+            x: rowStartX + j * (NODE_W + H_GAP),
+            y: PAD + NODE_H + V_GAP + row * (NODE_H + V_GAP),
+          });
+        });
+        clusterBottom = PAD + NODE_H + V_GAP + row * (NODE_H + V_GAP) + NODE_H;
+      }
+    }
+
+    maxBottom = Math.max(maxBottom, clusterBottom);
+    xCursor += clusterW + CLUSTER_GAP;
+  }
+
+  const width = Math.max(PAD * 2 + NODE_W, xCursor - CLUSTER_GAP + PAD);
+  const height = maxBottom + PAD;
+
+  return { width, height, rootPositions, childPositions };
+}
+
 export default function AgentGraph() {
   const [zoom, setZoom] = createSignal(1);
   const [pan, setPan] = createSignal({ x: 0, y: 0 });
   const [dragging, setDragging] = createSignal(false);
   const [dragStart, setDragStart] = createSignal({ x: 0, y: 0 });
-  const [filter, setFilter] = createSignal<'active' | 'idle' | 'all'>('all');
+  const [filter, setFilter] = createSignal<GraphAgentFilter>('all');
   const [selectedGraphId, setSelectedGraphId] = createSignal<string | null>(null);
+  const [focusedRootGraphId, setFocusedRootGraphId] = createSignal<string | null>(null);
+  const [graphViewport, setGraphViewport] = createSignal<HTMLDivElement | undefined>();
   const graphNodes = createMemo<GraphNode[]>(() => {
     const all = graphAgents();
     if (all.length === 0) return [];
@@ -144,13 +203,35 @@ export default function AgentGraph() {
       return { ...agent, graphId } satisfies GraphNode;
     });
 
+    const mainRoots = mapped.filter((node) => node.agentId === null);
     const primaryRootId = mapped.find((node) => node.agentId === null)?.graphId;
+    const closestMainRootId = (child: GraphNode): string | undefined => {
+      if (mainRoots.length === 0) return undefined;
+      const childRuntime = child.runtimeLabel?.trim().toLowerCase();
+      const childModel = child.modelName?.trim().toLowerCase();
+      let bestRoot = mainRoots[0];
+      let bestScore = Number.NEGATIVE_INFINITY;
+      for (const root of mainRoots) {
+        let score = -Math.abs((root.lastEventAt || 0) - (child.lastEventAt || 0));
+        if (childRuntime && root.runtimeLabel?.trim().toLowerCase() === childRuntime) {
+          score += 60_000;
+        }
+        if (childModel && root.modelName?.trim().toLowerCase() === childModel) {
+          score += 30_000;
+        }
+        if (score > bestScore) {
+          bestScore = score;
+          bestRoot = root;
+        }
+      }
+      return bestRoot.graphId;
+    };
     return mapped.map((node) => {
       if (!node.agentId) return node;
       const rawParent = node.parentId || parentMap.get(node.agentId);
       if (!rawParent) return node;
       if (rawParent === 'main' && primaryRootId) {
-        return { ...node, parentGraphId: primaryRootId };
+        return { ...node, parentGraphId: closestMainRootId(node) || primaryRootId };
       }
       const inferredParent = graphIdByAgentId.get(rawParent);
       return inferredParent ? { ...node, parentGraphId: inferredParent } : node;
@@ -160,15 +241,36 @@ export default function AgentGraph() {
   const isNodeActive = (node: GraphNode) => node.isActive || node.statusTone === 'active';
   const rootsAll = createMemo(() => graphNodes().filter((node) => !node.parentGraphId));
   const childrenAll = createMemo(() => graphNodes().filter((node) => Boolean(node.parentGraphId)));
-  const roots = createMemo(() => {
+  const rootsByMode = createMemo(() => {
     if (filter() === 'all') return rootsAll();
     if (filter() === 'active') return rootsAll().filter((node) => isNodeActive(node));
     return rootsAll().filter((node) => !isNodeActive(node));
   });
-  const children = createMemo(() => {
+  const childrenByMode = createMemo(() => {
     if (filter() === 'all') return childrenAll();
     if (filter() === 'active') return childrenAll().filter((node) => isNodeActive(node));
     return childrenAll().filter((node) => !isNodeActive(node));
+  });
+
+  createEffect(() => {
+    const focusId = focusedRootGraphId();
+    if (!focusId) return;
+    if (!rootsByMode().some((root) => root.graphId === focusId)) {
+      setFocusedRootGraphId(null);
+    }
+  });
+
+  const roots = createMemo(() => {
+    const focusId = focusedRootGraphId();
+    const r = rootsByMode();
+    if (!focusId) return r;
+    return r.filter((root) => root.graphId === focusId);
+  });
+  const children = createMemo(() => {
+    const focusId = focusedRootGraphId();
+    const c = childrenByMode();
+    if (!focusId) return c;
+    return c.filter((child) => child.parentGraphId === focusId);
   });
   const nodes = createMemo(() => [...roots(), ...children()]);
   const nodeById = createMemo(() => {
@@ -204,40 +306,48 @@ export default function AgentGraph() {
         childId: child.graphId,
         parentId: child.parentGraphId!,
         lineColor: nodeLineColor(child.graphId),
-        childActive: child.isActive || child.statusTone === 'active',
+        isActive:
+          (child.isActive || child.statusTone === 'active')
+          && (nodeById().get(child.parentGraphId || '')?.isActive
+            || nodeById().get(child.parentGraphId || '')?.statusTone === 'active'),
       }))
       .filter((edge) => visibleIds.has(edge.parentId) && visibleIds.has(edge.childId));
   });
 
-  const layout = createMemo(() => {
-    const r = roots();
-    const c = children();
-    const rootCount = Math.max(r.length, 1);
-    const childRows = Math.ceil(c.length / MAX_PER_ROW) || 0;
-    const maxCols = Math.max(rootCount, Math.min(c.length, MAX_PER_ROW));
-    const width = maxCols * (NODE_W + H_GAP) - H_GAP + 80;
-    const height = NODE_H + (childRows > 0 ? childRows * (NODE_H + V_GAP) + V_GAP : 0) + 80;
+  const layout = createMemo(() => computeClusterLayout(roots(), children()));
 
-    const rootPositions = new Map<string, { x: number; y: number }>();
-    const rootStartX = (width - (rootCount * (NODE_W + H_GAP) - H_GAP)) / 2;
-    r.forEach((agent, i) => {
-      rootPositions.set(agent.graphId, { x: rootStartX + i * (NODE_W + H_GAP), y: 40 });
-    });
+  const applyGraphFit = () => {
+    const el = graphViewport();
+    if (!el || nodes().length === 0) return;
+    const cw = el.clientWidth;
+    const ch = el.clientHeight;
+    if (cw < 24 || ch < 24) return;
+    const L = layout();
+    const z = Math.min(2.5, Math.max(0.3, Math.min(cw / L.width, ch / L.height) * 0.92));
+    setZoom(z);
+    setPan({ x: (cw - L.width * z) / 2, y: (ch - L.height * z) / 2 });
+  };
 
-    const childPositions = new Map<string, { x: number; y: number }>();
-    c.forEach((agent, i) => {
-      const row = Math.floor(i / MAX_PER_ROW);
-      const col = i % MAX_PER_ROW;
-      const rowCols = Math.min(c.length - row * MAX_PER_ROW, MAX_PER_ROW);
-      const rowStartX = (width - (rowCols * (NODE_W + H_GAP) - H_GAP)) / 2;
-      childPositions.set(agent.graphId, {
-        x: rowStartX + col * (NODE_W + H_GAP),
-        y: 40 + NODE_H + V_GAP + row * (NODE_H + V_GAP),
-      });
-    });
-
-    return { width, height, rootPositions, childPositions };
+  createEffect(() => {
+    filter();
+    graphViewport();
+    roots()
+      .map((node) => node.graphId)
+      .join('|');
+    children()
+      .map((node) => node.graphId)
+      .join('|');
+    requestAnimationFrame(() => requestAnimationFrame(() => applyGraphFit()));
   });
+
+  createEffect(() => {
+    const el = graphViewport();
+    if (!el) return;
+    const ro = new ResizeObserver(() => applyGraphFit());
+    ro.observe(el);
+    onCleanup(() => ro.disconnect());
+  });
+
   const nodePos = (node: GraphNode) => {
     return layout().rootPositions.get(node.graphId) ?? layout().childPositions.get(node.graphId) ?? { x: 0, y: 0 };
   };
@@ -247,38 +357,6 @@ export default function AgentGraph() {
     if (!parentPos || !childPos) return undefined;
     return `M ${parentPos.x + NODE_W / 2} ${parentPos.y + NODE_H} C ${parentPos.x + NODE_W / 2} ${(parentPos.y + NODE_H + childPos.y) / 2}, ${childPos.x + NODE_W / 2} ${(parentPos.y + NODE_H + childPos.y) / 2}, ${childPos.x + NODE_W / 2} ${childPos.y}`;
   };
-  const peerEdges = createMemo(() => {
-    const activeChildren = children()
-      .filter((node) => (node.isActive || node.statusTone === 'active') && node.parentGraphId)
-      .sort((left, right) => (left.lastEventAt || 0) - (right.lastEventAt || 0));
-    const grouped = new Map<string, GraphNode[]>();
-    for (const child of activeChildren) {
-      const parentId = child.parentGraphId!;
-      const list = grouped.get(parentId) || [];
-      list.push(child);
-      grouped.set(parentId, list);
-    }
-    const links: Array<{ key: string; d: string; lineColor: string }> = [];
-    for (const [parentId, siblingNodes] of grouped) {
-      for (let index = 0; index < siblingNodes.length - 1; index += 1) {
-        if (links.length >= MAX_PEER_PULSES) break;
-        const left = siblingNodes[index];
-        const right = siblingNodes[index + 1];
-        const leftPos = nodePos(left);
-        const rightPos = nodePos(right);
-        const y = Math.min(leftPos.y, rightPos.y) - 16;
-        const d = `M ${leftPos.x + NODE_W / 2} ${leftPos.y} C ${leftPos.x + NODE_W / 2} ${y}, ${rightPos.x + NODE_W / 2} ${y}, ${rightPos.x + NODE_W / 2} ${rightPos.y}`;
-        links.push({
-          key: `${parentId}:${left.graphId}:${right.graphId}`,
-          d,
-          lineColor: nodeLineColor(left.graphId),
-        });
-      }
-      if (links.length >= MAX_PEER_PULSES) break;
-    }
-    return links;
-  });
-
   const onWheel = (e: WheelEvent) => {
     e.preventDefault();
     setZoom(z => Math.max(0.3, Math.min(2.5, z + (e.deltaY > 0 ? -0.08 : 0.08))));
@@ -304,48 +382,44 @@ export default function AgentGraph() {
       onMouseUp={onMouseUp}
       onMouseLeave={onMouseUp}
     >
-      {/* Filter buttons top-left */}
-      <div style="position:absolute;top:12px;left:12px;display:flex;flex-direction:column;gap:4px;z-index:10;">
-        <div style="display:flex;gap:4px;">
-          <For each={[
-            { key: 'active' as const, label: `Active (${graphNodes().filter((node) => isNodeActive(node)).length})` },
-            { key: 'idle' as const, label: `Idle (${graphNodes().filter((node) => !isNodeActive(node)).length})` },
-            { key: 'all' as const, label: `All (${graphNodes().length})` },
-          ]}>
-            {(f) => (
-              <button
-                class="graph-zoom-btn"
-                style={`font-size:10px;width:auto;padding:0 10px;${filter() === f.key ? 'background:var(--bg-elevated);color:var(--text-primary);border-color:var(--accent);' : ''}`}
-                onClick={() => setFilter(f.key)}
-              >
-                {f.label}
-              </button>
-            )}
-          </For>
-        </div>
-      </div>
+      <GraphAgentFilterTabPanel
+        value={filter()}
+        onChange={setFilter}
+        counts={{
+          active: graphNodes().filter((node) => isNodeActive(node)).length,
+          idle: graphNodes().filter((node) => !isNodeActive(node)).length,
+          all: graphNodes().length,
+        }}
+      />
 
       {/* Zoom controls bottom-right */}
       <div style="position:absolute;bottom:12px;right:12px;display:flex;gap:4px;z-index:10;">
         <button class="graph-zoom-btn" onClick={() => setZoom(z => Math.min(2.5, z + 0.2))}>+</button>
-        <button class="graph-zoom-btn" style="font-size:10px;" onClick={() => setZoom(1)}>Fit</button>
+        <button class="graph-zoom-btn" style="font-size:10px;" type="button" onClick={() => applyGraphFit()}>Fit</button>
         <button class="graph-zoom-btn" onClick={() => setZoom(z => Math.max(0.3, z - 0.2))}>-</button>
       </div>
 
-      <Show when={nodes().length > 0} fallback={
-        <div style="display:flex;align-items:center;justify-content:center;height:100%;padding:28px;">
-          <div style="max-width:420px;padding:18px 20px;border:1px solid var(--border);border-radius:14px;text-align:center;">
-            <p style="font-size:14px;font-weight:600;color:var(--text-primary);margin-bottom:6px;">No agents to display</p>
-            <p style="font-size:12px;line-height:1.5;color:var(--text-dim);">Try changing the filter or selecting a different project.</p>
+      <div
+        ref={setGraphViewport}
+        id={PANEL_ID}
+        role="tabpanel"
+        aria-labelledby={TAB_IDS[filter()]}
+        style="position:absolute;inset:0;overflow:hidden;"
+      >
+        <Show when={nodes().length > 0} fallback={
+          <div style="display:flex;align-items:center;justify-content:center;height:100%;padding:28px;">
+            <div style="max-width:420px;padding:18px 20px;border:1px solid var(--border);border-radius:14px;text-align:center;">
+              <p style="font-size:14px;font-weight:600;color:var(--text-primary);margin-bottom:6px;">No agents to display</p>
+              <p style="font-size:12px;line-height:1.5;color:var(--text-dim);">Try changing the filter or selecting a different project.</p>
+            </div>
           </div>
-        </div>
-      }>
-        <svg
-          width={layout().width * zoom()}
-          height={layout().height * zoom()}
-          viewBox={`0 0 ${layout().width} ${layout().height}`}
-          style={`transform:translate(${pan().x}px,${pan().y}px);`}
-        >
+        }>
+          <svg
+            width={layout().width * zoom()}
+            height={layout().height * zoom()}
+            viewBox={`0 0 ${layout().width} ${layout().height}`}
+            style={`transform:translate(${pan().x}px,${pan().y}px);`}
+          >
           <defs>
             <filter id="metro-glow" x="-50%" y="-50%" width="200%" height="200%">
               <feGaussianBlur stdDeviation="2.5" result="blur" />
@@ -367,62 +441,26 @@ export default function AgentGraph() {
                       d={pathD()!}
                       fill="none"
                       stroke={edge.lineColor}
-                      stroke-opacity="0.68"
-                      stroke-width="2.8"
+                      stroke-opacity={edge.isActive ? '0.68' : '0.34'}
+                      stroke-width={edge.isActive ? '2.8' : '1.9'}
+                      stroke-dasharray={edge.isActive ? undefined : '8 8'}
                       stroke-linecap="round"
                       filter="url(#metro-glow)"
                     />
-                    <Show when={edge.childActive}>
-                      <path
-                        class="graph-edge-flow"
-                        style={{ 'animation-delay': `${(edge.key.length % 7) * 120}ms` }}
-                        d={pathD()!}
-                        fill="none"
-                        stroke={edge.lineColor}
-                        stroke-width="1.8"
-                        stroke-linecap="round"
-                        stroke-dasharray="9 11"
-                      />
+                    <Show when={edge.isActive}>
+                      <circle r="3.2" fill={edge.lineColor} opacity="0.95">
+                        <animateMotion
+                          dur={`${1.9 + (edge.key.length % 5) * 0.25}s`}
+                          repeatCount="indefinite"
+                          rotate="auto"
+                          path={pathD()!}
+                        />
+                      </circle>
                     </Show>
                   </>
                 </Show>
               );
             }}
-          </For>
-
-          <For each={peerEdges()}>
-            {(peer, index) => (
-              <>
-                <path
-                  d={peer.d}
-                  fill="none"
-                  stroke={peer.lineColor}
-                  stroke-opacity="0.28"
-                  stroke-width="1.6"
-                  stroke-linecap="round"
-                />
-                <path
-                  class="graph-peer-flow"
-                  style={{ 'animation-delay': `${index() * 140}ms` }}
-                  d={peer.d}
-                  fill="none"
-                  stroke={peer.lineColor}
-                  stroke-width="1.6"
-                  stroke-linecap="round"
-                  stroke-dasharray="4 12"
-                />
-                <path
-                  class="graph-peer-flow graph-peer-flow-reverse"
-                  style={{ 'animation-delay': `${index() * 140 + 240}ms` }}
-                  d={peer.d}
-                  fill="none"
-                  stroke={peer.lineColor}
-                  stroke-width="1.2"
-                  stroke-linecap="round"
-                  stroke-dasharray="4 12"
-                />
-              </>
-            )}
           </For>
 
           {/* All nodes */}
@@ -442,6 +480,11 @@ export default function AgentGraph() {
                   onClick={(event) => {
                     event.stopPropagation();
                     setSelectedGraphId(agent.graphId);
+                    if (!agent.parentGraphId) {
+                      setFocusedRootGraphId((current) =>
+                        current === agent.graphId ? null : agent.graphId,
+                      );
+                    }
                     if (agent.agentId) {
                       selectAgent(agent.agentId);
                     } else {
@@ -483,32 +526,9 @@ export default function AgentGraph() {
             }}
           </For>
 
-          {/* Decorative metro rail */}
-          <g opacity="0.5">
-            <line
-              x1={layout().width - 26}
-              y1={26}
-              x2={layout().width - 26}
-              y2={layout().height - 26}
-              stroke="#22c55e"
-              stroke-width="2"
-              stroke-linecap="round"
-            />
-            <For each={[0, 1, 2, 3, 4, 5, 6]}>
-              {(index) => (
-                <line
-                  x1={layout().width - 34}
-                  y1={42 + index * 52}
-                  x2={layout().width - 18}
-                  y2={42 + index * 52}
-                  stroke="#22c55e"
-                  stroke-width="1.2"
-                />
-              )}
-            </For>
-          </g>
-        </svg>
-      </Show>
+          </svg>
+        </Show>
+      </div>
     </div>
   );
 }

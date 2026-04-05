@@ -5,8 +5,17 @@ import {
   chevronRight,
   bolt,
   clock,
+  exclamationCircle,
+  exclamationTriangle,
 } from 'solid-heroicons/solid';
-import { projects, selectedProject, selectedSession, selectProject, selectSession } from '../lib/store';
+import {
+  projects,
+  selectedProject,
+  selectedSession,
+  selectProject,
+  selectSession,
+  sidebarSessionActivityTone,
+} from '../lib/store';
 import { getAgentColor } from '../lib/colors';
 import { timeAgo } from '../lib/time';
 import { DOCS_PORTAL_RUN_COMMANDS, DOCS_PORTAL_SECTIONS, type DocsPortalSection } from '../lib/docsPortal';
@@ -27,8 +36,6 @@ interface SidebarProps {
 }
 
 type ActivityTone = 'active' | 'blocked' | 'attention' | 'idle' | 'done';
-const SESSION_ACTIVE_WINDOW_MS = 90_000;
-const SESSION_IDLE_WINDOW_MS = 10 * 60_000;
 
 function statusPalette(tone: ActivityTone) {
   switch (tone) {
@@ -46,9 +53,21 @@ function statusPalette(tone: ActivityTone) {
   }
 }
 
+function statusToneIcon(tone: ActivityTone) {
+  switch (tone) {
+    case 'active':
+      return bolt;
+    case 'attention':
+      return exclamationTriangle;
+    case 'blocked':
+      return exclamationCircle;
+    default:
+      return clock;
+  }
+}
+
 function resolveProjectTone(project: ReturnType<typeof projects>[number]): ActivityTone {
-  const tones = project.sessions.map((session) =>
-    session.statusTone || (session.isActive ? 'active' : session.eventCount > 0 ? 'idle' : 'done'));
+  const tones = project.sessions.map((session) => sidebarSessionActivityTone(project.name, session));
   if (tones.includes('attention')) return 'attention';
   if (tones.includes('blocked')) return 'blocked';
   if (tones.includes('active')) return 'active';
@@ -75,26 +94,8 @@ function sessionTitleForSidebar(label: string | undefined | null, index: number)
   return `Session #${index + 1}`;
 }
 
-function displaySessionTone(session: { statusTone?: ActivityTone; isActive: boolean; eventCount: number; lastEventAt: number; activeAgentCount: number }): ActivityTone {
-  const explicitTone = session.statusTone;
-  if (explicitTone === 'attention' || explicitTone === 'blocked') {
-    return explicitTone;
-  }
-  const now = Date.now();
-  const age = Math.max(0, now - (session.lastEventAt || 0));
-  if ((session.isActive || session.activeAgentCount > 0) && age <= SESSION_ACTIVE_WINDOW_MS) {
-    return 'active';
-  }
-  if (session.eventCount > 0 && age <= SESSION_IDLE_WINDOW_MS) {
-    return 'idle';
-  }
-  if (session.eventCount > 0) {
-    return 'done';
-  }
-  return 'done';
-}
-
 function displayedProjectSessions(
+  projectName: string,
   sessions: Array<{
     sessionId: string;
     statusTone?: ActivityTone;
@@ -106,7 +107,7 @@ function displayedProjectSessions(
 ): Array<{ sessionId: string; tone: ActivityTone }> {
   const withBaseTone = sessions.map((session) => ({
     sessionId: session.sessionId,
-    tone: displaySessionTone(session),
+    tone: sidebarSessionActivityTone(projectName, session),
     lastEventAt: session.lastEventAt,
   }));
   const activeCandidates = withBaseTone
@@ -428,7 +429,7 @@ export default function Sidebar(props: SidebarProps) {
                 activityFilter() === 'active' ? p.sessions.filter((session) => session.isActive) : p.sessions;
               const sessionToneById = () => {
                 const map = new Map<string, ActivityTone>();
-                for (const entry of displayedProjectSessions(projectSessions())) {
+                for (const entry of displayedProjectSessions(p.name, projectSessions())) {
                   map.set(entry.sessionId, entry.tone);
                 }
                 return map;
@@ -491,18 +492,18 @@ export default function Sidebar(props: SidebarProps) {
                       `background:${projectPalette().background};`,
                       `color:${projectPalette().text};`,
                     ].join('')}>
-                      <Icon path={projectTone() === 'active' ? bolt : clock} style="width:10px;height:10px;" />
-                      <Show when={projectTone() !== 'attention'}>
-                        <span>
-                          {projectTone() === 'active'
-                            ? 'Active'
-                            : projectTone() === 'blocked'
-                              ? 'Blocked'
+                      <Icon path={statusToneIcon(projectTone())} style="width:10px;height:10px;" />
+                      <span>
+                        {projectTone() === 'active'
+                          ? 'Active'
+                          : projectTone() === 'blocked'
+                            ? 'Blocked'
+                            : projectTone() === 'attention'
+                              ? 'Needs attention'
                               : projectTone() === 'idle'
                                 ? 'Idle'
                                 : 'Done'}
-                        </span>
-                      </Show>
+                      </span>
                     </div>
                   </div>
 
@@ -529,7 +530,8 @@ export default function Sidebar(props: SidebarProps) {
                         {(s, sessionIndex) => {
                           const sessionId = () => (s.sessionId && s.sessionId.trim() ? s.sessionId : null);
                           const isSessionSelected = () => selectedSession() === sessionId();
-                          const statusTone = () => sessionToneById().get(s.sessionId) ?? displaySessionTone(s);
+                          const statusTone = () =>
+                            sessionToneById().get(s.sessionId) ?? sidebarSessionActivityTone(p.name, s);
                           const statusPaletteForSession = () => statusPalette(statusTone());
                           const statusLabel = () =>
                             s.statusLabel
@@ -538,14 +540,31 @@ export default function Sidebar(props: SidebarProps) {
                               : statusTone() === 'blocked'
                                 ? 'Blocked'
                                 : statusTone() === 'attention'
-                                  ? 'Needs attention'
+                                  ? 'Stalled — check session'
                                   : statusTone() === 'idle'
                                     ? 'Idle'
                                     : 'Done');
-                          const statusIcon = () => (statusTone() === 'active' ? bolt : clock);
+                          const statusIcon = () => statusToneIcon(statusTone());
                           const sessionSummary = () => friendlySummary(
                             s.statusDetail || s.summary || s.currentAction || 'Waiting for the next action',
                           );
+                          const sessionRowAccent = () => {
+                            const tone = statusTone();
+                            if (tone === 'attention') {
+                              return 'border-left:2px solid var(--red);';
+                            }
+                            if (tone === 'blocked') {
+                              return 'border-left:2px solid var(--yellow);';
+                            }
+                            return 'border-left:2px solid transparent;';
+                          };
+                          const sessionRowBackground = () => {
+                            if (isSessionSelected()) return 'var(--bg-elevated)';
+                            const tone = statusTone();
+                            if (tone === 'attention') return 'rgba(239, 68, 68, 0.08)';
+                            if (tone === 'blocked') return 'rgba(245, 158, 11, 0.08)';
+                            return 'transparent';
+                          };
                           return (
                             <div
                               onClick={() => {
@@ -558,34 +577,54 @@ export default function Sidebar(props: SidebarProps) {
                               }}
                               style={[
                                 'display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:7px;cursor:pointer;',
-                                `background:${isSessionSelected() ? 'var(--bg-elevated)' : 'transparent'};`,
+                                sessionRowAccent(),
+                                `background:${sessionRowBackground()};`,
                               ].join('')}
                               onMouseEnter={(e) => {
-                                if (!isSessionSelected()) (e.currentTarget as HTMLDivElement).style.background = 'var(--bg-card)';
+                                if (isSessionSelected()) return;
+                                const el = e.currentTarget as HTMLDivElement;
+                                const tone = statusTone();
+                                if (tone === 'attention') {
+                                  el.style.background = 'rgba(239, 68, 68, 0.12)';
+                                } else if (tone === 'blocked') {
+                                  el.style.background = 'rgba(245, 158, 11, 0.12)';
+                                } else {
+                                  el.style.background = 'var(--bg-card)';
+                                }
                               }}
                               onMouseLeave={(e) => {
-                                if (!isSessionSelected()) (e.currentTarget as HTMLDivElement).style.background = 'transparent';
+                                if (isSessionSelected()) return;
+                                (e.currentTarget as HTMLDivElement).style.background = sessionRowBackground();
                               }}
-                              aria-label={`Open session ${friendlySessionLabel(s.label)}`}
+                              aria-label={`${sessionTitleForSidebar(s.label, sessionIndex())}, ${statusLabel()}. ${sessionSummary()}`}
                             >
-                              <Icon path={statusIcon()} style="width:10px;height:10px;color:var(--text-secondary);flex-shrink:0;" />
+                              <Icon
+                                path={statusIcon()}
+                                style={`width:10px;height:10px;color:${statusPaletteForSession().text};flex-shrink:0;`}
+                              />
                               <div style="display:flex;flex-direction:column;min-width:0;flex:1;gap:2px;">
                                 <span style="font-size:10px;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
                                   {sessionTitleForSidebar(s.label, sessionIndex())}
                                 </span>
-                                <span style="font-size:9px;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title={sessionSummary()}>
+                                <span
+                                  style={[
+                                    'font-size:9px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;',
+                                    statusTone() === 'attention' || statusTone() === 'blocked'
+                                      ? `color:${statusPaletteForSession().text};font-weight:600;`
+                                      : 'color:var(--text-dim);',
+                                  ].join('')}
+                                  title={sessionSummary()}
+                                >
                                   {sessionSummary()}
                                 </span>
                               </div>
                               <div style={[
-                                'display:flex;align-items:center;gap:3px;font-size:8px;padding:1px 5px;border-radius:9999px;font-weight:500;flex-shrink:0;',
+                                'display:flex;align-items:center;gap:3px;font-size:8px;padding:2px 7px;border-radius:9999px;font-weight:600;flex-shrink:0;max-width:min(140px,38%);',
                                 `background:${statusPaletteForSession().background};`,
                                 `color:${statusPaletteForSession().text};`,
                               ].join('')}>
-                                <Icon path={statusIcon()} style="width:9px;height:9px;" />
-                                <Show when={statusTone() !== 'attention'}>
-                                  <span>{statusLabel()}</span>
-                                </Show>
+                                <Icon path={statusIcon()} style="width:9px;height:9px;flex-shrink:0;" />
+                                <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{statusLabel()}</span>
                               </div>
                             </div>
                           );

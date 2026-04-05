@@ -18,6 +18,8 @@ import { resolveEventAgentName } from '../lib/agentNaming';
 interface Props {
   event: HookEvent;
   detailed: boolean;
+  /** When set, row is visually tied to an open attention/blocked banner for this session. */
+  attentionRowTone?: 'attention' | 'blocked';
 }
 
 function resolveAgentName(e: HookEvent): string {
@@ -104,6 +106,11 @@ export default function EventRow(props: Props) {
   return (
     <div
       class="event-row-shell"
+      classList={{
+        'event-row-attention': Boolean(props.attentionRowTone),
+        'is-attention': props.attentionRowTone === 'attention',
+        'is-blocked': props.attentionRowTone === 'blocked',
+      }}
       onClick={() => props.detailed && setExpanded(x => !x)}
       role={props.detailed ? 'button' : undefined}
       tabindex={props.detailed ? 0 : undefined}

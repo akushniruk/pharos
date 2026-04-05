@@ -1,11 +1,21 @@
-import { For, Show, createSignal, createMemo, createEffect, onMount } from 'solid-js';
+import { For, Show, createSignal, createMemo, createEffect, onMount, onCleanup } from 'solid-js';
 import { Icon } from 'solid-heroicons';
-import { bars_3BottomLeft, queueList, funnel } from 'solid-heroicons/solid';
+import {
+  bars_3BottomLeft,
+  queueList,
+  funnel,
+  exclamationTriangle,
+} from 'solid-heroicons/solid';
 import {
   filteredEvents,
+  logsAttentionAlerts,
+  markAttentionSolved,
   selectedProjectFocusSnapshot,
   selectedProjectSnapshot,
+  selectSession,
+  type LogsAttentionAlert,
 } from '../lib/store';
+import { extractToolNameFromAttentionDetail } from '../lib/attentionHints';
 import { getEventTypeLabel } from '../lib/colors';
 import SearchBar, { searchQuery } from './SearchBar';
 import EventRow from './EventRow';
@@ -44,8 +54,35 @@ export default function EventStream(props: EventStreamProps) {
   const [hiddenTypes, setHiddenTypes] = createSignal<Set<string>>(new Set(SIMPLE_HIDDEN));
   const [hiddenRuntimes, setHiddenRuntimes] = createSignal<Set<string>>(new Set());
   const [backendMatches, setBackendMatches] = createSignal<HookEvent[] | null>(null);
+  const [copiedAttentionFingerprint, setCopiedAttentionFingerprint] = createSignal<string | null>(
+    null,
+  );
+  let attentionCopyResetTimer: number | undefined;
   const focus = createMemo(() => selectedProjectFocusSnapshot());
   const project = createMemo(() => selectedProjectSnapshot());
+
+  const copyAttentionSummary = async (alert: LogsAttentionAlert) => {
+    const proj = project()?.name ?? '';
+    const body = [
+      `${alert.headline} — ${alert.sessionTitle} (${proj})`,
+      alert.detail,
+      '',
+      'Suggestions:',
+      ...alert.suggestions.map((line, index) => `${index + 1}. ${line}`),
+    ].join('\n');
+    try {
+      await navigator.clipboard.writeText(body);
+      setCopiedAttentionFingerprint(alert.fingerprint);
+      window.clearTimeout(attentionCopyResetTimer);
+      attentionCopyResetTimer = window.setTimeout(() => setCopiedAttentionFingerprint(null), 2000);
+    } catch {
+      /* clipboard denied or unavailable */
+    }
+  };
+
+  onCleanup(() => {
+    window.clearTimeout(attentionCopyResetTimer);
+  });
 
   const switchToDetailed = () => {
     setDetailed(true);
@@ -124,6 +161,37 @@ export default function EventStream(props: EventStreamProps) {
       }
     }
     return evts.slice(-500).reverse();
+  });
+
+  /** One visible row per attention alert: prefer tool named in status detail, else newest row for session. */
+  const attentionHighlightByEventKey = createMemo(() => {
+    const map = new Map<string, 'attention' | 'blocked'>();
+    const events = displayEvents();
+    for (const alert of logsAttentionAlerts()) {
+      const toolHint = extractToolNameFromAttentionDetail(alert.detail);
+      let row: HookEvent | undefined;
+
+      if (toolHint) {
+        const hintLower = toolHint.toLowerCase();
+        row = events.find((ev) => {
+          if (ev.session_id !== alert.sessionId) return false;
+          if (!ev.hook_event_type.includes('Tool')) return false;
+          const name = ev.payload?.tool_name;
+          if (typeof name !== 'string') return false;
+          const n = name.toLowerCase();
+          return n === hintLower || n.includes(hintLower) || hintLower.includes(n);
+        });
+      }
+
+      if (!row) {
+        row = events.find((ev) => ev.session_id === alert.sessionId);
+      }
+
+      if (row) {
+        map.set(attentionEventKey(row), alert.tone);
+      }
+    }
+    return map;
   });
 
   const emptyState = createMemo(() => {
@@ -321,10 +389,78 @@ export default function EventStream(props: EventStreamProps) {
         </div>
       </Show>
 
+      <Show when={props.viewMode === 'logs' && logsAttentionAlerts().length > 0}>
+        <div class="event-stream-attention-wrap" role="region" aria-label="Sessions needing attention">
+          <For each={logsAttentionAlerts()}>
+            {(alert) => (
+              <div
+                class="event-stream-attention-banner"
+                classList={{
+                  'is-blocked': alert.tone === 'blocked',
+                  'is-attention': alert.tone === 'attention',
+                }}
+              >
+                <div class="event-stream-attention-head">
+                  <Icon path={exclamationTriangle} class="event-stream-attention-icon" />
+                  <div class="event-stream-attention-copy">
+                    <div class="event-stream-attention-title">
+                      <span class="event-stream-attention-headline">{alert.headline}</span>
+                      <span class="event-stream-attention-session">{alert.sessionTitle}</span>
+                      <span class="event-stream-attention-project">{project()?.name}</span>
+                    </div>
+                    <p class="event-stream-attention-detail">{alert.detail}</p>
+                  </div>
+                </div>
+                <ul class="event-stream-attention-suggestions">
+                  <For each={alert.suggestions}>
+                    {(line) => <li class="event-stream-attention-suggestion">{line}</li>}
+                  </For>
+                </ul>
+                <div class="event-stream-attention-cta-row">
+                  <button
+                    type="button"
+                    class="event-stream-attention-jump"
+                    aria-label="Show log: select this session in the sidebar"
+                    onClick={() => selectSession(alert.sessionId)}
+                  >
+                    Show log
+                  </button>
+                  <button
+                    type="button"
+                    class="event-stream-attention-secondary"
+                    classList={{
+                      'is-copied': copiedAttentionFingerprint() === alert.fingerprint,
+                    }}
+                    onClick={() => void copyAttentionSummary(alert)}
+                  >
+                    {copiedAttentionFingerprint() === alert.fingerprint ? 'Copied' : 'Copy summary'}
+                  </button>
+                  <button
+                    type="button"
+                    class="event-stream-attention-solved"
+                    aria-label="Mark as solved: remove banner and log highlights until status changes"
+                    title="Clears this banner and log highlights until the daemon reports new activity or a different status"
+                    onClick={() => markAttentionSolved(alert.fingerprint)}
+                  >
+                    Solved
+                  </button>
+                </div>
+              </div>
+            )}
+          </For>
+        </div>
+      </Show>
+
       {/* Event list */}
       <div ref={containerRef} class="event-stream-list" aria-live="polite" aria-label="Live event stream">
         <For each={displayEvents()}>
-          {(e) => <EventRow event={e} detailed={detailed()} />}
+          {(e) => (
+            <EventRow
+              event={e}
+              detailed={detailed()}
+              attentionRowTone={attentionHighlightByEventKey().get(attentionEventKey(e))}
+            />
+          )}
         </For>
         <Show when={displayEvents().length === 0}>
           <div class="event-stream-empty-wrap">
@@ -341,6 +477,10 @@ export default function EventStream(props: EventStreamProps) {
       </div>
     </div>
   );
+}
+
+function attentionEventKey(event: HookEvent): string {
+  return `${event.session_id}\u001f${event.timestamp}\u001f${event.hook_event_type}\u001f${event.agent_id ?? ''}`;
 }
 
 function searchableEventText(event: HookEvent): string {

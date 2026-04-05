@@ -385,6 +385,17 @@ body {
   height: 12px;
 }
 
+.graph-agent-filter-tabpanel {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 10;
+}
+
+.graph-agent-filter-tabs {
+  flex-wrap: nowrap;
+}
+
 .event-stream-toolbar-actions {
   margin-left: auto;
   display: inline-flex;
@@ -538,6 +549,170 @@ body {
   min-width: 0;
 }
 
+.event-stream-attention-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 16px 10px;
+  flex-shrink: 0;
+}
+
+.event-stream-attention-banner {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  padding: 10px 12px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.event-stream-attention-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.event-stream-attention-banner.is-attention {
+  border-color: rgba(248, 113, 113, 0.45);
+  background: rgba(248, 113, 113, 0.08);
+}
+
+.event-stream-attention-banner.is-blocked {
+  border-color: rgba(251, 191, 36, 0.45);
+  background: rgba(251, 191, 36, 0.08);
+}
+
+.event-stream-attention-icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: var(--text-primary);
+  opacity: 0.9;
+}
+
+.event-stream-attention-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.event-stream-attention-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 10px;
+  font-size: 11px;
+  line-height: 1.35;
+  margin-bottom: 4px;
+}
+
+.event-stream-attention-headline {
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  font-size: 10px;
+  color: var(--text-primary);
+}
+
+.event-stream-attention-session {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.event-stream-attention-project {
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.event-stream-attention-detail {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+.event-stream-attention-suggestions {
+  margin: 0;
+  padding: 0 0 0 28px;
+  list-style: disc;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+.event-stream-attention-suggestion {
+  margin-bottom: 4px;
+  padding-left: 2px;
+}
+
+.event-stream-attention-suggestion:last-child {
+  margin-bottom: 0;
+}
+
+.event-stream-attention-cta-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding-top: 2px;
+}
+
+.event-stream-attention-jump,
+.event-stream-attention-secondary {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.event-stream-attention-secondary {
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0.02em;
+  font-size: 11px;
+}
+
+.event-stream-attention-secondary.is-copied {
+  border-color: rgba(52, 211, 153, 0.45);
+  color: rgba(167, 243, 208, 0.95);
+}
+
+.event-stream-attention-solved {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(52, 211, 153, 0.4);
+  background: rgba(16, 185, 129, 0.12);
+  color: rgba(167, 243, 208, 0.98);
+  cursor: pointer;
+  margin-left: auto;
+}
+
+.event-stream-attention-solved:hover {
+  border-color: rgba(52, 211, 153, 0.55);
+  background: rgba(16, 185, 129, 0.2);
+}
+
+.event-stream-attention-jump:hover,
+.event-stream-attention-secondary:hover {
+  border-color: rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.06);
+}
+
 .event-stream-list {
   flex: 1;
   overflow-y: auto;
@@ -578,6 +753,30 @@ body {
 /* ---- Event row + payload viewer ---- */
 .event-row-shell {
   border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.event-row-shell.event-row-attention {
+  border-left: 3px solid rgba(248, 113, 113, 0.75);
+  background: linear-gradient(
+    90deg,
+    rgba(248, 113, 113, 0.1) 0%,
+    rgba(248, 113, 113, 0.02) 48%,
+    transparent 100%
+  );
+}
+
+.event-row-shell.event-row-attention.is-blocked {
+  border-left-color: rgba(251, 191, 36, 0.85);
+  background: linear-gradient(
+    90deg,
+    rgba(251, 191, 36, 0.12) 0%,
+    rgba(251, 191, 36, 0.03) 48%,
+    transparent 100%
+  );
+}
+
+.event-row-shell.event-row-attention .event-row-body:hover {
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .event-row-body {
