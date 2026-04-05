@@ -30,8 +30,8 @@ export default function SearchBar() {
         value={searchQuery()}
         onInput={onInput}
         style={[
-          'height:32px;background:var(--bg-elevated);border-radius:6px;',
-          'font-size:12px;padding:0 8px 0 28px;outline:none;color:var(--text-primary);',
+          'height:32px;background:var(--bg-card);border-radius:9999px;',
+          'font-size:12px;padding:0 12px 0 30px;outline:none;color:var(--text-primary);',
           'font-family:var(--font-sans);width:100%;',
           `border:1px solid ${borderColor()};`,
           'transition:border-color 0.15s;',

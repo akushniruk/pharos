@@ -1,6 +1,4 @@
 import { Show, For, onMount, onCleanup, createSignal, createMemo, createEffect, type JSX } from 'solid-js';
-import { Icon } from 'solid-heroicons';
-import { listBullet, share } from 'solid-heroicons/solid';
 import {
   selectedProject,
   selectedViewedChangesSnapshot,
@@ -22,10 +20,12 @@ import Sidebar from './components/Sidebar';
 import EventStream from './components/EventStream';
 import AgentGraph from './components/AgentGraph';
 import AgentDetail from './components/AgentDetail';
+import ViewModeTabs from './components/ViewModeTabs';
 import type { Project } from './lib/types';
 
 type ViewMode = 'logs' | 'graph';
 type AppRoute = 'main' | 'docs';
+const VIEW_MODE_STORAGE_KEY = 'pharos.view-mode';
 const DOC_ROUTE_SLUG_TO_PATH = new Map<string, string>();
 const DOC_ROUTE_PATH_TO_SLUG = new Map<string, string>();
 {
@@ -122,15 +122,13 @@ export default function App() {
     setRoute('docs');
   };
 
-  const toggleStyle = (mode: ViewMode) => [
-    'display:flex;align-items:center;gap:4px;font-size:11px;font-weight:500;padding:4px 10px;border-radius:4px;cursor:pointer;border:none;',
-    'transition:background 0.15s,color 0.15s;',
-    viewMode() === mode
-      ? 'background:var(--bg-elevated);color:var(--text-primary);'
-      : 'background:none;color:var(--text-secondary);',
-  ].join('');
-
   onMount(() => {
+    if (typeof localStorage !== 'undefined') {
+      const savedViewMode = localStorage.getItem(VIEW_MODE_STORAGE_KEY);
+      if (savedViewMode === 'logs' || savedViewMode === 'graph') {
+        setViewMode(savedViewMode);
+      }
+    }
     connectWs();
     initTheme();
     syncRouteFromLocation();
@@ -142,6 +140,11 @@ export default function App() {
       window.removeEventListener('hashchange', onHashChange);
       window.removeEventListener('popstate', onPopState);
     });
+  });
+
+  createEffect(() => {
+    if (typeof localStorage === 'undefined') return;
+    localStorage.setItem(VIEW_MODE_STORAGE_KEY, viewMode());
   });
 
   createEffect(() => {
@@ -208,43 +211,29 @@ export default function App() {
             when={route() === 'docs'}
             fallback={
               <Show when={selectedProject()} fallback={<ProjectsHome />}>
-                {/* Toolbar: project breadcrumb + view mode toggle */}
-                <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 16px;border-bottom:1px solid var(--border);flex-shrink:0;">
-                  <button
-                    onClick={() => selectProject(null)}
-                    style="background:none;border:none;cursor:pointer;font-size:12px;font-weight:500;color:var(--text-secondary);padding:4px 8px;border-radius:4px;transition:background 0.15s;"
-                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'var(--bg-elevated)'; }}
-                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
-                  >
-                    Project: {selectedProject()}
-                  </button>
-                  <div style="display:flex;align-items:center;gap:2px;">
-                    <button style={toggleStyle('logs')} onClick={() => setViewMode('logs')}>
-                      <Icon path={listBullet} style="width:14px;height:14px;" />
-                      Logs
-                    </button>
-                    <button style={toggleStyle('graph')} onClick={() => setViewMode('graph')}>
-                      <Icon path={share} style="width:14px;height:14px;" />
-                      Graph
-                    </button>
-                  </div>
-                </div>
-
                 {/* Content area */}
                 <Show
                   when={viewMode() === 'logs'}
                   fallback={
-                    <div style="display:flex;flex:1;overflow:hidden;">
-                      <AgentGraph />
-                      <Show when={selectedAgent() && viewMode() === 'graph'}>
-                        <div style="width:300px;flex-shrink:0;border-left:1px solid var(--border);overflow-y:auto;">
-                          <AgentDetail />
-                        </div>
-                      </Show>
+                    <div style="display:flex;flex-direction:column;flex:1;min-width:0;">
+                      <div style="display:flex;align-items:center;justify-content:flex-start;min-height:40px;padding:6px 16px;border-bottom:1px solid var(--border);flex-shrink:0;">
+                        <ViewModeTabs viewMode={viewMode()} onChange={setViewMode} />
+                      </div>
+                      <div style="display:flex;flex:1;overflow:hidden;">
+                        <AgentGraph />
+                        <Show when={selectedAgent() && viewMode() === 'graph'}>
+                          <div style="width:300px;flex-shrink:0;border-left:1px solid var(--border);overflow-y:auto;">
+                            <AgentDetail />
+                          </div>
+                        </Show>
+                      </div>
                     </div>
                   }
                 >
-                  <EventStream />
+                  <EventStream
+                    viewMode={viewMode()}
+                    onViewModeChange={setViewMode}
+                  />
                 </Show>
               </Show>
             }
@@ -359,20 +348,12 @@ function projectInitials(name: string): string {
 
 function projectFallbackIconDataUri(projectName: string): string {
   const initials = projectInitials(projectName);
+  const escapedInitials = initials
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
   const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'>
-<style>
-  .bg { fill: #F8FAFC; stroke: #CBD5E1; }
-  .core { fill: #E2E8F0; stroke: #94A3B8; }
-  .txt { fill: #334155; }
-  @media (prefers-color-scheme: dark) {
-    .bg { fill: #0F172A; stroke: #334155; }
-    .core { fill: #1E293B; stroke: #94A3B8; }
-    .txt { fill: #CBD5E1; }
-  }
-</style>
-<rect class='bg' x='1' y='1' width='30' height='30' rx='9'/>
-<rect class='core' x='8' y='8' width='16' height='16' rx='5' stroke-width='1.25'/>
-<text class='txt' x='16' y='16' text-anchor='middle' dominant-baseline='central' font-family='Inter,Arial,sans-serif' font-size='7.5' font-weight='700'>${initials}</text>
+<text x='16' y='16' text-anchor='middle' dominant-baseline='central' font-family='Inter,Arial,sans-serif' font-size='11' font-weight='700' fill='#94A3B8'>${escapedInitials}</text>
 </svg>`;
   return `data:image/svg+xml,${encodeURIComponent(svg)}`;
 }

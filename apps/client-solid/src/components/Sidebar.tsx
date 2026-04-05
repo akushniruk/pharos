@@ -27,6 +27,8 @@ interface SidebarProps {
 }
 
 type ActivityTone = 'active' | 'blocked' | 'attention' | 'idle' | 'done';
+const SESSION_ACTIVE_WINDOW_MS = 90_000;
+const SESSION_IDLE_WINDOW_MS = 10 * 60_000;
 
 function statusPalette(tone: ActivityTone) {
   switch (tone) {
@@ -37,10 +39,10 @@ function statusPalette(tone: ActivityTone) {
     case 'attention':
       return { background: 'rgba(239, 68, 68, 0.16)', text: 'var(--red)', dot: 'var(--red)' };
     case 'idle':
-      return { background: 'var(--bg-elevated)', text: 'var(--text-dim)', dot: 'var(--text-dim)' };
+      return { background: 'var(--bg-card)', text: 'var(--text-secondary)', dot: 'var(--text-secondary)' };
     case 'done':
     default:
-      return { background: 'var(--bg-elevated)', text: 'var(--text-dim)', dot: 'var(--text-dim)' };
+      return { background: 'var(--bg-card)', text: 'var(--text-secondary)', dot: 'var(--text-secondary)' };
   }
 }
 
@@ -56,10 +58,65 @@ function resolveProjectTone(project: ReturnType<typeof projects>[number]): Activ
 
 function friendlySessionLabel(label?: string | null): string {
   if (!label) return 'Session';
-  const cleaned = label.replace(/^<[^>]+>\s*/i, '').trim();
+  const cleaned = label
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\[image\]/gi, ' ')
+    .replace(/<image_files>/gi, ' ')
+    .replace(/the following images were provdied by the user and saved to the workspace/gi, ' ')
+    .replace(/<user_query>/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
   if (!cleaned) return 'Current request';
   if (cleaned.toLowerCase() === 'pending') return 'Current request';
   return cleaned;
+}
+
+function sessionTitleForSidebar(label: string | undefined | null, index: number): string {
+  return `Session #${index + 1}`;
+}
+
+function displaySessionTone(session: { statusTone?: ActivityTone; isActive: boolean; eventCount: number; lastEventAt: number; activeAgentCount: number }): ActivityTone {
+  const explicitTone = session.statusTone;
+  if (explicitTone === 'attention' || explicitTone === 'blocked') {
+    return explicitTone;
+  }
+  const now = Date.now();
+  const age = Math.max(0, now - (session.lastEventAt || 0));
+  if ((session.isActive || session.activeAgentCount > 0) && age <= SESSION_ACTIVE_WINDOW_MS) {
+    return 'active';
+  }
+  if (session.eventCount > 0 && age <= SESSION_IDLE_WINDOW_MS) {
+    return 'idle';
+  }
+  if (session.eventCount > 0) {
+    return 'done';
+  }
+  return 'done';
+}
+
+function displayedProjectSessions(
+  sessions: Array<{
+    sessionId: string;
+    statusTone?: ActivityTone;
+    isActive: boolean;
+    eventCount: number;
+    lastEventAt: number;
+    activeAgentCount: number;
+  }>,
+): Array<{ sessionId: string; tone: ActivityTone }> {
+  const withBaseTone = sessions.map((session) => ({
+    sessionId: session.sessionId,
+    tone: displaySessionTone(session),
+    lastEventAt: session.lastEventAt,
+  }));
+  const activeCandidates = withBaseTone
+    .filter((entry) => entry.tone === 'active')
+    .sort((left, right) => right.lastEventAt - left.lastEventAt);
+  const primaryActiveId = activeCandidates[0]?.sessionId;
+  return withBaseTone.map((entry) => ({
+    sessionId: entry.sessionId,
+    tone: entry.tone === 'active' && entry.sessionId !== primaryActiveId ? 'idle' : entry.tone,
+  }));
 }
 
 function friendlySummary(text?: string | null): string {
@@ -102,20 +159,12 @@ function projectInitials(name: string): string {
 
 function projectFallbackIconDataUri(projectName: string): string {
   const initials = projectInitials(projectName);
+  const escapedInitials = initials
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
   const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'>
-<style>
-  .bg { fill: #F8FAFC; stroke: #CBD5E1; }
-  .core { fill: #E2E8F0; stroke: #94A3B8; }
-  .txt { fill: #334155; }
-  @media (prefers-color-scheme: dark) {
-    .bg { fill: #0F172A; stroke: #334155; }
-    .core { fill: #1E293B; stroke: #94A3B8; }
-    .txt { fill: #CBD5E1; }
-  }
-</style>
-<rect class='bg' x='1' y='1' width='22' height='22' rx='7'/>
-<rect class='core' x='6' y='6' width='12' height='12' rx='3.7' stroke-width='1.1'/>
-<text class='txt' x='12' y='12' text-anchor='middle' dominant-baseline='central' font-family='Inter,Arial,sans-serif' font-size='6.4' font-weight='700'>${initials}</text>
+<text x='12' y='12' text-anchor='middle' dominant-baseline='central' font-family='Inter,Arial,sans-serif' font-size='8.2' font-weight='700' fill='#94A3B8'>${escapedInitials}</text>
 </svg>`;
   return `data:image/svg+xml,${encodeURIComponent(svg)}`;
 }
@@ -153,13 +202,6 @@ export default function Sidebar(props: SidebarProps) {
   const [activityFilter, setActivityFilter] = createSignal<'all' | 'active'>('all');
   const [expandedDocSections, setExpandedDocSections] = createSignal<Record<string, boolean>>({});
 
-  const selectedProjectSessions = createMemo(() => {
-    const proj = selectedProject();
-    if (!proj) return [];
-    const sessions = projects().find(p => p.name === proj)?.sessions ?? [];
-    return activityFilter() === 'active' ? sessions.filter(s => s.isActive) : sessions;
-  });
-
   const selectedProjectAgentTypes = createMemo(() => {
     const proj = selectedProject();
     if (!proj) return [];
@@ -176,16 +218,8 @@ export default function Sidebar(props: SidebarProps) {
 
   const labelStyle = [
     'display:block;padding:10px 12px 4px;',
-    'font-size:10px;font-weight:600;text-transform:uppercase;',
-    'letter-spacing:0.08em;color:var(--text-dim);',
-  ].join('');
-
-  const filterStyle = (mode: 'all' | 'active') => [
-    'font-size:9px;font-weight:600;padding:2px 8px;border-radius:9999px;border:none;cursor:pointer;',
-    'transition:background 0.15s,color 0.15s;',
-    activityFilter() === mode
-      ? 'background:var(--bg-elevated);color:var(--text-primary);'
-      : 'background:transparent;color:var(--text-dim);',
+    'font-size:11px;font-weight:700;text-transform:uppercase;',
+    'letter-spacing:0.09em;color:var(--text-secondary);',
   ].join('');
 
   const visibleProjects = createMemo(() =>
@@ -357,22 +391,27 @@ export default function Sidebar(props: SidebarProps) {
         style="width:220px;flex-shrink:0;background:var(--bg-primary);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;"
       >
         {/* Toggle + Projects header */}
-        <div style="display:flex;align-items:flex-start;justify-content:space-between;padding-right:8px;">
-          <div style="display:flex;flex-direction:column;gap:6px;min-width:0;">
-            <span style={labelStyle}>Projects</span>
-            <div style="display:flex;align-items:center;gap:4px;padding:0 12px 8px;">
-              <button style={filterStyle('all')} onClick={() => setActivityFilter('all')}>
-                All
-              </button>
-              <button style={filterStyle('active')} onClick={() => setActivityFilter('active')}>
-                Active
-              </button>
-            </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 8px 8px 12px;border-bottom:1px solid var(--border);gap:8px;">
+          <div class="pill-tabs">
+            <button
+              class="pill-tab"
+              classList={{ 'is-active': activityFilter() === 'all' }}
+              onClick={() => setActivityFilter('all')}
+            >
+              All
+            </button>
+            <button
+              class="pill-tab"
+              classList={{ 'is-active': activityFilter() === 'active' }}
+              onClick={() => setActivityFilter('active')}
+            >
+              Active
+            </button>
           </div>
           <button
             onClick={props.onToggle}
             title="Collapse sidebar"
-            style="background:none;border:none;cursor:pointer;color:var(--text-dim);padding:4px;line-height:1;display:flex;align-items:center;justify-content:center;margin-top:6px;"
+            style="background:none;border:none;cursor:pointer;color:var(--text-dim);padding:4px;line-height:1;display:flex;align-items:center;justify-content:center;"
           >
             <Icon path={chevronLeft} style="width:12px;height:12px;" />
           </button>
@@ -385,6 +424,15 @@ export default function Sidebar(props: SidebarProps) {
               const isSelected = () => selectedProject() === p.name;
               const projectTone = () => resolveProjectTone(p);
               const projectPalette = () => statusPalette(projectTone());
+              const projectSessions = () =>
+                activityFilter() === 'active' ? p.sessions.filter((session) => session.isActive) : p.sessions;
+              const sessionToneById = () => {
+                const map = new Map<string, ActivityTone>();
+                for (const entry of displayedProjectSessions(projectSessions())) {
+                  map.set(entry.sessionId, entry.tone);
+                }
+                return map;
+              };
               const primarySummary = () =>
                 friendlyProjectSummary(p.summary)
                 || (p.isActive
@@ -403,9 +451,13 @@ export default function Sidebar(props: SidebarProps) {
                 <div>
                   {/* Project row */}
                   <div
-                    onClick={() => selectProject(p.name)}
+                    onClick={() => {
+                      if (!isSelected()) {
+                        selectProject(p.name);
+                      }
+                    }}
                     style={[
-                      'display:flex;align-items:center;gap:6px;padding:7px 12px;cursor:pointer;',
+                      'display:flex;align-items:center;gap:8px;padding:7px 12px;cursor:pointer;',
                       `border-left:2px solid ${isSelected() ? 'var(--accent)' : 'transparent'};`,
                       `background:${isSelected() ? 'var(--bg-elevated)' : 'transparent'};`,
                       'transition:background 0.1s;',
@@ -417,13 +469,6 @@ export default function Sidebar(props: SidebarProps) {
                       if (!isSelected()) (e.currentTarget as HTMLDivElement).style.background = 'transparent';
                     }}
                     >
-                    <div style="width:16px;height:16px;border-radius:5px;border:1px solid var(--border);display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0;">
-                      <img
-                        src={resolveProjectLogo(p)}
-                        alt=""
-                        style="width:100%;height:100%;object-fit:cover;"
-                      />
-                    </div>
                     {/* Name */}
                     <div style="display:flex;flex-direction:column;min-width:0;flex:1;gap:2px;">
                       <span style="font-size:12px;font-weight:500;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
@@ -476,105 +521,83 @@ export default function Sidebar(props: SidebarProps) {
                       </For>
                     </div>
                   </Show>
+
+                  {/* Sessions under project row */}
+                  <Show when={isSelected()}>
+                    <div style="display:flex;flex-direction:column;padding:0 8px 6px 22px;gap:2px;">
+                      <For each={projectSessions()}>
+                        {(s, sessionIndex) => {
+                          const sessionId = () => (s.sessionId && s.sessionId.trim() ? s.sessionId : null);
+                          const isSessionSelected = () => selectedSession() === sessionId();
+                          const statusTone = () => sessionToneById().get(s.sessionId) ?? displaySessionTone(s);
+                          const statusPaletteForSession = () => statusPalette(statusTone());
+                          const statusLabel = () =>
+                            s.statusLabel
+                            || (statusTone() === 'active'
+                              ? 'Active'
+                              : statusTone() === 'blocked'
+                                ? 'Blocked'
+                                : statusTone() === 'attention'
+                                  ? 'Needs attention'
+                                  : statusTone() === 'idle'
+                                    ? 'Idle'
+                                    : 'Done');
+                          const statusIcon = () => (statusTone() === 'active' ? bolt : clock);
+                          const sessionSummary = () => friendlySummary(
+                            s.statusDetail || s.summary || s.currentAction || 'Waiting for the next action',
+                          );
+                          return (
+                            <div
+                              onClick={() => {
+                                if (!isSelected()) {
+                                  selectProject(p.name);
+                                }
+                                if (sessionId()) {
+                                  selectSession(sessionId());
+                                }
+                              }}
+                              style={[
+                                'display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:7px;cursor:pointer;',
+                                `background:${isSessionSelected() ? 'var(--bg-elevated)' : 'transparent'};`,
+                              ].join('')}
+                              onMouseEnter={(e) => {
+                                if (!isSessionSelected()) (e.currentTarget as HTMLDivElement).style.background = 'var(--bg-card)';
+                              }}
+                              onMouseLeave={(e) => {
+                                if (!isSessionSelected()) (e.currentTarget as HTMLDivElement).style.background = 'transparent';
+                              }}
+                              aria-label={`Open session ${friendlySessionLabel(s.label)}`}
+                            >
+                              <Icon path={statusIcon()} style="width:10px;height:10px;color:var(--text-secondary);flex-shrink:0;" />
+                              <div style="display:flex;flex-direction:column;min-width:0;flex:1;gap:2px;">
+                                <span style="font-size:10px;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                                  {sessionTitleForSidebar(s.label, sessionIndex())}
+                                </span>
+                                <span style="font-size:9px;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title={sessionSummary()}>
+                                  {sessionSummary()}
+                                </span>
+                              </div>
+                              <div style={[
+                                'display:flex;align-items:center;gap:3px;font-size:8px;padding:1px 5px;border-radius:9999px;font-weight:500;flex-shrink:0;',
+                                `background:${statusPaletteForSession().background};`,
+                                `color:${statusPaletteForSession().text};`,
+                              ].join('')}>
+                                <Icon path={statusIcon()} style="width:9px;height:9px;" />
+                                <Show when={statusTone() !== 'attention'}>
+                                  <span>{statusLabel()}</span>
+                                </Show>
+                              </div>
+                            </div>
+                          );
+                        }}
+                      </For>
+                    </div>
+                  </Show>
                 </div>
               );
             }}
           </For>
         </div>
-
-        {/* Sessions section — only when a project is selected */}
-        <Show when={selectedProject()}>
-          <div style="border-top:1px solid var(--border);flex-shrink:0;max-height:40%;overflow-y:auto;">
-            <span style={labelStyle}>Sessions</span>
-            <For each={selectedProjectSessions()}>
-              {(s) => {
-                const sessionId = () => (s.sessionId && s.sessionId.trim() ? s.sessionId : null);
-                const isSelected = () => selectedSession() === sessionId();
-                const statusTone = () => s.statusTone || (s.isActive ? 'active' : s.eventCount > 0 ? 'idle' : 'done');
-                const statusPaletteForSession = () => statusPalette(statusTone());
-                const statusLabel = () =>
-                  s.statusLabel
-                  || (statusTone() === 'active'
-                    ? 'Active'
-                    : statusTone() === 'blocked'
-                      ? 'Blocked'
-                      : statusTone() === 'attention'
-                        ? 'Needs attention'
-                        : statusTone() === 'idle'
-                          ? 'Idle'
-                          : 'Done');
-                const statusIcon = () => (statusTone() === 'active' ? bolt : clock);
-                const primarySummary = () =>
-                  statusTone() === 'blocked' || statusTone() === 'attention'
-                    ? s.statusDetail || s.summary || s.currentAction || 'Waiting for the next action'
-                    : s.summary || s.currentAction || 'Waiting for the next action';
-                const secondarySummary = () =>
-                  [
-                    s.summaryDetail,
-                    s.currentActionDetail,
-                    s.runtimeLabel ? `Using ${s.runtimeLabel}` : undefined,
-                    s.isActive
-                      ? `${s.activeAgentCount} helper${s.activeAgentCount === 1 ? '' : 's'} active`
-                      : undefined,
-                    timeAgo(s.lastEventAt),
-                  ]
-                    .filter(Boolean)
-                    .join(' · ') || undefined;
-                return (
-                  <div
-                    onClick={() => {
-                      if (sessionId()) {
-                        selectSession(sessionId());
-                      }
-                    }}
-                    style={[
-                      'display:flex;align-items:center;gap:6px;padding:6px 12px;cursor:pointer;',
-                      `border-left:2px solid ${isSelected() ? 'var(--accent)' : 'transparent'};`,
-                      `background:${isSelected() ? 'var(--bg-elevated)' : 'transparent'};`,
-                      'transition:background 0.1s;',
-                    ].join('')}
-                    onMouseEnter={(e) => {
-                      if (!isSelected()) (e.currentTarget as HTMLDivElement).style.background = 'var(--bg-card)';
-                    }}
-                    onMouseLeave={(e) => {
-                      if (!isSelected()) (e.currentTarget as HTMLDivElement).style.background = 'transparent';
-                    }}
-                    aria-label={`Open session ${friendlySessionLabel(s.label)}`}
-                  >
-                    <Icon path={statusIcon()} style="width:12px;height:12px;color:var(--text-secondary);flex-shrink:0;" />
-                    <div style="min-width:0;flex:1;display:flex;flex-direction:column;gap:2px;">
-                      <span style="font-size:11px;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-                        {friendlySessionLabel(s.label)}
-                      </span>
-                      <span
-                        title={friendlySummary(primarySummary())}
-                        style="font-size:10px;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
-                      >
-                        {friendlySummary(primarySummary())}
-                      </span>
-                      <Show when={secondarySummary()}>
-                        <span title={secondarySummary()} style="font-size:9px;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-                          {secondarySummary()}
-                        </span>
-                      </Show>
-                    </div>
-                    {/* Status badge */}
-                    <div style={[
-                      'display:flex;align-items:center;gap:4px;font-size:9px;padding:1px 5px;border-radius:9999px;font-weight:500;flex-shrink:0;',
-                      `background:${statusPaletteForSession().background};`,
-                      `color:${statusPaletteForSession().text};`,
-                    ].join('')}>
-                      <Icon path={statusIcon()} style="width:10px;height:10px;" />
-                      <Show when={statusTone() !== 'attention'}>
-                        <span>{statusLabel()}</span>
-                      </Show>
-                    </div>
-                  </div>
-                );
-              }}
-            </For>
-          </div>
-        </Show>
       </div>
     </Show>
   );

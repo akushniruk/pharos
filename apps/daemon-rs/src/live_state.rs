@@ -1,5 +1,6 @@
 use std::collections::{BTreeSet, HashMap};
 use std::sync::{Arc, Mutex};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::model::{
     AgentRegistryEntry, AgentSnapshot, EventEnvelope, EventKind, FilterOptions, LegacyHookEvent,
@@ -36,6 +37,9 @@ struct SessionState {
     summary: SessionSummary,
     seen_agents: BTreeSet<String>,
 }
+
+const SUBAGENT_ACTIVE_WINDOW_MS: i64 = 5 * 60 * 1000;
+const SESSION_ACTIVE_WINDOW_MS: i64 = 30 * 60 * 1000;
 
 impl LiveState {
     pub fn bootstrap(store: &Store) -> Result<Self, StoreError> {
@@ -244,7 +248,10 @@ impl LiveStateData {
             .get(session_id)
             .cloned()
             .unwrap_or_default();
-        let is_active = session.summary.is_active;
+        let now_ms = current_time_ms();
+        let recent_session_activity =
+            now_ms.saturating_sub(session.summary.last_event_at) <= SESSION_ACTIVE_WINDOW_MS;
+        let is_active = session.summary.is_active && recent_session_activity;
         let agents = self.build_agents(&events, is_active);
         let active_agent_count = agents.iter().filter(|agent| agent.is_active).count();
         let runtime_label = resolve_runtime_label(&events);
@@ -268,6 +275,7 @@ impl LiveStateData {
         events: &[LegacyHookEvent],
         session_is_active: bool,
     ) -> Vec<AgentSnapshot> {
+        let session_latest_at = events.iter().map(|event| event.timestamp).max().unwrap_or(0);
         let mut grouped = HashMap::<String, Vec<&LegacyHookEvent>>::new();
         for event in events {
             let key = event
@@ -289,8 +297,20 @@ impl LiveStateData {
                 .iter()
                 .find_map(|event| payload_string(&event.payload, "runtime_label"));
             let display_name = resolve_agent_name(&grouped_events, agent_key == "__main__");
+            let is_main_agent = agent_key == "__main__";
+            let explicitly_active = session_is_active
+                && resolve_agent_active(
+                    &sample.session_id,
+                    if is_main_agent {
+                        None
+                    } else {
+                        Some(&agent_key)
+                    },
+                    &self.registry,
+                );
+            let recently_active = session_latest_at.saturating_sub(latest_at) <= SUBAGENT_ACTIVE_WINDOW_MS;
             agents.push(AgentSnapshot {
-                agent_id: if agent_key == "__main__" {
+                agent_id: if is_main_agent {
                     None
                 } else {
                     Some(agent_key.clone())
@@ -304,16 +324,7 @@ impl LiveStateData {
                 model_name: sample.model_name.clone(),
                 event_count: grouped_events.len(),
                 last_event_at: latest_at,
-                is_active: session_is_active
-                    && resolve_agent_active(
-                        &sample.session_id,
-                        if agent_key == "__main__" {
-                            None
-                        } else {
-                            Some(&agent_key)
-                        },
-                        &self.registry,
-                    ),
+                is_active: explicitly_active && (is_main_agent || recently_active),
                 parent_id: grouped_events
                     .iter()
                     .find_map(|event| payload_string(&event.payload, "parent_agent_id")),
@@ -461,9 +472,6 @@ fn resolve_runtime_label(events: &[LegacyHookEvent]) -> Option<String> {
 
 fn resolve_agent_name(events: &[&LegacyHookEvent], is_main: bool) -> String {
     for event in events {
-        if let Some(responsibility) = payload_responsibility(&event.payload) {
-            return responsibility;
-        }
         if let Some(agent_type) = payload_string(&event.payload, "agent_type") {
             if let Some(mapped) = mapped_agent_type_label(&agent_type) {
                 if mapped != "Session" {
@@ -472,16 +480,29 @@ fn resolve_agent_name(events: &[&LegacyHookEvent], is_main: bool) -> String {
             }
         }
         if let Some(display_name) = &event.display_name {
-            return display_name.clone();
+            if let Some(label) = normalized_agent_label(display_name) {
+                return label;
+            }
         }
         if let Some(agent_name) = &event.agent_name {
-            return agent_name.clone();
+            if let Some(label) = normalized_agent_label(agent_name) {
+                return label;
+            }
         }
         if let Some(display_name) = payload_string(&event.payload, "display_name") {
-            return display_name;
+            if let Some(label) = normalized_agent_label(&display_name) {
+                return label;
+            }
         }
         if let Some(agent_name) = payload_string(&event.payload, "agent_name") {
-            return agent_name;
+            if let Some(label) = normalized_agent_label(&agent_name) {
+                return label;
+            }
+        }
+        if let Some(responsibility) = payload_responsibility(&event.payload) {
+            if let Some(label) = normalized_agent_label(&responsibility) {
+                return label;
+            }
         }
         if let Some(agent_type) = payload_string(&event.payload, "agent_type") {
             if agent_type != "main" {
@@ -1087,54 +1108,66 @@ struct DisplayNameCandidate {
 }
 
 fn display_name_candidate_for_legacy_event(event: &LegacyHookEvent) -> DisplayNameCandidate {
-    if let Some(responsibility) = payload_responsibility(&event.payload) {
-        return DisplayNameCandidate {
-            value: responsibility,
-            score: 9,
-        };
-    }
     if let Some(agent_type) = payload_string(&event.payload, "agent_type") {
         if let Some(mapped) = mapped_agent_type_label(&agent_type) {
             if mapped != "Session" {
                 return DisplayNameCandidate {
                     value: mapped,
-                    score: 8,
+                    score: 9,
                 };
             }
         }
     }
     if let Some(display_name) = &event.display_name {
-        return DisplayNameCandidate {
-            value: display_name.clone(),
-            score: 7,
-        };
+        if let Some(label) = normalized_agent_label(display_name) {
+            return DisplayNameCandidate {
+                value: label,
+                score: 8,
+            };
+        }
     }
     if let Some(display_name) = payload_string(&event.payload, "display_name") {
-        return DisplayNameCandidate {
-            value: display_name,
-            score: 6,
-        };
-    }
-    if let Some(description) = payload_string(&event.payload, "description") {
-        let trimmed = description.trim();
-        if !trimmed.is_empty() {
+        if let Some(label) = normalized_agent_label(&display_name) {
             return DisplayNameCandidate {
-                value: trimmed.to_string(),
-                score: 5,
+                value: label,
+                score: 7,
             };
         }
     }
     if let Some(agent_name) = &event.agent_name {
-        return DisplayNameCandidate {
-            value: agent_name.clone(),
-            score: 4,
-        };
+        if let Some(label) = normalized_agent_label(agent_name) {
+            return DisplayNameCandidate {
+                value: label,
+                score: 6,
+            };
+        }
     }
     if let Some(agent_name) = payload_string(&event.payload, "agent_name") {
-        return DisplayNameCandidate {
-            value: agent_name,
-            score: 3,
-        };
+        if let Some(label) = normalized_agent_label(&agent_name) {
+            return DisplayNameCandidate {
+                value: label,
+                score: 5,
+            };
+        }
+    }
+    if let Some(responsibility) = payload_responsibility(&event.payload) {
+        if let Some(label) = normalized_agent_label(&responsibility) {
+            return DisplayNameCandidate {
+                value: label,
+                score: 4,
+            };
+        }
+    }
+    if let Some(description) = payload_string(&event.payload, "description") {
+        let trimmed = description.trim();
+        if !trimmed.is_empty() {
+            if let Some(label) = normalized_agent_label(trimmed) {
+                return DisplayNameCandidate {
+                    value: label,
+                    score: 3,
+                };
+            }
+        }
     }
     if let Some(title) = payload_string(&event.payload, "title") {
         return DisplayNameCandidate {
@@ -1159,6 +1192,42 @@ fn payload_responsibility(payload: &serde_json::Value) -> Option<String> {
         .or_else(|| payload_string(payload, "description"))
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
+}
+
+fn normalized_agent_label(value: &str) -> Option<String> {
+    let normalized = value.replace('\n', " ").replace('\t', " ");
+    let compact = normalized.split_whitespace().collect::<Vec<_>>().join(" ");
+    let trimmed = compact.trim();
+    if trimmed.is_empty() || is_noisy_agent_label(trimmed) {
+        return None;
+    }
+    Some(trimmed.to_string())
+}
+
+fn is_noisy_agent_label(value: &str) -> bool {
+    let compact = value.trim();
+    if compact.is_empty() {
+        return true;
+    }
+    if compact.len() > 48 {
+        return true;
+    }
+    if compact.split_whitespace().count() > 6 {
+        return true;
+    }
+    if compact.contains('<') || compact.contains('>') || compact.contains('[') || compact.contains(']') {
+        return true;
+    }
+    let lowered = compact.to_ascii_lowercase();
+    lowered.starts_with("respond ")
+        || lowered.starts_with("build ")
+        || lowered.starts_with("write ")
+        || lowered.starts_with("fix ")
+        || lowered.starts_with("investigate ")
+        || lowered.starts_with("update ")
+        || lowered.starts_with("user ")
+        || lowered.starts_with("prompt ")
+        || lowered.starts_with("message ")
 }
 
 fn mapped_agent_type_label(agent_type: &str) -> Option<String> {
@@ -1210,9 +1279,23 @@ fn build_registry_id(source_app: &str, session_id: &str, agent_id: Option<&str>)
     }
 }
 
+fn current_time_ms() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .ok()
+        .and_then(|duration| i64::try_from(duration.as_millis()).ok())
+        .unwrap_or(0)
+}
+
 fn resolve_lifecycle_status(hook_event_type: &str) -> &'static str {
     match hook_event_type {
-        "SessionEnd" | "SubagentStop" => "inactive",
+        "SessionEnd"
+        | "SubagentStop"
+        | "SubagentStopped"
+        | "SubagentComplete"
+        | "SubagentCompleted"
+        | "AgentStop"
+        | "AgentStopped" => "inactive",
         _ => "active",
     }
 }
@@ -1222,8 +1305,8 @@ mod tests {
     use serde_json::json;
 
     use super::{
-        AgentSnapshot, LiveState, default_agent_avatar_data_uri, resolve_project_icon_url,
-        resolve_session_summary, truncate,
+        AgentSnapshot, LiveState, default_agent_avatar_data_uri, resolve_agent_name,
+        resolve_project_icon_url, resolve_session_summary, truncate, SUBAGENT_ACTIVE_WINDOW_MS,
     };
     use crate::model::{
         AcquisitionMode, CapabilitySet, EventEnvelope, EventKind, LegacyHookEvent, RuntimeSource,
@@ -1455,6 +1538,137 @@ mod tests {
             project.name == "unknown"
                 && project.sessions.iter().any(|session| session.session_id == "sess-unknown")
         }));
+    }
+
+    #[test]
+    fn resolve_agent_name_prefers_agent_identity_over_task_text() {
+        let event = LegacyHookEvent {
+            source_app: "pharos".to_string(),
+            session_id: "sess-1".to_string(),
+            hook_event_type: "SubagentStart".to_string(),
+            payload: json!({
+                "agent_type": "cursor_subagent",
+                "responsibility": "Build client and then review backend integration details with exhaustive checks"
+            }),
+            timestamp: 10,
+            agent_id: Some("agent-1".to_string()),
+            agent_type: Some("cursor_subagent".to_string()),
+            model_name: None,
+            display_name: None,
+            agent_name: None,
+        };
+        let refs = vec![&event];
+        assert_eq!(resolve_agent_name(&refs, false), "Cursor Helper");
+    }
+
+    #[test]
+    fn stale_subagent_becomes_inactive_without_explicit_stop_event() {
+        let state = LiveState::default();
+        let session = SessionRef {
+            host_id: "local".to_string(),
+            workspace_id: "pharos".to_string(),
+            session_id: "sess-stale".to_string(),
+        };
+
+        let subagent_start = EventEnvelope {
+            runtime_source: RuntimeSource::CursorAgent,
+            acquisition_mode: AcquisitionMode::Observed,
+            event_kind: EventKind::SubagentStarted,
+            session: session.clone(),
+            agent_id: Some("agent-old".to_string()),
+            occurred_at_ms: 1_000,
+            capabilities: CapabilitySet {
+                can_observe: true,
+                can_start: false,
+                can_stop: false,
+                can_retry: false,
+                can_respond: false,
+            },
+            title: "subagent started".to_string(),
+            payload: json!({
+                "agent_type": "cursor_subagent",
+                "display_name": "Cursor Subagent"
+            }),
+        };
+        let recent_main_event = EventEnvelope {
+            runtime_source: RuntimeSource::CursorAgent,
+            acquisition_mode: AcquisitionMode::Observed,
+            event_kind: EventKind::AssistantResponse,
+            session,
+            agent_id: None,
+            occurred_at_ms: 1_000 + SUBAGENT_ACTIVE_WINDOW_MS + 1_000,
+            capabilities: CapabilitySet {
+                can_observe: true,
+                can_start: false,
+                can_stop: false,
+                can_retry: false,
+                can_respond: false,
+            },
+            title: "assistant response".to_string(),
+            payload: json!({
+                "text": "still working"
+            }),
+        };
+
+        state
+            .record_envelope(&subagent_start)
+            .expect("subagent recorded");
+        state
+            .record_envelope(&recent_main_event)
+            .expect("main event recorded");
+
+        let project = state
+            .project("pharos")
+            .expect("project listing")
+            .expect("project exists");
+        let agent = project
+            .sessions
+            .iter()
+            .flat_map(|session| session.agents.iter())
+            .find(|agent| agent.agent_id.as_deref() == Some("agent-old"))
+            .expect("agent snapshot exists");
+        assert!(!agent.is_active);
+    }
+
+    #[test]
+    fn stale_session_becomes_inactive_without_session_end() {
+        let state = LiveState::default();
+        let event = EventEnvelope {
+            runtime_source: RuntimeSource::CursorAgent,
+            acquisition_mode: AcquisitionMode::Observed,
+            event_kind: EventKind::AssistantResponse,
+            session: SessionRef {
+                host_id: "local".to_string(),
+                workspace_id: "pharos".to_string(),
+                session_id: "sess-old".to_string(),
+            },
+            agent_id: None,
+            occurred_at_ms: 1_000,
+            capabilities: CapabilitySet {
+                can_observe: true,
+                can_start: false,
+                can_stop: false,
+                can_retry: false,
+                can_respond: false,
+            },
+            title: "assistant response".to_string(),
+            payload: json!({
+                "text": "old activity"
+            }),
+        };
+        state.record_envelope(&event).expect("event recorded");
+
+        let project = state
+            .project("pharos")
+            .expect("project listing")
+            .expect("project exists");
+        let session = project
+            .sessions
+            .iter()
+            .find(|session| session.session_id == "sess-old")
+            .expect("session snapshot exists");
+        assert!(!session.is_active);
+        assert!(!project.is_active);
     }
 }
 

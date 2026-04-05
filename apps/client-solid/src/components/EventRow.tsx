@@ -21,10 +21,24 @@ interface Props {
 }
 
 function resolveAgentName(e: HookEvent): string {
-  if (e.hook_event_type === 'SubagentStart') {
-    return resolveEventAgentName(e, 'Agent');
+  const isMainSessionEvent = !e.agent_id;
+  const looksLikeOrchestrationEvent =
+    e.hook_event_type === 'SubagentStart'
+    || (e.hook_event_type === 'PreToolUse' && e.payload?.tool_name === 'Agent');
+  const fallback = isMainSessionEvent
+    ? (looksLikeOrchestrationEvent ? 'Orchestrator' : 'Session')
+    : 'Agent';
+  const resolved = resolveEventAgentName(e, fallback).trim();
+  const sourceApp = (e.source_app || '').trim().toLowerCase();
+  const normalized = resolved.toLowerCase();
+
+  // Keep row identity stable and avoid leaking project names or long task text.
+  if (!resolved) return fallback;
+  if (sourceApp && normalized === sourceApp) return fallback;
+  if (resolved.length > 28 || resolved.split(/\s+/).length > 3 || resolved.includes(':')) {
+    return fallback;
   }
-  return resolveEventAgentName(e, e.source_app || 'Agent');
+  return resolved;
 }
 
 function resolveRuntimeDisplay(e: HookEvent): string | undefined {
@@ -70,6 +84,10 @@ export default function EventRow(props: Props) {
   const runtimeDisplay = () => resolveRuntimeDisplay(e());
   const acquisitionModeDisplay = () => resolveAcquisitionModeDisplay(e());
   const description = () => describeEvent(e());
+  const kindLabel = () =>
+    props.detailed
+      ? resolveSummaryKind(e())
+      : simpleEventKindLabel(e().hook_event_type);
   const descriptionDetail = () => {
     const detail = describeEventDetail(e());
     return detail && detail !== description() ? detail : undefined;
@@ -121,6 +139,11 @@ export default function EventRow(props: Props) {
               {acquisitionModeDisplay()}
             </span>
           </Show>
+          <Show when={kindLabel()}>
+            <span class="event-row-kind">
+              {kindLabel()}
+            </span>
+          </Show>
           <Show when={props.detailed}>
             <span
               class="event-row-type"
@@ -140,20 +163,6 @@ export default function EventRow(props: Props) {
         </div>
         <div class="event-row-content">
           <div class="event-row-copy">
-            <Show when={resolveSummaryKind(e())}>
-              <Show
-                when={props.detailed}
-                fallback={
-                  <span class="event-row-kind">
-                    {simpleEventKindLabel(e().hook_event_type)}
-                  </span>
-                }
-              >
-                <span class="event-row-kind">
-                  {resolveSummaryKind(e())}
-                </span>
-              </Show>
-            </Show>
             <span class="event-row-summary" title={props.detailed ? description() : simpleSummary()}>
               {props.detailed ? description() : simpleSummary()}
             </span>

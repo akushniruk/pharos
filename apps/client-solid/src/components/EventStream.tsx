@@ -1,20 +1,24 @@
-import { For, Show, createSignal, createMemo, createEffect } from 'solid-js';
+import { For, Show, createSignal, createMemo, createEffect, onMount } from 'solid-js';
 import { Icon } from 'solid-heroicons';
 import { bars_3BottomLeft, queueList, funnel } from 'solid-heroicons/solid';
 import {
   filteredEvents,
   selectedProjectFocusSnapshot,
   selectedProjectSnapshot,
-  selectedViewedChangesSnapshot,
-  acknowledgeSelectedScope,
-  selectSession,
 } from '../lib/store';
-import { getEventTypeLabel, getEventTypeBgColor, getEventTypeTextColor } from '../lib/colors';
+import { getEventTypeLabel } from '../lib/colors';
 import SearchBar, { searchQuery } from './SearchBar';
 import EventRow from './EventRow';
+import ViewModeTabs from './ViewModeTabs';
 import { connectionState, hasStreamData } from '../lib/ws';
 import type { HookEvent } from '../lib/types';
-import { describeEvent, describeEventDetail, mergeSimpleRowSummary, simpleEventKindLabel } from '../lib/describe';
+import {
+  describeEvent,
+  describeEventDetail,
+  formatRuntimeLabel,
+  mergeSimpleRowSummary,
+  simpleEventKindLabel,
+} from '../lib/describe';
 import { timeAgo } from '../lib/time';
 import { API_BASE } from '../lib/ws';
 
@@ -25,16 +29,23 @@ const EVENT_TYPES = [
   'SessionStart', 'SessionEnd', 'SessionTitleChanged',
 ];
 
-export default function EventStream() {
+interface EventStreamProps {
+  viewMode: 'logs' | 'graph';
+  onViewModeChange: (mode: 'logs' | 'graph') => void;
+}
+
+const DETAIL_MODE_STORAGE_KEY = 'pharos.event-stream.detail-mode';
+
+export default function EventStream(props: EventStreamProps) {
   const SIMPLE_HIDDEN = new Set(['SessionStart', 'SessionEnd', 'SessionTitleChanged']);
   const [detailed, setDetailed] = createSignal(false);
   const [stick, setStick] = createSignal(true);
   const [showFilters, setShowFilters] = createSignal(false);
   const [hiddenTypes, setHiddenTypes] = createSignal<Set<string>>(new Set(SIMPLE_HIDDEN));
+  const [hiddenRuntimes, setHiddenRuntimes] = createSignal<Set<string>>(new Set());
   const [backendMatches, setBackendMatches] = createSignal<HookEvent[] | null>(null);
   const focus = createMemo(() => selectedProjectFocusSnapshot());
   const project = createMemo(() => selectedProjectSnapshot());
-  const viewedChanges = createMemo(() => selectedViewedChangesSnapshot());
 
   const switchToDetailed = () => {
     setDetailed(true);
@@ -46,6 +57,21 @@ export default function EventStream() {
     // Re-hide lifecycle in simple mode
     setHiddenTypes(new Set(SIMPLE_HIDDEN));
   };
+  onMount(() => {
+    if (typeof localStorage === 'undefined') return;
+    const saved = localStorage.getItem(DETAIL_MODE_STORAGE_KEY);
+    if (saved === 'detailed') {
+      switchToDetailed();
+      return;
+    }
+    if (saved === 'simple') {
+      switchToSimple();
+    }
+  });
+  createEffect(() => {
+    if (typeof localStorage === 'undefined') return;
+    localStorage.setItem(DETAIL_MODE_STORAGE_KEY, detailed() ? 'detailed' : 'simple');
+  });
   let containerRef: HTMLDivElement | undefined;
 
   const toggleType = (type: string) => {
@@ -57,20 +83,36 @@ export default function EventStream() {
     });
   };
 
-  // Count events by type for badges
-  const typeCounts = createMemo(() => {
-    const counts = new Map<string, number>();
-    for (const e of filteredEvents()) {
-      counts.set(e.hook_event_type, (counts.get(e.hook_event_type) || 0) + 1);
+  const toggleRuntime = (runtime: string) => {
+    setHiddenRuntimes((prev) => {
+      const next = new Set(prev);
+      if (next.has(runtime)) next.delete(runtime);
+      else next.add(runtime);
+      return next;
+    });
+  };
+
+  const runtimeLabelForEvent = (event: HookEvent): string => {
+    const candidate = event.payload?.runtime_label || event.payload?.runtime_source;
+    return formatRuntimeLabel(candidate) || 'Unknown';
+  };
+
+  const runtimeOptions = createMemo(() => {
+    const labels = new Set<string>();
+    for (const event of filteredEvents()) {
+      labels.add(runtimeLabelForEvent(event));
     }
-    return counts;
+    return Array.from(labels).sort((left, right) => left.localeCompare(right));
   });
 
   const displayEvents = createMemo(() => {
     const query = searchQuery();
     const hidden = hiddenTypes();
+    const hiddenRuntimeSet = hiddenRuntimes();
     const source = backendMatches() ?? filteredEvents();
-    let evts = compactEvents(source.filter(e => !hidden.has(e.hook_event_type)));
+    let evts = compactEvents(source.filter((event) =>
+      !hidden.has(event.hook_event_type)
+      && !hiddenRuntimeSet.has(runtimeLabelForEvent(event))));
 
     if (query) {
       // backend search already narrowed the list; keep lightweight local fallback
@@ -91,6 +133,7 @@ export default function EventStream() {
     const query = searchQuery().trim();
     const hidden = hiddenTypes();
     const customFiltersActive = hidden.size > SIMPLE_HIDDEN.size;
+    const runtimeFiltersActive = hiddenRuntimes().size > 0;
     const hasScopedFocus = Boolean(focus()?.hasSessionFocus || focus()?.hasAgentFocus);
 
     if (connectionState() === 'connecting' && !hasStreamData()) {
@@ -124,10 +167,10 @@ export default function EventStream() {
         };
       }
 
-      if (customFiltersActive) {
+      if (customFiltersActive || runtimeFiltersActive) {
         return {
-          title: 'No events match the active type filters',
-          body: 'Re-enable one or more event types to reveal rows.',
+          title: 'No events match the active filters',
+          body: 'Re-enable one or more event type/runtime filters to reveal rows.',
         };
       }
 
@@ -180,119 +223,101 @@ export default function EventStream() {
     <div class="event-stream-shell">
       {/* Toolbar */}
       <div class="event-stream-toolbar">
-        <button
-          class="event-stream-tab"
-          classList={{ 'is-active': !detailed() }}
-          type="button"
-          onClick={switchToSimple}
-          aria-label="Switch to simple mode"
-        >
-          <span class="event-stream-tab-content">
-            <Icon path={queueList} class="event-stream-tab-icon" /> Simple
-          </span>
-        </button>
-        <button
-          class="event-stream-tab"
-          classList={{ 'is-active': detailed() }}
-          type="button"
-          onClick={switchToDetailed}
-          aria-label="Switch to detailed mode"
-        >
-          <span class="event-stream-tab-content">
-            <Icon path={bars_3BottomLeft} class="event-stream-tab-icon" /> Detailed
-          </span>
-        </button>
+        <ViewModeTabs viewMode={props.viewMode} onChange={props.onViewModeChange} />
 
         <SearchBar />
 
-        <button
-          class="event-stream-tab event-stream-filter-toggle"
-          classList={{ 'is-active': showFilters() }}
-          type="button"
-          onClick={() => setShowFilters(f => !f)}
-          title="Toggle event type filters"
-          aria-pressed={showFilters()}
-          aria-label="Toggle event type filters"
-        >
-          <span class="event-stream-tab-content">
-            <Icon path={funnel} class="event-stream-tab-icon" /> Filter
-          </span>
-        </button>
-      </div>
+        <div class="event-stream-toolbar-actions">
+          <div class="pill-tabs event-stream-mode-tabs">
+          <button
+            class="pill-tab event-stream-tab"
+            classList={{ 'is-active': !detailed() }}
+            type="button"
+            onClick={switchToSimple}
+            aria-label="Switch to simple mode"
+          >
+            <span class="event-stream-tab-content">
+              <Icon path={queueList} class="event-stream-tab-icon" /> Simple
+            </span>
+          </button>
+          <button
+            class="pill-tab event-stream-tab"
+            classList={{ 'is-active': detailed() }}
+            type="button"
+            onClick={switchToDetailed}
+            aria-label="Switch to detailed mode"
+          >
+            <span class="event-stream-tab-content">
+              <Icon path={bars_3BottomLeft} class="event-stream-tab-icon" /> Detailed
+            </span>
+          </button>
+        </div>
 
-      <Show when={focus()}>
-        {(currentFocus) => (
-          <div class="event-stream-focusbar">
-            <span class="event-stream-focus-label">
-              Focus
+          <button
+            class="pill-tab event-stream-tab event-stream-filter-toggle"
+            classList={{ 'is-active': showFilters() }}
+            type="button"
+            onClick={() => setShowFilters(f => !f)}
+            title="Toggle event type filters"
+            aria-pressed={showFilters()}
+            aria-label="Toggle event type filters"
+          >
+            <span class="event-stream-tab-content">
+              <Icon path={funnel} class="event-stream-tab-icon" /> Filter
             </span>
-            <span class="event-stream-focus-scope">
-              {currentFocus().scopeLabel}
-            </span>
-            <div class="event-stream-focus-actions">
-              <Show when={viewedChanges()}>
-                {(currentViewed) => (
-                  <span
-                    class="event-stream-pill"
-                    classList={{
-                      'is-unread': currentViewed().hasUnreadChanges,
-                      'is-uptodate': !currentViewed().hasUnreadChanges,
-                    }}
-                    title={currentViewed().body}
-                  >
-                    {currentViewed().hasUnreadChanges
-                      ? `${currentViewed().unreadCount} new since viewed`
-                      : 'Up to date'}
-                  </span>
-                )}
-              </Show>
-              <button
-                onClick={acknowledgeSelectedScope}
-                type="button"
-                class="event-stream-pill-button"
-              >
-                Mark viewed
-              </button>
-              <button
-                onClick={() => selectSession(null)}
-                type="button"
-                class="event-stream-pill-button is-muted"
-              >
-                Show all events
-              </button>
-            </div>
-          </div>
-        )}
-      </Show>
+          </button>
+        </div>
+      </div>
 
       {/* Filter chips */}
       <Show when={showFilters()}>
         <div class="event-stream-filterchips">
-          <For each={EVENT_TYPES}>
-            {(type) => {
-              const count = () => typeCounts().get(type) || 0;
-              const hidden = () => hiddenTypes().has(type);
-              return (
-                <button
-                  onClick={() => toggleType(type)}
-                  aria-pressed={!hidden()}
-                  aria-label={`${hidden() ? 'Show' : 'Hide'} ${getEventTypeLabel(type)} events`}
-                  type="button"
-                  class="event-stream-chip"
-                  classList={{ 'is-hidden': hidden() }}
-                  style={hidden()
-                    ? {}
-                    : {
-                      background: getEventTypeBgColor(type),
-                      color: getEventTypeTextColor(type),
-                    }}
-                >
-                  {getEventTypeLabel(type)}
-                  <span class="event-stream-chip-count">{count()}</span>
-                </button>
-              );
-            }}
-          </For>
+          <div class="event-stream-filter-row">
+            <span class="event-stream-filter-group-label">Types</span>
+            <div class="event-stream-filter-chip-wrap">
+              <For each={EVENT_TYPES}>
+                {(type) => {
+                  const hidden = () => hiddenTypes().has(type);
+                  return (
+                    <button
+                      onClick={() => toggleType(type)}
+                      aria-pressed={!hidden()}
+                      aria-label={`${hidden() ? 'Show' : 'Hide'} ${getEventTypeLabel(type)} events`}
+                      type="button"
+                      class="event-stream-chip"
+                      classList={{ 'is-hidden': hidden(), 'is-active': !hidden() }}
+                    >
+                      {getEventTypeLabel(type)}
+                    </button>
+                  );
+                }}
+              </For>
+            </div>
+          </div>
+          <Show when={runtimeOptions().length > 0}>
+            <div class="event-stream-filter-row">
+              <span class="event-stream-filter-group-label">Runtimes</span>
+              <div class="event-stream-filter-chip-wrap">
+                <For each={runtimeOptions()}>
+                  {(runtime) => {
+                    const hidden = () => hiddenRuntimes().has(runtime);
+                    return (
+                      <button
+                        onClick={() => toggleRuntime(runtime)}
+                        aria-pressed={!hidden()}
+                        aria-label={`${hidden() ? 'Show' : 'Hide'} ${runtime} events`}
+                        type="button"
+                        class="event-stream-chip"
+                        classList={{ 'is-hidden': hidden(), 'is-active': !hidden() }}
+                      >
+                        {runtime}
+                      </button>
+                    );
+                  }}
+                </For>
+              </div>
+            </div>
+          </Show>
         </div>
       </Show>
 

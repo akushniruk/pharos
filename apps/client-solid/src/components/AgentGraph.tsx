@@ -2,7 +2,6 @@ import { For, Show, createMemo, createSignal } from 'solid-js';
 import {
   graphAgents,
   filteredEvents,
-  runtimeBridgeCandidates,
   selectAgent,
   selectedAgent,
 } from '../lib/store';
@@ -25,7 +24,6 @@ const METRO_COLORS = [
 ];
 
 type StatusColor = 'var(--green)' | 'var(--yellow)' | 'var(--accent)' | 'var(--text-dim)';
-type ConnectionMode = 'parent_child' | 'session_bridge';
 type GraphNode = AgentInfo & {
   graphId: string;
   parentGraphId?: string;
@@ -38,19 +36,31 @@ function statusDot(agent: AgentInfo): StatusColor {
   return 'var(--text-dim)';
 }
 
-function agentLabel(agent: AgentInfo): string {
-  const name = agent.displayName?.trim();
-  if (name && name.toLowerCase() !== 'unknown') {
+function isNoisyRoleLabel(value: string): boolean {
+  if (!value) return true;
+  const compact = value.replace(/\s+/g, ' ').trim();
+  if (compact.length > 40) return true;
+  const words = compact.split(' ').filter(Boolean);
+  if (words.length > 6) return true;
+  if (/[<>\[\]`]/.test(compact)) return true;
+  if (/^(respond|build|write|fix|investigate|update)\b/i.test(compact)) return true;
+  if (/^(user|prompt|message)\b/i.test(compact)) return true;
+  return false;
+}
+
+function agentLabel(agent: GraphNode): string {
+  if (!agent.parentGraphId) return 'Orchestrator';
+
+  if (agent.agentType && agent.agentType !== 'main') {
+    const mapped = mapAgentTypeLabel(agent.agentType);
+    if (mapped && mapped !== 'Session') return mapped;
+  }
+
+  const name = agent.displayName?.replace(/\s+/g, ' ').trim() || '';
+  if (name && name.toLowerCase() !== 'unknown' && !isNoisyRoleLabel(name)) {
     return name;
   }
-  const task = agent.assignment || agent.currentAction || agent.nextAction;
-  if (task) {
-    return task.length > 32 ? `${task.slice(0, 31)}…` : task;
-  }
-  if (agent.agentType && agent.agentType !== 'main') {
-    return mapAgentTypeLabel(agent.agentType) || agent.agentType;
-  }
-  return 'Session';
+  return 'Worker';
 }
 
 function summarizeMeta(agent: AgentInfo): string {
@@ -103,7 +113,6 @@ export default function AgentGraph() {
   const [dragging, setDragging] = createSignal(false);
   const [dragStart, setDragStart] = createSignal({ x: 0, y: 0 });
   const [filter, setFilter] = createSignal<'active' | 'idle' | 'all'>('all');
-  const [connectionMode, setConnectionMode] = createSignal<ConnectionMode>('parent_child');
   const [selectedGraphId, setSelectedGraphId] = createSignal<string | null>(null);
   const graphNodes = createMemo<GraphNode[]>(() => {
     const all = graphAgents();
@@ -148,18 +157,20 @@ export default function AgentGraph() {
     });
   });
 
-  const nodes = createMemo(() => {
-    const all = graphNodes();
-    if (filter() === 'all') return all;
-    const isRoot = (node: GraphNode) => !node.parentGraphId;
-    if (filter() === 'active') {
-      return all.filter((node) => isRoot(node) || node.isActive || node.statusTone === 'active');
-    }
-    return all.filter((node) => isRoot(node) || (!node.isActive && node.statusTone !== 'active'));
+  const isNodeActive = (node: GraphNode) => node.isActive || node.statusTone === 'active';
+  const rootsAll = createMemo(() => graphNodes().filter((node) => !node.parentGraphId));
+  const childrenAll = createMemo(() => graphNodes().filter((node) => Boolean(node.parentGraphId)));
+  const roots = createMemo(() => {
+    if (filter() === 'all') return rootsAll();
+    if (filter() === 'active') return rootsAll().filter((node) => isNodeActive(node));
+    return rootsAll().filter((node) => !isNodeActive(node));
   });
-
-  const roots = createMemo(() => nodes().filter((node) => !node.parentGraphId));
-  const children = createMemo(() => nodes().filter((node) => Boolean(node.parentGraphId)));
+  const children = createMemo(() => {
+    if (filter() === 'all') return childrenAll();
+    if (filter() === 'active') return childrenAll().filter((node) => isNodeActive(node));
+    return childrenAll().filter((node) => !isNodeActive(node));
+  });
+  const nodes = createMemo(() => [...roots(), ...children()]);
   const nodeById = createMemo(() => {
     const map = new Map<string, GraphNode>();
     for (const node of nodes()) map.set(node.graphId, node);
@@ -236,43 +247,6 @@ export default function AgentGraph() {
     if (!parentPos || !childPos) return undefined;
     return `M ${parentPos.x + NODE_W / 2} ${parentPos.y + NODE_H} C ${parentPos.x + NODE_W / 2} ${(parentPos.y + NODE_H + childPos.y) / 2}, ${childPos.x + NODE_W / 2} ${(parentPos.y + NODE_H + childPos.y) / 2}, ${childPos.x + NODE_W / 2} ${childPos.y}`;
   };
-  const bridgePath = (fromId: string, toId: string) => {
-    const fromPos = layout().rootPositions.get(fromId) ?? layout().childPositions.get(fromId);
-    const toPos = layout().rootPositions.get(toId) ?? layout().childPositions.get(toId);
-    if (!fromPos || !toPos) return undefined;
-    const left = fromPos.x <= toPos.x ? fromPos : toPos;
-    const right = fromPos.x <= toPos.x ? toPos : fromPos;
-    const leftY = left.y + NODE_H / 2;
-    const rightY = right.y + NODE_H / 2;
-    const arcY = Math.min(leftY, rightY) - 28;
-    return `M ${left.x + NODE_W} ${leftY} C ${left.x + NODE_W + 28} ${arcY}, ${right.x - 28} ${arcY}, ${right.x} ${rightY}`;
-  };
-  const graphIdByAgentId = createMemo(() => {
-    const map = new Map<string, string>();
-    for (const node of nodes()) {
-      if (node.agentId) map.set(node.agentId, node.graphId);
-    }
-    return map;
-  });
-  const bridgeEdges = createMemo(() => {
-    if (connectionMode() !== 'session_bridge') {
-      return [] as Array<{ key: string; fromId: string; toId: string; lineColor: string }>;
-    }
-    const mapped = runtimeBridgeCandidates()
-      .map((bridge) => {
-        const fromId = graphIdByAgentId().get(bridge.fromAgentId);
-        const toId = graphIdByAgentId().get(bridge.toAgentId);
-        if (!fromId || !toId || fromId === toId) return undefined;
-        return {
-          key: bridge.key,
-          fromId,
-          toId,
-          lineColor: nodeLineColor(fromId),
-        };
-      })
-      .filter((edge): edge is { key: string; fromId: string; toId: string; lineColor: string } => Boolean(edge));
-    return mapped;
-  });
   const peerEdges = createMemo(() => {
     const activeChildren = children()
       .filter((node) => (node.isActive || node.statusTone === 'active') && node.parentGraphId)
@@ -319,8 +293,7 @@ export default function AgentGraph() {
     setPan({ x: e.clientX - dragStart().x, y: e.clientY - dragStart().y });
   };
   const onMouseUp = () => setDragging(false);
-  const activeCount = () => graphNodes().filter((node) => node.isActive || node.statusTone === 'active').length;
-  const idleCount = () => graphNodes().filter((node) => !node.isActive && node.statusTone !== 'active').length;
+  const rootCount = () => roots().length;
 
   return (
     <div
@@ -335,9 +308,9 @@ export default function AgentGraph() {
       <div style="position:absolute;top:12px;left:12px;display:flex;flex-direction:column;gap:4px;z-index:10;">
         <div style="display:flex;gap:4px;">
           <For each={[
-            { key: 'active' as const, label: `Active (${activeCount()})` },
-            { key: 'idle' as const, label: `Idle (${idleCount()})` },
-            { key: 'all' as const, label: `All (${graphAgents().length})` },
+            { key: 'active' as const, label: `Active (${graphNodes().filter((node) => isNodeActive(node)).length})` },
+            { key: 'idle' as const, label: `Idle (${graphNodes().filter((node) => !isNodeActive(node)).length})` },
+            { key: 'all' as const, label: `All (${graphNodes().length})` },
           ]}>
             {(f) => (
               <button
@@ -346,22 +319,6 @@ export default function AgentGraph() {
                 onClick={() => setFilter(f.key)}
               >
                 {f.label}
-              </button>
-            )}
-          </For>
-        </div>
-        <div style="display:flex;gap:4px;">
-          <For each={[
-            { key: 'parent_child' as const, label: 'Hierarchy' },
-            { key: 'session_bridge' as const, label: `Session bridges (${runtimeBridgeCandidates().length})` },
-          ]}>
-            {(mode) => (
-              <button
-                class="graph-zoom-btn"
-                style={`font-size:10px;width:auto;padding:0 10px;${connectionMode() === mode.key ? 'background:var(--bg-elevated);color:var(--text-primary);border-color:var(--accent);' : ''}`}
-                onClick={() => setConnectionMode(mode.key)}
-              >
-                {mode.label}
               </button>
             )}
           </For>
@@ -398,38 +355,6 @@ export default function AgentGraph() {
               </feMerge>
             </filter>
           </defs>
-
-          <Show when={connectionMode() === 'session_bridge'}>
-            <For each={bridgeEdges()}>
-              {(edge, index) => {
-                const pathD = () => bridgePath(edge.fromId, edge.toId);
-                return (
-                  <Show when={pathD()}>
-                    <>
-                      <path
-                        class="graph-bridge-edge"
-                        d={pathD()!}
-                        fill="none"
-                        stroke={edge.lineColor}
-                        stroke-width="1.4"
-                        stroke-linecap="round"
-                      />
-                      <path
-                        class="graph-bridge-flow"
-                        style={{ 'animation-delay': `${index() * 260}ms` }}
-                        d={pathD()!}
-                        fill="none"
-                        stroke={edge.lineColor}
-                        stroke-width="1.2"
-                        stroke-linecap="round"
-                        stroke-dasharray="6 16"
-                      />
-                    </>
-                  </Show>
-                );
-              }}
-            </For>
-          </Show>
 
           {/* Edges */}
           <For each={edges()}>
@@ -545,7 +470,13 @@ export default function AgentGraph() {
                     {summarizeMeta(agent)}
                   </text>
                   <text x={pos().x + 16} y={pos().y + 78} font-size="10" fill="var(--text-dim)" font-family="var(--font-sans)">
-                    {agent.isActive ? 'Active' : agent.statusTone === 'blocked' ? 'Blocked' : 'Idle'}
+                    {!agent.parentGraphId
+                      ? `${rootCount()} root${rootCount() === 1 ? '' : 's'}`
+                      : agent.isActive
+                        ? 'Active'
+                        : agent.statusTone === 'blocked'
+                          ? 'Blocked'
+                          : 'Idle'}
                   </text>
                 </g>
               );
