@@ -26,7 +26,6 @@ import type { Project } from './lib/types';
 
 type ViewMode = 'logs' | 'graph';
 type AppRoute = 'main' | 'docs';
-const DEFAULT_PROJECT_LOGO_STORAGE_KEY = 'pharos.default-project-logo';
 const DOC_ROUTE_SLUG_TO_PATH = new Map<string, string>();
 const DOC_ROUTE_PATH_TO_SLUG = new Map<string, string>();
 {
@@ -288,8 +287,8 @@ export default function App() {
 
 
 /** Deduplicate useful agent badges by displayName, keeping the most active */
-function uniqueAgentBadges(p: Project): { name: string; isActive: boolean; avatarUrl?: string }[] {
-  const seen = new Map<string, { isActive: boolean; avatarUrl?: string }>();
+function uniqueAgentBadges(p: Project): { name: string; isActive: boolean }[] {
+  const seen = new Map<string, { isActive: boolean }>();
   for (const s of p.sessions) {
     for (const a of s.agents) {
       const cleanedName = a.displayName?.trim();
@@ -298,14 +297,13 @@ function uniqueAgentBadges(p: Project): { name: string; isActive: boolean; avata
       if (lower === 'unknown' || lower === 'agent' || lower === 'session') continue;
       const existing = seen.get(cleanedName);
       if (existing === undefined || a.isActive) {
-        seen.set(cleanedName, { isActive: a.isActive, avatarUrl: a.avatarUrl });
+        seen.set(cleanedName, { isActive: a.isActive });
       }
     }
   }
   return Array.from(seen, ([name, details]) => ({
     name,
     isActive: details.isActive,
-    avatarUrl: details.avatarUrl,
   })).slice(0, 4);
 }
 
@@ -348,37 +346,39 @@ function projectStatusLabel(p: Project): string {
   return 'New';
 }
 
-function projectFallbackIconDataUri(_projectName: string): string {
+function projectInitials(name: string): string {
+  const initials = name
+    .trim()
+    .split('')
+    .filter((char) => /[a-z0-9]/i.test(char))
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
+  return initials || 'P';
+}
+
+function projectFallbackIconDataUri(projectName: string): string {
+  const initials = projectInitials(projectName);
   const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'>
 <style>
   .bg { fill: #F8FAFC; stroke: #CBD5E1; }
   .core { fill: #E2E8F0; stroke: #94A3B8; }
-  .dot { fill: #334155; }
+  .txt { fill: #334155; }
   @media (prefers-color-scheme: dark) {
     .bg { fill: #0F172A; stroke: #334155; }
     .core { fill: #1E293B; stroke: #94A3B8; }
-    .dot { fill: #CBD5E1; }
+    .txt { fill: #CBD5E1; }
   }
 </style>
 <rect class='bg' x='1' y='1' width='30' height='30' rx='9'/>
 <rect class='core' x='8' y='8' width='16' height='16' rx='5' stroke-width='1.25'/>
-<circle class='dot' cx='16' cy='16' r='2.9'/>
+<text class='txt' x='16' y='16' text-anchor='middle' dominant-baseline='central' font-family='Inter,Arial,sans-serif' font-size='7.5' font-weight='700'>${initials}</text>
 </svg>`;
   return `data:image/svg+xml,${encodeURIComponent(svg)}`;
 }
 
-function normalizeLogoUrl(value?: string | null): string | undefined {
-  if (!value) return undefined;
-  const trimmed = value.trim();
-  if (!trimmed) return undefined;
-  if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('/')) {
-    return trimmed;
-  }
-  return undefined;
-}
-
-function resolveProjectLogo(project: Project, configuredLogo?: string): string {
-  return project.iconUrl || configuredLogo || projectFallbackIconDataUri(project.name);
+function resolveProjectLogo(project: Project): string {
+  return projectFallbackIconDataUri(project.name);
 }
 
 function agentInitials(name: string): string {
@@ -391,17 +391,21 @@ function agentInitials(name: string): string {
   return `${parts[0][0] || ''}${parts[1][0] || ''}`.toUpperCase();
 }
 
+function agentAvatarDataUri(name: string): string {
+  const initials = agentInitials(name);
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'>
+<rect x='0' y='0' width='24' height='24' rx='12' fill='#1E293B'/>
+<text x='12' y='12' text-anchor='middle' dominant-baseline='central' font-family='Inter,Arial,sans-serif' font-size='9' font-weight='700' fill='white'>${initials}</text>
+</svg>`;
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+}
+
 /** Inline home view — shown when no project selected */
 function ProjectsHome() {
   const [projectQuery, setProjectQuery] = createSignal('');
-  const [sortMode, setSortMode] = createSignal<'activity' | 'name'>('activity');
-  const [defaultProjectLogo, setDefaultProjectLogo] = createSignal<string | undefined>(undefined);
   const projectList = createMemo(() => projects());
   const orderedProjects = createMemo(() =>
     [...projectList()].sort((left, right) => {
-      if (sortMode() === 'name') {
-        return left.name.localeCompare(right.name);
-      }
       if (left.isActive !== right.isActive) return left.isActive ? -1 : 1;
       return right.lastEventAt - left.lastEventAt;
     }),
@@ -451,31 +455,6 @@ function ProjectsHome() {
     return 'Start the daemon, or reconnect it, to populate this workspace.';
   });
 
-  const sortButtonStyle = (mode: 'activity' | 'name') => [
-    'height:30px;padding:0 10px;border-radius:9999px;border:1px solid var(--border);font-size:11px;cursor:pointer;',
-    'transition:background 0.15s,color 0.15s,border-color 0.15s;',
-    sortMode() === mode
-      ? 'background:var(--bg-elevated);color:var(--text-primary);border-color:var(--border-hover);font-weight:600;'
-      : 'background:transparent;color:var(--text-secondary);',
-  ].join('');
-
-  onMount(() => {
-    if (typeof localStorage === 'undefined') return;
-    setDefaultProjectLogo(
-      normalizeLogoUrl(localStorage.getItem(DEFAULT_PROJECT_LOGO_STORAGE_KEY)),
-    );
-  });
-
-  createEffect(() => {
-    if (typeof localStorage === 'undefined') return;
-    const value = defaultProjectLogo();
-    if (value) {
-      localStorage.setItem(DEFAULT_PROJECT_LOGO_STORAGE_KEY, value);
-    } else {
-      localStorage.removeItem(DEFAULT_PROJECT_LOGO_STORAGE_KEY);
-    }
-  });
-
   return (
     <div style="padding:24px 28px;max-width:1400px;margin:0 auto;overflow-y:auto;flex:1;width:100%;">
       <div style="display:flex;flex-direction:column;gap:14px;margin-bottom:20px;">
@@ -498,41 +477,6 @@ function ProjectsHome() {
               style="width:100%;height:34px;border-radius:8px;border:1px solid var(--border);background:var(--bg-card);color:var(--text-primary);padding:0 12px;font-size:12px;"
             />
           </div>
-          <div style="display:flex;align-items:center;gap:6px;">
-            <button
-              onClick={() => setSortMode('activity')}
-              aria-pressed={sortMode() === 'activity'}
-              style={sortButtonStyle('activity')}
-            >
-              Activity
-            </button>
-            <button
-              onClick={() => setSortMode('name')}
-              aria-pressed={sortMode() === 'name'}
-              style={sortButtonStyle('name')}
-            >
-              Name
-            </button>
-          </div>
-          <button
-            onClick={() => {
-              const current = defaultProjectLogo() || '';
-              const next = window.prompt('Default project logo URL (https://... or /path)', current);
-              if (next === null) return;
-              setDefaultProjectLogo(normalizeLogoUrl(next));
-            }}
-            style="height:34px;border-radius:8px;border:1px solid var(--border);background:var(--bg-card);color:var(--text-primary);padding:0 10px;font-size:12px;cursor:pointer;"
-          >
-            Set logo
-          </button>
-          <Show when={defaultProjectLogo()}>
-            <button
-              onClick={() => setDefaultProjectLogo(undefined)}
-              style="height:34px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text-secondary);padding:0 10px;font-size:12px;cursor:pointer;"
-            >
-              Reset logo
-            </button>
-          </Show>
         </div>
       </div>
 
@@ -573,14 +517,13 @@ function ProjectsHome() {
                   <div style="display:flex;align-items:center;gap:8px;min-width:0;">
                     <div
                       style={[
-                        'width:32px;height:32px;border-radius:9px;border:1px solid var(--border);display:flex;align-items:center;justify-content:center;flex-shrink:0;',
-                        'background:linear-gradient(135deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01));',
+                        'width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;',
                       ].join('')}
                     >
                       <img
-                        src={resolveProjectLogo(p, defaultProjectLogo())}
+                        src={resolveProjectLogo(p)}
                         alt=""
-                        style="width:16px;height:16px;opacity:0.95;"
+                        style="width:32px;height:32px;object-fit:cover;"
                       />
                     </div>
                     <div style="min-width:0;display:flex;flex-direction:column;gap:2px;">
@@ -622,16 +565,11 @@ function ProjectsHome() {
                               'overflow:hidden;',
                             ].join('')}
                           >
-                            <Show
-                              when={badge.avatarUrl}
-                              fallback={agentInitials(badge.name)}
-                            >
-                              <img
-                                src={badge.avatarUrl}
-                                alt=""
-                                style="width:100%;height:100%;object-fit:cover;"
-                              />
-                            </Show>
+                            <img
+                              src={agentAvatarDataUri(badge.name)}
+                              alt=""
+                              style="width:100%;height:100%;object-fit:cover;"
+                            />
                           </div>
                         )}
                       </For>

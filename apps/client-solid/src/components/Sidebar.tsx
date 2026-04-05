@@ -89,21 +89,33 @@ function friendlyProjectSummary(text?: string | null): string | undefined {
 
 const DEFAULT_PROJECT_LOGO_STORAGE_KEY = 'pharos.default-project-logo';
 
-function projectFallbackIconDataUri(_projectName: string): string {
+function projectInitials(name: string): string {
+  const initials = name
+    .trim()
+    .split('')
+    .filter((char) => /[a-z0-9]/i.test(char))
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
+  return initials || 'P';
+}
+
+function projectFallbackIconDataUri(projectName: string): string {
+  const initials = projectInitials(projectName);
   const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'>
 <style>
   .bg { fill: #F8FAFC; stroke: #CBD5E1; }
   .core { fill: #E2E8F0; stroke: #94A3B8; }
-  .dot { fill: #334155; }
+  .txt { fill: #334155; }
   @media (prefers-color-scheme: dark) {
     .bg { fill: #0F172A; stroke: #334155; }
     .core { fill: #1E293B; stroke: #94A3B8; }
-    .dot { fill: #CBD5E1; }
+    .txt { fill: #CBD5E1; }
   }
 </style>
 <rect class='bg' x='1' y='1' width='22' height='22' rx='7'/>
 <rect class='core' x='6' y='6' width='12' height='12' rx='3.7' stroke-width='1.1'/>
-<circle class='dot' cx='12' cy='12' r='2.05'/>
+<text class='txt' x='12' y='12' text-anchor='middle' dominant-baseline='central' font-family='Inter,Arial,sans-serif' font-size='6.4' font-weight='700'>${initials}</text>
 </svg>`;
   return `data:image/svg+xml,${encodeURIComponent(svg)}`;
 }
@@ -122,7 +134,7 @@ function resolveProjectLogo(project: ReturnType<typeof projects>[number]): strin
   const custom = typeof localStorage === 'undefined'
     ? undefined
     : normalizeLogoUrl(localStorage.getItem(DEFAULT_PROJECT_LOGO_STORAGE_KEY));
-  return project.iconUrl || custom || projectFallbackIconDataUri(project.name);
+  return custom || projectFallbackIconDataUri(project.name);
 }
 
 function projectInitial(name: string): string {
@@ -139,8 +151,6 @@ function projectCollapsedTitle(project: ReturnType<typeof projects>[number]): st
 
 export default function Sidebar(props: SidebarProps) {
   const [activityFilter, setActivityFilter] = createSignal<'all' | 'active'>('all');
-  const [expandedProject, setExpandedProject] = createSignal<string | null>(null);
-  const [expandedSession, setExpandedSession] = createSignal<string | null>(null);
   const [expandedDocSections, setExpandedDocSections] = createSignal<Record<string, boolean>>({});
 
   const selectedProjectSessions = createMemo(() => {
@@ -389,7 +399,6 @@ export default function Sidebar(props: SidebarProps) {
                 ]
                   .filter(Boolean)
                   .join(' · ') || undefined;
-              const isProjectExpanded = () => expandedProject() === p.name;
               return (
                 <div>
                   {/* Project row */}
@@ -422,16 +431,7 @@ export default function Sidebar(props: SidebarProps) {
                       </span>
                       <span
                         title={primarySummary()}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          setExpandedProject(isProjectExpanded() ? null : p.name);
-                        }}
-                        style={[
-                          'font-size:10px;color:var(--text-primary);cursor:pointer;',
-                          isProjectExpanded()
-                            ? 'white-space:normal;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;'
-                            : 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;',
-                        ].join('')}
+                        style="font-size:10px;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
                       >
                         {primarySummary()}
                       </span>
@@ -520,7 +520,6 @@ export default function Sidebar(props: SidebarProps) {
                   ]
                     .filter(Boolean)
                     .join(' · ') || undefined;
-                const isSessionExpanded = () => expandedSession() === (sessionId() || s.label);
                 return (
                   <div
                     onClick={() => {
@@ -549,17 +548,7 @@ export default function Sidebar(props: SidebarProps) {
                       </span>
                       <span
                         title={friendlySummary(primarySummary())}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          const key = sessionId() || s.label;
-                          setExpandedSession(isSessionExpanded() ? null : key);
-                        }}
-                        style={[
-                          'font-size:10px;color:var(--text-primary);cursor:pointer;',
-                          isSessionExpanded()
-                            ? 'white-space:normal;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;'
-                            : 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;',
-                        ].join('')}
+                        style="font-size:10px;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
                       >
                         {friendlySummary(primarySummary())}
                       </span>

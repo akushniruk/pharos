@@ -218,9 +218,10 @@ impl LiveStateData {
             session_snaps.sort_by(|left, right| right.last_event_at.cmp(&left.last_event_at));
             let summary =
                 resolve_project_summary(&session_snaps, &runtime_labels, active_session_count);
+            let icon_url = resolve_project_icon_url(&name);
             projects.push(ProjectSnapshot {
                 name,
-                icon_url: resolve_project_icon_url(&session_snaps),
+                icon_url,
                 runtime_labels: runtime_labels.into_iter().collect(),
                 sessions: session_snaps,
                 summary,
@@ -619,13 +620,23 @@ fn resolve_session_summary(events: &[LegacyHookEvent], agents: &[AgentSnapshot])
         .or_else(|| active_runtime_summary(events))
 }
 
-fn resolve_project_icon_url(sessions: &[SessionSnapshot]) -> Option<String> {
-    sessions
-        .iter()
-        .flat_map(|session| session.agents.iter())
-        .filter_map(|agent| agent.avatar_url.clone())
-        .next()
-        .or_else(|| Some("/pharos-mark.svg".to_string()))
+fn resolve_project_icon_url(project_name: &str) -> Option<String> {
+    Some(default_project_icon_data_uri(project_name))
+}
+
+fn default_project_icon_data_uri(project_name: &str) -> String {
+    let initials = escape_svg_text(&project_initials(project_name));
+    let svg = format!(
+        "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'>\
+<rect x='1' y='1' width='22' height='22' rx='6' fill='#111827' stroke='#374151'/>\
+<text x='12' y='12' text-anchor='middle' dominant-baseline='central' font-family='Inter,Arial,sans-serif' font-size='8' font-weight='700' fill='white'>{initials}</text>\
+</svg>"
+    );
+    format!("data:image/svg+xml,{}", encode_data_uri_component(&svg))
+}
+
+fn project_initials(name: &str) -> String {
+    initials_from_name(name, "P")
 }
 
 fn resolve_agent_avatar_url(events: &[&LegacyHookEvent], display_name: &str) -> Option<String> {
@@ -653,7 +664,7 @@ fn resolve_agent_avatar_url(events: &[&LegacyHookEvent], display_name: &str) -> 
 }
 
 fn default_agent_avatar_data_uri(runtime: &str, display_name: &str) -> String {
-    let initials = avatar_initials(display_name);
+    let initials = escape_svg_text(&avatar_initials(display_name));
     let fill = runtime_color(runtime);
     let svg = format!(
         "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'>\
@@ -665,19 +676,26 @@ fn default_agent_avatar_data_uri(runtime: &str, display_name: &str) -> String {
 }
 
 fn avatar_initials(name: &str) -> String {
-    let parts = name
-        .split_whitespace()
-        .filter(|part| !part.is_empty())
-        .collect::<Vec<_>>();
-    if parts.is_empty() {
-        return "A".to_string();
+    initials_from_name(name, "A")
+}
+
+fn initials_from_name(name: &str, fallback: &str) -> String {
+    let initials = name
+        .chars()
+        .filter(|c| c.is_alphanumeric())
+        .take(2)
+        .collect::<String>();
+    if initials.is_empty() {
+        return fallback.to_string();
     }
-    if parts.len() == 1 {
-        return parts[0].chars().take(2).collect::<String>().to_uppercase();
-    }
-    let first = parts[0].chars().next().unwrap_or('A');
-    let second = parts[1].chars().next().unwrap_or('G');
-    format!("{}{}", first, second).to_uppercase()
+    initials.to_uppercase()
+}
+
+fn escape_svg_text(value: &str) -> String {
+    value
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
 }
 
 fn runtime_color(runtime: &str) -> &'static str {
@@ -1203,7 +1221,10 @@ fn resolve_lifecycle_status(hook_event_type: &str) -> &'static str {
 mod tests {
     use serde_json::json;
 
-    use super::{AgentSnapshot, LiveState, resolve_session_summary, truncate};
+    use super::{
+        AgentSnapshot, LiveState, default_agent_avatar_data_uri, resolve_project_icon_url,
+        resolve_session_summary, truncate,
+    };
     use crate::model::{
         AcquisitionMode, CapabilitySet, EventEnvelope, EventKind, LegacyHookEvent, RuntimeSource,
         SessionRef,
@@ -1357,6 +1378,21 @@ mod tests {
             .find_map(|agent| agent.avatar_url.as_ref())
             .expect("avatar generated");
         assert!(avatar.starts_with("data:image/svg+xml,"));
+    }
+
+    #[test]
+    fn project_icon_uses_project_initials() {
+        let icon_url = resolve_project_icon_url("pharos").expect("project icon");
+        assert!(icon_url.starts_with("data:image/svg+xml,"));
+        assert!(icon_url.contains("%3EPH%3C%2Ftext%3E"));
+    }
+
+    #[test]
+    fn generated_agent_avatar_escapes_svg_text() {
+        let avatar = default_agent_avatar_data_uri("Cursor", "[<");
+        assert!(avatar.contains("data:image/svg+xml,"));
+        assert!(avatar.contains("%3EA%3C%2Ftext%3E"));
+        assert!(!avatar.contains("%3C%3C%2Ftext%3E"));
     }
 
     #[test]

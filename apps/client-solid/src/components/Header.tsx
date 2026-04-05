@@ -10,12 +10,12 @@ interface HeaderProps {
 }
 
 export default function Header(props: HeaderProps) {
-  const navButtonStyle = (active: boolean) => [
-    'background:none;border:1px solid var(--border);border-radius:6px;',
+  const docsButtonStyle = (active: boolean) => [
+    'background:var(--bg-card);border:1px solid var(--border);border-radius:6px;',
     'padding:4px 10px;cursor:pointer;font-size:12px;font-weight:600;',
-    'color:var(--text-secondary);display:flex;align-items:center;gap:6px;',
-    'transition:border-color 0.15s,color 0.15s,background 0.15s;flex-shrink:0;',
-    active ? 'border-color:var(--accent);color:var(--text-primary);background:var(--bg-card);' : '',
+    'color:var(--text-secondary);display:flex;align-items:center;gap:6px;flex-shrink:0;',
+    'transition:border-color 0.15s,color 0.15s,background 0.15s;',
+    active ? 'border-color:var(--accent);color:var(--text-primary);' : '',
   ].join('');
 
   return (
@@ -36,43 +36,35 @@ export default function Header(props: HeaderProps) {
       </button>
 
       <div style="flex:1;" />
-      <button
-        type="button"
-        onClick={() => props.onNavigateHome?.()}
-        title="Go to root overview"
-        style={navButtonStyle(!props.isDocsRoute)}
-      >
-        Home
-      </button>
-      <button
-        type="button"
-        onClick={() => props.onNavigateDocs?.()}
-        title="Open guide portal"
-        style={navButtonStyle(Boolean(props.isDocsRoute))}
-      >
-        Guide
-      </button>
 
       {/* Right: Theme toggle */}
       <button
         onClick={toggleTheme}
         title={theme() === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
         style={[
-          'background:none;border:1px solid var(--border);border-radius:6px;',
+          'background:none;border:none;border-radius:6px;',
           'padding:4px 8px;cursor:pointer;font-size:14px;',
           'color:var(--text-secondary);display:flex;align-items:center;',
-          'transition:border-color 0.15s,color 0.15s;flex-shrink:0;',
+          'transition:color 0.15s,background 0.15s;flex-shrink:0;',
         ].join('')}
         onMouseEnter={(e) => {
-          (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border-hover)';
+          (e.currentTarget as HTMLButtonElement).style.background = 'var(--bg-elevated)';
           (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-primary)';
         }}
         onMouseLeave={(e) => {
-          (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border)';
+          (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
           (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-secondary)';
         }}
       >
         <Icon path={theme() === 'dark' ? sun : moon} style="width:16px;height:16px" />
+      </button>
+      <button
+        type="button"
+        onClick={() => props.onNavigateDocs?.()}
+        title="Open docs"
+        style={docsButtonStyle(Boolean(props.isDocsRoute))}
+      >
+        Docs
       </button>
     </header>
   );
