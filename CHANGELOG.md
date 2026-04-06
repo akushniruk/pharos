@@ -15,6 +15,7 @@ Release notes for **public** desktop builds should summarize from here into the 
 
 ### Changed
 
+- Root README: remove private issue-tracker links from the brand/naming pointer; keep in-repo `docs/gtm/` paths only.
 - Root README: clarify optional static marketing app under `apps/landing-svelte/` vs canonical README / `docs/` / Releases.
 
 ### Deprecated
