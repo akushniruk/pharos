@@ -11,7 +11,11 @@ Release notes for **public** desktop builds should summarize from here into the 
 
 ### Added
 
+- `apps/landing-svelte/README.md` — Pharos-specific maintainer notes (commands + CI pointer) replacing the Vite template text.
+
 ### Changed
+
+- Root README: clarify optional static marketing app under `apps/landing-svelte/` vs canonical README / `docs/` / Releases.
 
 ### Deprecated
 

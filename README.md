@@ -23,7 +23,7 @@ Strategic hierarchy and external-facing promise (security-led, velocity secondar
 - **A live view of agent sessions** wired to local transcript sources — see activity as structured events, not lost buffer history.
 - **A path to governance-friendly workflows** — pair visibility with how your org already reviews and ships (handoffs, checklists, release discipline).
 - **Two ways to run it** — lightweight **daemon + web UI** for iteration; **Tauri desktop** when you want a packaged app and in-app docs.
-- **Docs and releases as the canonical story** — README + `docs/` + GitHub Releases stay the source of truth (no parallel marketing site requirement).
+- **Docs and releases as the canonical story** — README + `docs/` + GitHub Releases stay the source of truth for the product. An optional **static marketing** shell lives under [`apps/landing-svelte/`](apps/landing-svelte/) for deploy experiments; it does not replace those surfaces.
 
 **Board letter / live naming decision — vote on [PHA-91](/PHA/issues/PHA-91)** (@local-board: reply there). **A/B/C paste-ready copy** (hero + cheat sheet): [docs/gtm/readme-hero-variants-pha36.md](docs/gtm/readme-hero-variants-pha36.md), [docs/gtm/board-vote-cheat-sheet-pha36.md](docs/gtm/board-vote-cheat-sheet-pha36.md). **Canonical vote-frame definitions** (historical thread): [CEO A/B/C frame](/PHA/issues/PHA-36#comment-81a0f3fb-dfda-4762-9f52-89055613f844). **Canonical surfaces:** this repo and **GitHub Releases** — product positioning notes live under [docs/gtm/](docs/gtm/).
 
