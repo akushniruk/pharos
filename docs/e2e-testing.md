@@ -4,8 +4,8 @@
 
 | Layer | Tool | Scope today |
 |-------|------|-------------|
-| **Web dashboard** | Playwright | Built Solid app via `vite preview` — routing, docs shell, static chrome |
-| **Tauri desktop** | Not automated here | Packaged app / native shell — follow-up with `tauri driver`, tagged smoke, or QA manual matrix |
+| **Web dashboard** | Playwright | Built Solid app via `vite preview` — routing, docs shell, overview empty-state + status bar (`e2e/observability-shell.spec.ts`), static smoke (`e2e/smoke.spec.ts`) |
+| **Desktop (Vite docs shell)** | Playwright | Same `vite preview` pattern in `apps/desktop` — smoke + deep-linked reference doc (`e2e/smoke.spec.js`); packaged Tauri still manual / `tauri driver` later |
 | **Daemon + live data** | Not in CI | Requires long-running `pharos-daemon` and fixtures; optional integration job later |
 
 **Why Playwright (not Cypress only):** multi-browser matrix, solid `webServer` hook for Vite preview, and a path to Tauri WebDriver later.
