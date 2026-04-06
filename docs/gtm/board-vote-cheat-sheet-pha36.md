@@ -4,7 +4,7 @@
 
 | Vote | Meaning (summary) | What happens next (high level) |
 |------|-------------------|--------------------------------|
-| **A** | Keep **Pharos** + approved **public-handle** pattern + **pronunciation** line | CEO closes naming thread; CMO applies README / About / X from [`readme-hero-variants-pha36.md`](readme-hero-variants-pha36.md) block **A**. |
+| **A** | Keep **Pharos** + approved **public-handle** pattern (README **without** a pronunciation line) | CEO closes naming thread; CMO applies README / About / X from [`readme-hero-variants-pha36.md`](readme-hero-variants-pha36.md) block **A**. |
 | **B** | Keep **Pharos** with **display variant only** (e.g. “Pharos Open”) — **no** full rebrand | Same as A for engineering; copy uses block **B** in [`readme-hero-variants-pha36.md`](readme-hero-variants-pha36.md). |
 | **C** | **Rebrand** — **Faro** first reserve | **CTO** rename checklist child; **CMO** comms after cutover — use block **C** only when engineering is green. |
 

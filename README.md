@@ -173,6 +173,7 @@ npx tauri icon ../../assets/brand/pharos-mark-square.svg
 
 | Topic | Doc |
 | --- | --- |
+| Contributing (expectations, dev, PRs) | [CONTRIBUTING.md](CONTRIBUTING.md) |
 | Releases: tags, drafts, smoke, QA checklist | [docs/releases.md](docs/releases.md) |
 | GitHub Release body template (desktop) | [docs/gtm/github-release-desktop-template.md](docs/gtm/github-release-desktop-template.md) |
 | MVP observability slice + API verification | [docs/mvp-observability-slice.md](docs/mvp-observability-slice.md) |

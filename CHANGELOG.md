@@ -20,7 +20,7 @@ Release notes for **public** desktop builds should summarize from here into the 
 
 ### Changed
 
-- README: drop the **Pronunciation** line from the hero; point **Contributing** and **License** to `CONTRIBUTING.md` and `LICENSE` ([PHA-115](/PHA/issues/PHA-115)).
+- README: drop the **Pronunciation** line from the hero; point **Contributing** and **License** to `CONTRIBUTING.md` and `LICENSE`; GTM README variant + board cheat sheet aligned (no hero pronunciation line) ([PHA-115](/PHA/issues/PHA-115)).
 - Docs portal index, root README, in-app `/docs` home and “What is Pharos?”, and `site/onboarding-homepage.html` meta/subhead aligned with the security-first GTM lock and canonical external promise in [docs/gtm/launch-narrative-v1.md](docs/gtm/launch-narrative-v1.md) ([PHA-81](/PHA/issues/PHA-81)).
 - Desktop `/docs` UX: denser sidebar nav, readable article measure (~72ch) and heading scale, skip link, in-page TOC with scroll-aware highlight, mobile slide-in drawer + backdrop (Docs menu), loading skeletons for article and TOC, and clearer missing-page copy — aligned with [docs/design/docs-page-ux-spec.md](docs/design/docs-page-ux-spec.md) ([PHA-58](/PHA/issues/PHA-58)).
 - README: engineering-factual dev docs — root `Makefile` targets and ports **4000** / **5173** for daemon + Solid client, split from Tauri desktop (**1420**), accurate CI pointers (`ci-e2e`, `ci-desktop`), `v*.*.*` release policy cross-link, and layout rows for `apps/daemon-rs` + `apps/client-solid` ([PHA-80](/PHA/issues/PHA-80)).
