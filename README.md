@@ -2,39 +2,77 @@
 
 **Pronunciation:** *FAIR-oss* (like “pharaoh,” lighthouse — a signal you can trust.)
 
-> Observable, governable AI coding agents — see what runs on your machine, control it, and ship with proof.
+[Quickstart](#quickstart) · [Architecture](#architecture) · [Documentation](#documentation) · [Contributing](#contributing)
 
-**Canonical external promise (GitHub / releases / threads):** *See what your coding agent does, govern it, and prove it — then ship faster because the system is inspectable.* Strategic hierarchy (security-led, velocity secondary): [docs/gtm/launch-narrative-v1.md](docs/gtm/launch-narrative-v1.md).
+[![Release desktop (draft)](https://github.com/akushniruk/pharos/actions/workflows/release-desktop.yml/badge.svg)](https://github.com/akushniruk/pharos/actions/workflows/release-desktop.yml)
 
-Pharos makes **AI coding agents observable and governable** on your machine: see what ran, under what rules, and prove it — so security and platform teams can say **yes** to agents without trading away clarity. Speed follows once the lights are on.
+## What is Pharos?
 
-**On this page:** [Quickstart](#quickstart) · [Development](#development) · [Architecture](#architecture) · [Documentation](#documentation) · [FAQ](#faq) · [Contributing](#contributing)
+Pharos is a **local observability layer** for AI coding agents: a Rust daemon tails agent session transcripts on your machine, normalizes them into a stream of events, and a Solid dashboard (or desktop shell) shows what ran — with enough structure to review, hand off, and prove what happened.
+
+**In one line:** your agent’s chat is the *conversation*; Pharos is the **flight recorder** for what it actually did in your repos and environments.
+
+Strategic hierarchy and external-facing promise (security-led, velocity secondary): [docs/gtm/launch-narrative-v1.md](docs/gtm/launch-narrative-v1.md).
 
 ## Who it’s for
 
-- **Security and platform teams** who need audit-friendly visibility into agent execution in real repos.
-- **Engineering leads** adopting coding agents without losing reviews, handoffs, and accountability.
-- **Developers** who want to understand what an agent did on **their** machine — not just read a chat transcript.
-
-## Why observable agents
-
-Most agent tools optimize for **output**. Pharos focuses on **observability** and **understandability**: durable signals about what ran, with permissions and context you can reason about. That is how you ship with confidence as agents become everyday participants in your workflow — so you always know what is running on your machine and can steer agent use with clarity.
+- **Security and platform teams** who need inspectable evidence of agent activity on real developer machines — not screenshots of a thread.
+- **Engineering leads** rolling out coding agents without losing accountability, review habits, or change control.
+- **Builders** who run agents daily and want a **durable signal** of sessions, steps, and outcomes across restarts.
 
 ## What you get
 
-- **Observable by default** — surface runs, steps, and outcomes so nothing “mysteriously” edits your project.
-- **Built for real workflows** — reviews, handoffs, and accountability — not one-off chats.
-- **Confidence at scale** — govern agent use as adoption grows. We lead with **trust, control, and auditability** before “raw speed.” For narrative framing and paste-ready hero variants, see [docs/gtm/readme-hero-variants-pha36.md](docs/gtm/readme-hero-variants-pha36.md) and the board-facing cheat sheet [docs/gtm/board-vote-cheat-sheet-pha36.md](docs/gtm/board-vote-cheat-sheet-pha36.md).
+- **A live view of agent sessions** wired to local transcript sources — see activity as structured events, not lost buffer history.
+- **A path to governance-friendly workflows** — pair visibility with how your org already reviews and ships (handoffs, checklists, release discipline).
+- **Two ways to run it** — lightweight **daemon + web UI** for iteration; **Tauri desktop** when you want a packaged app and in-app docs.
+- **Docs and releases as the canonical story** — README + `docs/` + GitHub Releases stay the source of truth (no parallel marketing site requirement).
 
-**Canonical surfaces:** this repo (README, `docs/`) and **GitHub Releases** — not a standalone marketing site. Product positioning notes live under [docs/gtm/](docs/gtm/).
+Paste-ready hero variants and board-facing cheat sheets: [docs/gtm/readme-hero-variants-pha36.md](docs/gtm/readme-hero-variants-pha36.md), [docs/gtm/board-vote-cheat-sheet-pha36.md](docs/gtm/board-vote-cheat-sheet-pha36.md). **Canonical surfaces:** this repo and **GitHub Releases** — product positioning notes live under [docs/gtm/](docs/gtm/).
+
+## The problem
+
+| Without a local observability layer | With Pharos |
+| --- | --- |
+| Agent work disappears into chat scrollback and scattered logs | Sessions and events stay **addressable** — skim, search, and trace what happened |
+| Hard to answer “what ran, where, and under what assumptions?” | **Structured events** from transcripts make behavior legible |
+| Tooling optimizes for *output*; risk and compliance need *evidence* | **Observable by default** so teams can say yes without flying blind |
+| Every developer reinvents “tail this folder, grep JSONL…” | One daemon + dashboard **convention** for the workspace |
+
+## Why observability first
+
+| Principle | What it means in Pharos |
+| --- | --- |
+| **Local truth** | Reads from **your** session files; you control retention and scope |
+| **Event-shaped** | Canonical envelope in `apps/daemon-rs/src/model.rs` — stable enough to build on |
+| **Inspectable surface** | WebSocket stream + UI — humans can **see** activity, not only automate against it |
+| **Ship-ready discipline** | Fits release checklists and engineering runbooks already in `docs/` |
+
+## What Pharos is not
+
+| It is not… | Because… |
+| --- | --- |
+| A replacement for your agent product | It **observes** sessions; it doesn’t compete with Claude, Codex, Cursor, etc. |
+| A hosted SaaS control plane | Core flow is **local**: daemon + your filesystem context |
+| A full policy engine (yet) | It helps you **see** behavior; orgs layer policy where they already enforce it |
+| A single chat window | It’s a **dashboard + stream** for runs across sessions |
+| Magic compliance in a box | It’s the **evidence layer** — you still define what “good” means |
 
 ## Quickstart
 
-- **Star / watch** this repo for releases and default-branch doc updates.
-- **Releases & changelog** — [docs/releases.md](docs/releases.md), [CHANGELOG.md](CHANGELOG.md); paste-ready Release body: [docs/gtm/github-release-desktop-template.md](docs/gtm/github-release-desktop-template.md).
-- **Desktop app (Tauri)** — `apps/desktop`; `npm ci && npm run tauri build` (Rust **1.88+** via `apps/desktop/src-tauri/rust-toolchain.toml`); icons from `assets/brand/pharos-mark-square.svg` via `npx tauri icon`.
-- **MVP observability slice** — [docs/mvp-observability-slice.md](docs/mvp-observability-slice.md).
-- **Engineering runbook** — [docs/cto-runbook.md](docs/cto-runbook.md).
+**Prerequisites:** Rust **1.88.0** (repo [`rust-toolchain.toml`](rust-toolchain.toml)) and **pnpm** for the client.
+
+```bash
+git clone https://github.com/akushniruk/pharos.git
+cd pharos
+make daemon   # terminal 1 — daemon on :4000
+make client   # terminal 2 — dashboard on :5173
+```
+
+Open `http://127.0.0.1:5173` and watch sessions as the daemon tails local agent transcripts.
+
+**Desktop app:** see [Development → Desktop app](#desktop-development) (Tauri + Vite, dev server on `:1420`).
+
+**Next:** [Architecture](#architecture) · [MVP observability slice](docs/mvp-observability-slice.md) · [Releases](docs/releases.md)
 
 ## Development
 
@@ -69,6 +107,8 @@ make client   # terminal 2 — http://127.0.0.1:5173
 ```
 
 **CI:** [`.github/workflows/ci-e2e.yml`](.github/workflows/ci-e2e.yml) runs Playwright against `apps/client-solid` when that tree changes. [`.github/workflows/ci-desktop.yml`](.github/workflows/ci-desktop.yml) verifies desktop manifests and runs desktop Playwright tests when `apps/desktop` (or related release scripts) change. Rust daemon coverage is **`make test` locally** for now — there is no dedicated `apps/daemon-rs` workflow in `.github/workflows/` yet.
+
+<a id="desktop-development"></a>
 
 ### Desktop app (Tauri 2 + Vite, `apps/desktop`)
 
@@ -108,8 +148,6 @@ npx tauri icon ../../assets/brand/pharos-mark-square.svg
 (Tauri’s SVG parser rejects XML `<!-- comments -->` in the source file.)
 
 **Releases:** Ship **semantic version tags** `v*.*.*` per [docs/releases.md](docs/releases.md); [`.github/workflows/release-desktop.yml`](.github/workflows/release-desktop.yml) builds installers and opens a **draft** GitHub Release on those tags.
-
-[![Release desktop (draft)](https://github.com/akushniruk/pharos/actions/workflows/release-desktop.yml/badge.svg)](https://github.com/akushniruk/pharos/actions/workflows/release-desktop.yml)
 
 ## Architecture
 
@@ -152,13 +190,6 @@ npx tauri icon ../../assets/brand/pharos-mark-square.svg
 - **What runs where?** The **daemon + Solid dashboard** use **4000** (HTTP/WebSocket) and **5173** (Vite) by default (`make daemon` / `make client`). The **Tauri desktop** dev shell loads **1420** (`npm run tauri dev` under `apps/desktop`). They are separate stacks; you do not need both unless you are working on both.
 - **Where is “truth” for events and sessions?** Session scan, JSONL tail, WebSocket fan-out, and the canonical event shape live in [`apps/daemon-rs`](apps/daemon-rs) — see [`apps/daemon-rs/src/model.rs`](apps/daemon-rs/src/model.rs) and [docs/mvp-observability-slice.md](docs/mvp-observability-slice.md).
 - **How do releases work?** Desktop ships on **semantic version tags** `v*.*.*` with a **draft** GitHub Release and attached bundles — see [docs/releases.md](docs/releases.md) and [CHANGELOG.md](CHANGELOG.md).
-
-## What Pharos is not
-
-- **Not a replacement for your coding agent** — Pharos observes and surfaces what agents already do locally; it does not replace Claude Code, Cursor, Codex, or similar runtimes.
-- **Not a hosted control plane** — this repo is oriented around **local** observation (daemon + desktop). There is no requirement to send transcripts to a SaaS to get value from the OSS slice.
-- **Not a full enterprise GRC suite** — Pharos emphasizes inspectability and durable signals for engineering and security partners; map it to your wider compliance program as needed.
-- **Not legal advice** — governance and audit language here is product direction, not counsel.
 
 ## Contributing
 
