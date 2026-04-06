@@ -5,6 +5,7 @@
 
 SERVER_PORT ?= 4000
 CLIENT_PORT ?= 5173
+LANDING_PORT ?= 5174
 PROJECT_ROOT := $(shell pwd)
 CARGO := cargo
 RUN_DIR := $(PROJECT_ROOT)/.run
@@ -14,7 +15,7 @@ CLIENT_PID_FILE := $(RUN_DIR)/client.pid
 DAEMON_DB_PATH ?= $(PROJECT_ROOT)/apps/daemon-rs/pharos-daemon.db
 DAEMON_BIN := $(PROJECT_ROOT)/apps/daemon-rs/target/debug/pharos-daemon
 
-.PHONY: help dev up down daemon client build test health open db-reset line-budget
+.PHONY: help dev up down daemon client landing build build-landing test health open db-reset line-budget
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -32,6 +33,9 @@ daemon: ## Start the Pharos daemon (port $(SERVER_PORT))
 
 client: ## Start client dev server (port $(CLIENT_PORT))
 	cd $(PROJECT_ROOT)/apps/client-solid && VITE_PORT=$(CLIENT_PORT) pnpm dev
+
+landing: ## Start the Svelte marketing landing dev server (port $(LANDING_PORT))
+	cd $(PROJECT_ROOT)/apps/landing-svelte && pnpm dev
 
 up: ## Start daemon + client in background and write pid files
 	@mkdir -p $(RUN_DIR) $(LOG_DIR)
@@ -101,6 +105,9 @@ down: ## Stop background daemon + client started by make up/dev
 
 build: ## Build client for production
 	cd $(PROJECT_ROOT)/apps/client-solid && pnpm build
+
+build-landing: ## Build Svelte marketing landing for production
+	cd $(PROJECT_ROOT)/apps/landing-svelte && pnpm install && pnpm build
 
 install: ## Install client dependencies
 	cd $(PROJECT_ROOT)/apps/client-solid && pnpm install
