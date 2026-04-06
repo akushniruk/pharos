@@ -5,8 +5,8 @@
   "build": {
     "frontendDist": "../../client-solid/dist",
     "devUrl": "http://localhost:5173",
-    "beforeDevCommand": "cd ../../client-solid && pnpm dev",
-    "beforeBuildCommand": "cd ../../client-solid && pnpm build"
+    "beforeDevCommand": "cd ../client-solid && pnpm dev",
+    "beforeBuildCommand": "cd ../client-solid && pnpm build"
   },
   "app": {
     "windows": [

@@ -19,4 +19,4 @@ make client    # start Solid dev server on port 5173
 make test      # run Rust tests
 ```
 
-Rust edition 2024 — use `rustup run 1.85.1 cargo` for all cargo commands.
+Rust edition 2024 — the repo pins **1.88.0** in `rust-toolchain.toml` (required for the Tauri desktop stack). Run `cargo` from the repo; rustup picks up the toolchain automatically.

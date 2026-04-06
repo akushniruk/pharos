@@ -6,7 +6,7 @@
 SERVER_PORT ?= 4000
 CLIENT_PORT ?= 5173
 PROJECT_ROOT := $(shell pwd)
-CARGO := rustup run 1.85.1 cargo
+CARGO := cargo
 RUN_DIR := $(PROJECT_ROOT)/.run
 LOG_DIR := $(RUN_DIR)/logs
 DAEMON_PID_FILE := $(RUN_DIR)/daemon.pid
