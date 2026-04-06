@@ -2,6 +2,26 @@
 
 - **Rust daemon:** `apps/daemon-rs` — run `cargo test` and `cargo clippy` from that crate (or `make test` at repo root).
 - **Solid dashboard:** `apps/client-solid` — `pnpm install`, `pnpm run build`, `pnpm run test`.
-- **Commits:** Keep changes scoped; follow existing style in touched files.
+- **Landing page:** `apps/landing-svelte` — Svelte + Vite.
+- **Commits:** Keep changes scoped; follow existing style in touched files. **No `Co-authored-by` trailers.**
 
 For architecture terms and data flow, see **`CLAUDE.md`**.
+
+## Learned User Preferences
+
+- Branding: product name is **Pharos** (not "Pharos.io").
+- UI: no outline/border decorations on interactive elements.
+- UI: dark-mode text contrast must pass accessibility — flag low-contrast text proactively.
+- UI: content, demos, and examples must look realistic, not fake/placeholder.
+- UI: reuse the same component for identical patterns across views — don't create duplicates.
+- Project avatars use 2-letter initials (e.g. "PH"), no images or white backgrounds.
+- Graph visualizations should use metro/subway-line style.
+- Keep the existing logo — do not redesign unless explicitly asked.
+
+## Learned Workspace Facts
+
+- GitHub repo: `https://github.com/akushniruk/pharos`
+- Current version: 0.01 (pre-launch, open-source MIT).
+- Distribution: desktop app (Tauri wrapping SolidJS dashboard) is primary; daemon + web UI also for VPS.
+- Dalaran (`~/home_projects/dalaran`) is a separate Obsidian vault used for docs.
+- Product-marketing context lives at `.agents/product-marketing-context.md`.

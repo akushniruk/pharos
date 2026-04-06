@@ -16,8 +16,9 @@ apps/landing-svelte/dist/
 # Local dev (daemon/client PIDs and logs)
 .run/
 
-# Cursor — machine-local hook state only
+# Cursor — machine-local hook state and MCP config
 .cursor/hooks/state/
+.cursor/mcp.json
 
 # Secrets / local env (keep examples tracked explicitly if you add them)
 .env
