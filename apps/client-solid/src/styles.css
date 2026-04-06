@@ -3,6 +3,8 @@
    ======================================== */
 
 :root[data-theme="dark"], :root:not([data-theme]) {
+  /* Graph canvas: ux-spec bg-canvas — recessed stage vs panels using --bg-secondary (PHA-20 ux-spec). */
+  --bg-canvas: #0a0a0a;
   --bg-primary: #0a0a0a;
   --bg-secondary: #111111;
   --bg-card: #171717;
@@ -28,6 +30,7 @@
 }
 
 :root[data-theme="light"] {
+  --bg-canvas: #fafafa;
   --bg-primary: #ffffff;
   --bg-secondary: #fafafa;
   --bg-card: #f4f4f5;
@@ -482,14 +485,39 @@ body {
 }
 
 .graph-agent-filter-tabpanel {
-  position: absolute;
-  top: 12px;
-  left: 12px;
-  z-index: 10;
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+}
+
+.graph-graph-toolbar {
+  flex-shrink: 0;
+}
+
+.graph-graph-toolbar .pill-tabs.graph-agent-filter-tabs {
+  gap: 8px;
 }
 
 .graph-agent-filter-tabs {
   flex-wrap: nowrap;
+}
+
+.graph-empty-clear-filters {
+  margin-top: 4px;
+  padding: 0;
+  border: none;
+  background: none;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--accent);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.graph-empty-clear-filters:hover {
+  color: var(--accent-hover);
 }
 
 .event-stream-toolbar-actions {

@@ -1,4 +1,6 @@
 import { For, Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
+import { Icon } from 'solid-heroicons';
+import { squares_2x2 } from 'solid-heroicons/solid';
 import {
   graphAgents,
   graphScopeEvents,
@@ -14,14 +16,18 @@ import {
   type GraphNode,
   agentLabel,
   computeHierarchicalLayout,
+  graphSecondaryLine,
+  graphTelemetryMeta,
   METRO_COLORS,
   NODE_H,
   NODE_W,
   stableTextHash,
   statusDot,
-  summarizeMeta,
   wrapLabel,
 } from '../widgets/agent-graph/graphLayout';
+
+const ZOOM_MIN = 0.35;
+const ZOOM_MAX = 2;
 
 export default function AgentGraph() {
   const [zoom, setZoom] = createSignal(1);
@@ -32,6 +38,7 @@ export default function AgentGraph() {
   const [selectedGraphId, setSelectedGraphId] = createSignal<string | null>(null);
   const [focusedRootGraphId, setFocusedRootGraphId] = createSignal<string | null>(null);
   const [graphViewport, setGraphViewport] = createSignal<HTMLDivElement | undefined>();
+  const [hoveredEdgeKey, setHoveredEdgeKey] = createSignal<string | null>(null);
   const graphNodes = createMemo<GraphNode[]>(() => {
     const all = graphAgents();
     if (all.length === 0) return [];
@@ -182,14 +189,17 @@ export default function AgentGraph() {
     const ch = el.clientHeight;
     if (cw < 24 || ch < 24) return;
     const L = layout();
-    const z = Math.min(2.5, Math.max(0.3, Math.min(cw / L.width, ch / L.height) * 0.92));
+    const z = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.min(cw / L.width, ch / L.height) * 0.92));
     setZoom(z);
     setPan({ x: (cw - L.width * z) / 2, y: (ch - L.height * z) / 2 });
   };
 
+  /** Refit when visible nodes or viewport change. Filter is included via roots/children signatures (ux-spec §1 soft refit: layout recomputes immediately when filter changes). */
   createEffect(() => {
-    filter();
     graphViewport();
+    layout().width;
+    layout().height;
+    filter();
     roots()
       .map((node) => node.graphId)
       .join('|');
@@ -218,7 +228,7 @@ export default function AgentGraph() {
   };
   const onWheel = (e: WheelEvent) => {
     e.preventDefault();
-    setZoom(z => Math.max(0.3, Math.min(2.5, z + (e.deltaY > 0 ? -0.08 : 0.08))));
+    setZoom(z => Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, z + (e.deltaY > 0 ? -0.08 : 0.08))));
   };
   const onMouseDown = (e: MouseEvent) => {
     if (e.button !== 0) return;
@@ -232,44 +242,70 @@ export default function AgentGraph() {
   const onMouseUp = () => setDragging(false);
   const rootCount = () => roots().length;
 
+  const parentPrimaryForMeta = (child: GraphNode): string | undefined => {
+    const pid = child.parentGraphId;
+    if (!pid) return undefined;
+    const parent = nodeById().get(pid);
+    if (!parent) return undefined;
+    const [lineOne] = wrapLabel(agentLabel(parent));
+    return lineOne;
+  };
+
   return (
     <div
-      style="flex:1;overflow:hidden;position:relative;cursor:grab;user-select:none;"
-      onWheel={onWheel}
-      onMouseDown={onMouseDown}
-      onMouseMove={onMouseMove}
-      onMouseUp={onMouseUp}
-      onMouseLeave={onMouseUp}
+      style="flex:1;overflow:hidden;position:relative;display:flex;flex-direction:column;min-height:0;background:var(--bg-canvas);user-select:none;"
     >
-      <GraphAgentFilterTabPanel
-        value={filter()}
-        onChange={setFilter}
-        counts={{
-          active: graphNodes().filter((node) => isNodeActive(node)).length,
-          idle: graphNodes().filter((node) => !isNodeActive(node)).length,
-          all: graphNodes().length,
-        }}
-      />
-
-      {/* Zoom controls bottom-right */}
-      <div style="position:absolute;bottom:12px;right:12px;display:flex;gap:4px;z-index:10;">
-        <button class="graph-zoom-btn" onClick={() => setZoom(z => Math.min(2.5, z + 0.2))}>+</button>
-        <button class="graph-zoom-btn graph-zoom-btn--fit" type="button" onClick={() => applyGraphFit()}>Fit</button>
-        <button class="graph-zoom-btn" onClick={() => setZoom(z => Math.max(0.3, z - 0.2))}>-</button>
+      <div class="event-stream-toolbar graph-graph-toolbar">
+        <GraphAgentFilterTabPanel
+          value={filter()}
+          onChange={setFilter}
+          counts={{
+            active: graphNodes().filter((node) => isNodeActive(node)).length,
+            idle: graphNodes().filter((node) => !isNodeActive(node)).length,
+            all: graphNodes().length,
+          }}
+        />
       </div>
 
       <div
-        ref={setGraphViewport}
-        id={PANEL_ID}
-        role="tabpanel"
-        aria-labelledby={TAB_IDS[filter()]}
-        style="position:absolute;inset:0;overflow:hidden;"
+        style="flex:1;position:relative;min-height:0;cursor:grab;"
+        onWheel={onWheel}
+        onMouseDown={onMouseDown}
+        onMouseMove={onMouseMove}
+        onMouseUp={onMouseUp}
+        onMouseLeave={onMouseUp}
       >
+        {/* Zoom controls bottom-right */}
+        <div style="position:absolute;bottom:12px;right:12px;display:flex;gap:8px;z-index:10;">
+          <button type="button" class="graph-zoom-btn" onClick={() => setZoom(z => Math.min(ZOOM_MAX, z + 0.2))}>+</button>
+          <button type="button" class="graph-zoom-btn graph-zoom-btn--fit" onClick={() => applyGraphFit()}>Fit</button>
+          <button type="button" class="graph-zoom-btn" onClick={() => setZoom(z => Math.max(ZOOM_MIN, z - 0.2))}>-</button>
+        </div>
+
+        <div
+          ref={setGraphViewport}
+          id={PANEL_ID}
+          role="tabpanel"
+          aria-labelledby={TAB_IDS[filter()]}
+          style="position:absolute;inset:0;overflow:hidden;background:var(--bg-canvas);"
+        >
         <Show when={nodes().length > 0} fallback={
-          <div style="display:flex;align-items:center;justify-content:center;height:100%;padding:28px;">
-            <div style="max-width:420px;padding:18px 20px;border:1px solid var(--border);border-radius:14px;text-align:center;">
-              <p style="font-size:var(--text-base);font-weight:600;color:var(--text-primary);margin-bottom:6px;">No agents to display</p>
-              <p style="font-size:var(--text-sm);line-height:1.5;color:var(--text-dim);">Try changing the filter or selecting a different project.</p>
+          <div style="display:flex;align-items:center;justify-content:center;height:100%;padding:24px 16px;">
+            <div style="max-width:360px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:12px;">
+              <Icon path={squares_2x2} style="width:28px;height:28px;color:var(--text-tertiary);flex-shrink:0;" />
+              <p style="font-size:var(--text-base);font-weight:600;color:var(--text-primary);margin:0;">No agents to show</p>
+              <p style="font-size:var(--text-sm);line-height:1.5;color:var(--text-secondary);margin:0;">
+                Add an agent or adjust filters to see relationships on the graph.
+              </p>
+              <Show when={filter() !== 'all'}>
+                <button
+                  type="button"
+                  class="graph-empty-clear-filters"
+                  onClick={() => setFilter('all')}
+                >
+                  Clear filters
+                </button>
+              </Show>
             </div>
           </div>
         }>
@@ -279,20 +315,13 @@ export default function AgentGraph() {
             viewBox={`0 0 ${layout().width} ${layout().height}`}
             style={`transform:translate(${pan().x}px,${pan().y}px);`}
           >
-          <defs>
-            <filter id="metro-glow" x="-50%" y="-50%" width="200%" height="200%">
-              <feGaussianBlur stdDeviation="2.5" result="blur" />
-              <feMerge>
-                <feMergeNode in="blur" />
-                <feMergeNode in="SourceGraphic" />
-              </feMerge>
-            </filter>
-          </defs>
 
-          {/* Edges */}
+          {/* Edges — rest 1px, hover/focus 1.5px (ux-spec §1). */}
           <For each={edges()}>
             {(edge) => {
               const pathD = () => edgePath(edge.parentId, edge.childId);
+              const hovered = () => hoveredEdgeKey() === edge.key;
+              const strokeW = () => (hovered() ? 1.5 : 1);
               return (
                 <Show when={pathD()}>
                   <>
@@ -300,14 +329,16 @@ export default function AgentGraph() {
                       d={pathD()!}
                       fill="none"
                       stroke={edge.lineColor}
-                      stroke-opacity={edge.isActive ? '0.78' : '0.5'}
-                      stroke-width={edge.isActive ? '3' : '2.2'}
-                      stroke-dasharray={edge.isActive ? undefined : '8 8'}
+                      stroke-opacity={edge.isActive ? '0.72' : '0.42'}
+                      stroke-width={strokeW()}
+                      stroke-dasharray={edge.isActive ? undefined : '6 6'}
                       stroke-linecap="round"
-                      filter="url(#metro-glow)"
+                      style={{ 'pointer-events': 'stroke' }}
+                      onMouseEnter={() => setHoveredEdgeKey(edge.key)}
+                      onMouseLeave={() => setHoveredEdgeKey(null)}
                     />
                     <Show when={edge.isActive}>
-                      <circle r="3.2" fill={edge.lineColor} opacity="0.95">
+                      <circle r="2.5" fill={edge.lineColor} opacity="0.9" style={{ 'pointer-events': 'none' }}>
                         <animateMotion
                           dur={`${1.9 + (edge.key.length % 5) * 0.25}s`}
                           repeatCount="indefinite"
@@ -331,6 +362,15 @@ export default function AgentGraph() {
                 selectedGraphId() === agent.graphId
                 || (agent.agentId ? selectedId === agent.agentId : false);
               const [lineOne, lineTwo] = wrapLabel(agentLabel(agent));
+              const secondary = graphSecondaryLine(agent);
+              const hasSecondPrimary = Boolean(lineTwo);
+              const secondaryBaseline = hasSecondPrimary ? 58 : 42;
+              const metaBaseline = secondary
+                ? (hasSecondPrimary ? 76 : 60)
+                : (hasSecondPrimary ? 60 : 48);
+              const statusBaseline = secondary
+                ? (hasSecondPrimary ? 92 : 76)
+                : (hasSecondPrimary ? 76 : 62);
               const lineColor = () => nodeLineColor(agent.graphId);
               const nodeStroke = () => (isSel() ? 'var(--accent)' : lineColor());
               return (
@@ -352,26 +392,66 @@ export default function AgentGraph() {
                   }}
                 >
                   <rect
-                    x={pos().x} y={pos().y} width={NODE_W} height={NODE_H} rx="10"
+                    x={pos().x} y={pos().y} width={NODE_W} height={NODE_H} rx="8"
                     fill="var(--bg-secondary)"
                     stroke={nodeStroke()}
                     stroke-opacity={isSel() ? 1 : 0.72}
-                    stroke-width={isSel() ? 2.4 : 1.8}
+                    stroke-width={isSel() ? 2 : 1.5}
                   />
-                  <circle cx={pos().x + 16} cy={pos().y + 18} r="6.5" fill={lineColor()} opacity="0.22" />
-                  <circle cx={pos().x + 16} cy={pos().y + 18} r="4.5" fill={statusDot(agent)} />
-                  <text x={pos().x + 30} y={pos().y + 22} font-size="16" font-weight="700" fill="var(--text-primary)" font-family="var(--font-sans)">
+                  <circle cx={pos().x + 14} cy={pos().y + 20} r="5" fill={lineColor()} opacity="0.2" />
+                  <circle cx={pos().x + 14} cy={pos().y + 20} r="3.5" fill={statusDot(agent)} />
+                  <text
+                    x={pos().x + 28}
+                    y={pos().y + 24}
+                    font-size="15"
+                    font-weight="600"
+                    fill="var(--text-primary)"
+                    font-family="var(--font-sans)"
+                  >
                     {lineOne}
                   </text>
                   <Show when={lineTwo}>
-                    <text x={pos().x + 30} y={pos().y + 38} font-size="16" font-weight="700" fill="var(--text-primary)" font-family="var(--font-sans)">
+                    <text
+                      x={pos().x + 28}
+                      y={pos().y + 40}
+                      font-size="15"
+                      font-weight="600"
+                      fill="var(--text-primary)"
+                      font-family="var(--font-sans)"
+                    >
                       {lineTwo}
                     </text>
                   </Show>
-                  <text x={pos().x + 16} y={pos().y + 62} font-size="14" fill="var(--text-secondary)" font-family="var(--font-sans)">
-                    {summarizeMeta(agent)}
+                  <Show when={secondary}>
+                    <text
+                      x={pos().x + 12}
+                      y={pos().y + secondaryBaseline}
+                      font-size="13"
+                      font-weight="400"
+                      fill="var(--text-secondary)"
+                      font-family="var(--font-sans)"
+                    >
+                      {secondary}
+                    </text>
+                  </Show>
+                  <text
+                    x={pos().x + 12}
+                    y={pos().y + metaBaseline}
+                    font-size="12"
+                    font-weight="400"
+                    fill="var(--text-tertiary)"
+                    font-family="var(--font-mono)"
+                  >
+                    {graphTelemetryMeta(agent, parentPrimaryForMeta(agent))}
                   </text>
-                  <text x={pos().x + 16} y={pos().y + 78} font-size="14" fill="var(--text-dim)" font-family="var(--font-sans)">
+                  <text
+                    x={pos().x + 12}
+                    y={pos().y + statusBaseline}
+                    font-size="11"
+                    font-weight="400"
+                    fill="var(--text-tertiary)"
+                    font-family="var(--font-sans)"
+                  >
                     {!agent.parentGraphId
                       ? `${rootCount()} root${rootCount() === 1 ? '' : 's'}`
                       : agent.isActive
@@ -387,6 +467,7 @@ export default function AgentGraph() {
 
           </svg>
         </Show>
+        </div>
       </div>
     </div>
   );

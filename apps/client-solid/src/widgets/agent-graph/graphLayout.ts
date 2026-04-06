@@ -1,13 +1,17 @@
 import type { AgentInfo } from '../../lib/types';
 import { mapAgentTypeLabel } from '../../lib/agentNaming';
 
-export const NODE_W = 248;
-export const NODE_H = 94;
-export const H_GAP = 30;
-export const V_GAP = 86;
+/**
+ * Graph layout constants — [PHA-20](/PHA/issues/PHA-20) ux-spec §1 (8px grid, node 200–280px wide).
+ * `PAD` aliases spec `space.page-inline` (24px canvas inset); no separate token in theme yet.
+ */
+export const NODE_W = 240;
+export const NODE_H = 104;
+export const H_GAP = 24;
+export const V_GAP = 80;
 export const MAX_PER_ROW = 5;
-export const PAD = 40;
-export const CLUSTER_GAP = 36;
+export const PAD = 24;
+export const CLUSTER_GAP = 32;
 export const METRO_COLORS = [
   '#22c55e',
   '#3b82f6',
@@ -97,6 +101,29 @@ export function summarizeMeta(agent: AgentInfo): string {
   const model = agent.modelName?.trim();
   if (model) return `${agent.eventCount} events · ${model}`;
   return `${agent.eventCount} events`;
+}
+
+/** Secondary line: role / adapter — spec `text-body-sm` (truncate tail). */
+export function graphSecondaryLine(agent: GraphNode): string {
+  const runtime = agent.runtimeLabel?.replace(/\s+/g, ' ').trim();
+  if (runtime && !isNoisyRoleLabel(runtime)) {
+    return runtime.length > 44 ? `${runtime.slice(0, 41)}…` : runtime;
+  }
+  if (agent.agentType && agent.agentType !== 'main') {
+    const mapped = mapAgentTypeLabel(agent.agentType);
+    if (mapped && mapped !== 'Session') return mapped;
+  }
+  const model = shortModelName(agent.modelName || '');
+  return model.length > 44 ? `${model.slice(0, 41)}…` : model;
+}
+
+/** Caption meta: telemetry + optional parent hint (`text-caption` / tertiary). */
+export function graphTelemetryMeta(agent: GraphNode, parentPrimaryLine?: string): string {
+  const base = summarizeMeta(agent);
+  if (!agent.parentGraphId || !parentPrimaryLine) return base;
+  const hint =
+    parentPrimaryLine.length > 20 ? `${parentPrimaryLine.slice(0, 17)}…` : parentPrimaryLine;
+  return `${base} · via ${hint}`;
 }
 
 export function stableTextHash(value: string): string {
