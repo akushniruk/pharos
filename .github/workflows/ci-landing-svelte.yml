@@ -1,0 +1,43 @@
+name: Landing (Svelte)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/landing-svelte/**"
+      - ".github/workflows/ci-landing-svelte.yml"
+  pull_request:
+    paths:
+      - "apps/landing-svelte/**"
+      - ".github/workflows/ci-landing-svelte.yml"
+
+jobs:
+  check-and-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: apps/landing-svelte
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+          run_install: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: apps/landing-svelte/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Svelte check + TypeScript
+        run: pnpm run check
+
+      - name: Production build
+        run: pnpm run build
