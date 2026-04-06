@@ -1,6 +1,6 @@
 # README + GitHub + X copy — PHA-36 vote outcomes (v1)
 
-**Board letter / live anchor:** [PHA-91](/PHA/issues/PHA-91). **Historical definitions parent:** [PHA-36](/PHA/issues/PHA-36). **Vote frame:** [board A/B/C](/PHA/issues/PHA-36#comment-81a0f3fb-dfda-4762-9f52-89055613f844).
+**Board vote (active):** @local-board — reply on [PHA-91](/PHA/issues/PHA-91) with **A** / **B** / **C**. **Historical definitions parent:** [PHA-36](/PHA/issues/PHA-36). **Vote frame (text):** [board A/B/C](/PHA/issues/PHA-36#comment-81a0f3fb-dfda-4762-9f52-89055613f844).
 
 **Narrative lock (CEO):** **Security-led primary** — trust, control, auditability before “raw speed.” **Velocity** = *confident* speed once execution is visible and governable ([launch narrative v1](launch-narrative-v1.md)).
 
