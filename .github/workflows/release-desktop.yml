@@ -1,0 +1,61 @@
+# Publishes Tauri desktop bundles to a GitHub Release when a version tag is pushed.
+# Changelog: see docs/releases.md (marketing template coordinated separately).
+name: Release desktop
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+
+jobs:
+  publish-tauri:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+          - platform: ubuntu-22.04
+          - platform: windows-latest
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+          run_install: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: apps/client-solid/pnpm-lock.yaml
+
+      - name: Install frontend dependencies
+        working-directory: apps/client-solid
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: apps/desktop/src-tauri
+          tagName: ${{ github.ref_name }}
+          releaseName: "Pharos Agent Monitor ${{ github.ref_name }}"
+          releaseBody: "Automated desktop build. See docs/releases.md for changelog process. This release is created as a **draft**; publish from the GitHub Releases UI after review."
+          releaseDraft: true
+          prerelease: false
+          args: --verbose
