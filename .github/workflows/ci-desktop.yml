@@ -4,7 +4,7 @@ on:
   push:
     paths:
       - "apps/desktop/**"
-      - "apps/client-solid/src/lib/docsPortal.ts"
+      - "apps/client-solid/**"
       - "scripts/check-docs-desktop-web-parity.mjs"
       - "scripts/docs-desktop-web-parity-allowlist.json"
       - ".github/workflows/ci-desktop.yml"
@@ -14,7 +14,7 @@ on:
   pull_request:
     paths:
       - "apps/desktop/**"
-      - "apps/client-solid/src/lib/docsPortal.ts"
+      - "apps/client-solid/**"
       - "scripts/check-docs-desktop-web-parity.mjs"
       - "scripts/docs-desktop-web-parity-allowlist.json"
       - ".github/workflows/ci-desktop.yml"
@@ -34,6 +34,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
       - name: Verify desktop version manifests
         working-directory: ${{ github.workspace }}
         run: python3 scripts/release/verify_desktop_versions.py
@@ -52,8 +56,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Tauri icon generation smoke test
+        run: npm run icons
+
       - name: Install Playwright Chromium
-        run: npx playwright install chromium --with-deps
+        run: pnpm --dir ../client-solid exec playwright install chromium --with-deps
 
       - name: Build + Playwright tests
         run: npm run test:e2e

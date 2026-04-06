@@ -1,90 +1,131 @@
 # macOS Desktop Release
 
-This guide covers the first installable Pharos desktop release:
+This guide covers installable Pharos desktop builds for macOS testers and maintainers.
 
 Back to [Docs Portal](README.md).
 
-- platform: macOS only
-- architecture: Apple Silicon (`aarch64-apple-darwin`)
-- artifact: unsigned internal `.dmg`
-- product: `Pharos Agent Monitor.app`
+- **Platform:** macOS (Apple Silicon and Intel builds ship from CI; local example below is Apple Silicon).
+- **Artifact:** Unsigned `.dmg` from draft GitHub Releases (unless signing is configured).
+- **Bundle name:** `pharos-desktop.app` — from [`productName`](https://v2.tauri.app/reference/config/) in [`apps/desktop/src-tauri/tauri.conf.json`](../apps/desktop/src-tauri/tauri.conf.json). (The in-window product title may still say “Pharos Agent Monitor”; that is separate from the `.app` filename.)
 
-This is an internal tester build. It is installable, but macOS will warn on first launch because the app is not signed or notarized yet.
+Unsigned builds are normal for internal testing. **macOS Gatekeeper** may block first launch or show messages such as the app being **“damaged”** and suggesting you **move it to the Trash**. That wording usually means **code signature / quarantine validation failed**, not a corrupt download or a wrong icon. Icons affect appearance and packaging; they do not fix Gatekeeper.
 
-## Build Release
+## Build release (local)
 
-Use the Tauri desktop app in `apps/desktop/src-tauri` as the release entrypoint.
+Entry point: Tauri app under [`apps/desktop`](../apps/desktop) (Vite shell + Rust backend).
 
 ### Requirements
 
-- macOS on Apple Silicon
-- Rust 1.85+
-- Node.js 22+
-- `pnpm`
-- `cargo-tauri` v2
+- macOS (for local `.dmg` with Apple’s toolchain)
+- **Rust 1.88+** (see repo [`rust-toolchain.toml`](../rust-toolchain.toml) and [`apps/desktop/src-tauri/rust-toolchain.toml`](../apps/desktop/src-tauri/rust-toolchain.toml))
+- **Node.js 20+** (matches [`.github/workflows/release-desktop.yml`](../.github/workflows/release-desktop.yml))
+- **npm** (lockfile is `apps/desktop/package-lock.json`)
 
-Install the Tauri CLI if needed:
-
-```bash
-cargo install tauri-cli --version "^2"
-```
-
-Install the client dependencies once per clone:
+Install dependencies and icons once per clone (icons are generated from [`assets/brand/pharos-mark-square.svg`](../assets/brand/pharos-mark-square.svg)):
 
 ```bash
-cd apps/client-solid
-pnpm install
+cd apps/desktop
+npm ci
+npm run icons
 ```
 
-### Build Command
+### Build command
 
-Run the release build on macOS from the Tauri app directory:
+`beforeBuildCommand` in `tauri.conf.json` runs **`npm run build`**, which produces the **desktop Vite app** in `apps/desktop` (not `apps/client-solid`).
+
+Either use the npm wrapper (recommended):
+
+```bash
+cd apps/desktop
+npm run tauri build -- --bundles dmg --target aarch64-apple-darwin
+```
+
+Or invoke Cargo from the Tauri crate:
 
 ```bash
 cd apps/desktop/src-tauri
 cargo tauri build --bundles dmg --target aarch64-apple-darwin
 ```
 
-Tauri already builds the Solid frontend through `beforeBuildCommand`, so there is no separate release step for the client bundle.
+### Output paths
 
-### Output Paths
-
-After a successful build, collect artifacts from:
+After a successful build:
 
 ```text
 apps/desktop/src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/
 apps/desktop/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/
 ```
 
-Use the `.dmg` from the `bundle/dmg/` directory as the installable release artifact.
+Use the `.dmg` under `bundle/dmg/` for distribution. The raw `.app` under `bundle/macos/` is useful for local smoke tests.
 
-The raw `.app` bundle lives under `bundle/macos/` and is useful for local smoke testing before sharing the DMG.
+### Maintainer smoke test
 
-### Maintainer Smoke Test
+1. Open the built `pharos-desktop.app` from `bundle/macos/`.
+2. Confirm the window launches outside `npm run tauri dev`.
+3. Exercise the flows you care about (daemon, UI, agents) per your release checklist.
 
-Before sharing the DMG:
+## Install unsigned DMG (testers)
 
-1. Open the built `.app` from `bundle/macos/`.
-2. Confirm the desktop window launches outside `cargo tauri dev`.
-3. Confirm the embedded daemon starts and the UI connects.
-4. Start a supported agent CLI and verify Pharos shows live session activity.
+Share the `.dmg` only with trusted testers.
 
-## Install Unsigned DMG
-
-Share the generated `.dmg` with internal testers only.
-
-### Tester Install Steps
+### Tester steps
 
 1. Open the DMG.
-2. Drag `Pharos Agent Monitor.app` into `Applications` if the installer window shows the shortcut.
+2. Drag **`pharos-desktop.app`** into **Applications** (if the DMG presents the shortcut).
 3. Eject the DMG.
-4. In `Applications`, right-click the app and choose `Open`.
-5. If macOS blocks the app, open `System Settings` -> `Privacy & Security` and use `Open Anyway`, then retry.
+4. In **Applications**, **right-click** the app → **Open** (first launch).
+5. If blocked, open **System Settings → Privacy & Security** and use **Open Anyway**, then retry.
 
-After the first approved launch, macOS should allow future launches for that copy of the app.
+### If macOS says the app is “damaged”
+
+Try, on a copy in **Applications** or on the `.app` inside the DMG:
+
+1. **Clear quarantine** (common for files downloaded from the browser or GitHub):
+
+   ```bash
+   xattr -cr /path/to/pharos-desktop.app
+   ```
+
+2. **Inspect signing** (unsigned/ad-hoc builds will not pass strict assessment—that is expected until you ship a Developer ID build):
+
+   ```bash
+   codesign --verify --deep --strict --verbose=2 /path/to/pharos-desktop.app
+   spctl --assess --verbose /path/to/pharos-desktop.app
+   xattr -l /path/to/pharos-desktop.app
+   ```
+
+   Look for `com.apple.quarantine` on the bundle or contained files.
+
+For broad distribution without these steps, you need **Developer ID Application** signing and **notarization** (see below).
+
+## CI and draft releases
+
+- **[`.github/workflows/release-desktop.yml`](../.github/workflows/release-desktop.yml)** — on `v*.*.*` tags, builds macOS (aarch64 + x86_64), Linux, and Windows and uploads artifacts to a **draft** GitHub Release. It runs **`npm run icons`** before the Tauri build so bundle icons are always regenerated on the runner.
+- **[`.github/workflows/ci-desktop.yml`](../.github/workflows/ci-desktop.yml)** — runs **`npm run icons`** as a smoke test on pull requests (along with desktop Playwright tests).
+
+## Signing and notarization (maintainers)
+
+To avoid Gatekeeper warnings for users who download the app from the internet, configure **Apple code signing** and **notarization**. Official Tauri documentation:
+
+- [macOS code signing](https://v2.tauri.app/distribute/sign/macos/)
+
+Typical GitHub Actions secrets (names vary slightly by setup; align with the Tauri guide and your keychain import step):
+
+| Secret | Purpose |
+|--------|---------|
+| `APPLE_CERTIFICATE` | Base64-encoded `.p12` exported from Keychain |
+| `APPLE_CERTIFICATE_PASSWORD` | Password for that `.p12` |
+| `KEYCHAIN_PASSWORD` | Ephemeral keychain password used on the runner |
+| `APPLE_ID` | Apple ID email (notarization via Apple ID path) |
+| `APPLE_PASSWORD` | App-specific password (or API key flow per Tauri docs) |
+
+Alternatively use **App Store Connect API** keys (`APPLE_API_ISSUER`, `APPLE_API_KEY`, `APPLE_API_KEY_PATH`) as described in the same page.
+
+After secrets exist, add a macOS job step that **imports the certificate into a temporary keychain** before `tauri-apps/tauri-action`, and set **`APPLE_SIGNING_IDENTITY`** (or `bundle.macos.signingIdentity` in `tauri.conf.json`) to your **Developer ID Application** identity. Notarization flags/environment variables follow the Tauri bundler configuration for v2.
+
+Until that is wired up, treat unsigned draft releases as **internal-only** and use the quarantine / right-click **Open** flow above.
 
 ## Notes
 
-- This flow does not use the Linux Dockerfile or server-only packaging.
-- This flow does not add CI, auto-update, signing, or notarization.
-- A later public release can keep the same desktop product and upgrade only the trust/distribution layer.
+- This flow does not describe the daemon + Solid web stack (`make daemon` / `make client`); that is a separate surface from the Tauri desktop shell.
+- Auto-update and full notarization are optional follow-ons once signing is in place.

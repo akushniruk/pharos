@@ -131,23 +131,66 @@ export function projectInitials(name: string): string {
   return initials || 'P';
 }
 
-export function projectFallbackIconDataUri(projectName: string): string {
-  const initials = projectInitials(projectName);
-  const escapedInitials = initials
+function escapeSvgTextNode(text: string): string {
+  return text
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+export function projectFallbackIconDataUri(projectName: string): string {
+  const initials = projectInitials(projectName);
+  const escapedInitials = escapeSvgTextNode(initials);
   const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'>
 <text x='12' y='12' text-anchor='middle' dominant-baseline='central' font-family='Inter,Arial,sans-serif' font-size='10' font-weight='700' fill='#94A3B8'>${escapedInitials}</text>
 </svg>`;
   return `data:image/svg+xml,${encodeURIComponent(svg)}`;
 }
 
+/** Two-letter badge for agent rows; avoids lone surrogate pairs from emoji-heavy names. */
+function agentDisplayInitials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  const pickLetter = (word: string): string => {
+    for (const ch of word) {
+      if (/\p{L}|\p{N}/u.test(ch)) return ch.toUpperCase();
+    }
+    return '';
+  };
+  if (parts.length === 0) return '?';
+  if (parts.length === 1) {
+    let out = '';
+    for (const ch of parts[0]) {
+      if (/\p{L}|\p{N}/u.test(ch)) {
+        out += ch.toUpperCase();
+        if (out.length >= 2) break;
+      }
+    }
+    return out || '?';
+  }
+  const a = pickLetter(parts[0]);
+  const b = pickLetter(parts[1]);
+  const pair = `${a}${b}`.slice(0, 2);
+  return pair || '?';
+}
+
+export function agentAvatarDataUri(name: string): string {
+  const initials = escapeSvgTextNode(agentDisplayInitials(name));
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'>
+<rect x='0' y='0' width='24' height='24' rx='12' fill='#1E293B'/>
+<text x='12' y='12' text-anchor='middle' dominant-baseline='central' font-family='Inter,Arial,sans-serif' font-size='13' font-weight='700' fill='white'>${initials}</text>
+</svg>`;
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+}
+
+/** Only http(s) and data: — root-relative URLs break in Tauri / file-based loads. */
 function normalizeLogoUrl(value?: string | null): string | undefined {
   if (!value) return undefined;
   const trimmed = value.trim();
   if (!trimmed) return undefined;
-  if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('/')) {
+  const lower = trimmed.toLowerCase();
+  if (lower.startsWith('data:')) return trimmed;
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
     return trimmed;
   }
   return undefined;

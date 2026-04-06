@@ -28,10 +28,10 @@ Regenerate platform icons from the canonical square mark:
 
 ```bash
 cd apps/desktop
-npx tauri icon ../../assets/brand/pharos-mark-square.svg
+npm run icons
 ```
 
-(Tauri’s SVG parser rejects XML comments in the source file.)
+(`npm run icons` runs `tauri icon` on `assets/brand/pharos-mark-square.svg` relative to the repository root. If the CLI rejects an SVG, try stripping comments or simplifying the file.)
 
 ## Where data lives
 
