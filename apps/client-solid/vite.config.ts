@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 
 import { defineConfig } from 'vite';
 import solid from 'vite-plugin-solid';
+import { defaultExclude } from 'vitest/config';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -23,5 +24,6 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
+    exclude: [...defaultExclude, '**/e2e/**'],
   },
 });
