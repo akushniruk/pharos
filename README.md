@@ -22,9 +22,9 @@ Most agent tools optimize for **output**. Pharos focuses on **observability** an
 
 - **Observable by default** — surface runs, steps, and outcomes so nothing “mysteriously” edits your project.
 - **Built for real workflows** — reviews, handoffs, and accountability — not one-off chats.
-- **Confidence at scale** — govern agent use as adoption grows. We lead with **trust, control, and auditability** before “raw speed.” README and GitHub copy variants (including board A/B/C framing) live in [docs/gtm/readme-hero-variants-pha36.md](docs/gtm/readme-hero-variants-pha36.md) and [docs/gtm/board-vote-cheat-sheet-pha36.md](docs/gtm/board-vote-cheat-sheet-pha36.md).
+- **Confidence at scale** — govern agent use as adoption grows. We lead with **trust, control, and auditability** before “raw speed.” For narrative framing and paste-ready hero variants, see [docs/gtm/readme-hero-variants-pha36.md](docs/gtm/readme-hero-variants-pha36.md) and the board-facing cheat sheet [docs/gtm/board-vote-cheat-sheet-pha36.md](docs/gtm/board-vote-cheat-sheet-pha36.md).
 
-**Canonical surfaces:** this repo (README, `docs/`) and **GitHub Releases** — not a standalone marketing site.
+**Canonical surfaces:** this repo (README, `docs/`) and **GitHub Releases** — not a standalone marketing site. Product positioning notes live under [docs/gtm/](docs/gtm/).
 
 ## Get started
 
@@ -115,7 +115,7 @@ npx tauri icon ../../assets/brand/pharos-mark-square.svg
 - **`apps/client-solid`** — SolidJS dashboard (Vite); talks to the daemon on the configured API/WebSocket port.
 - **`apps/desktop`** — Tauri 2 shell and Vite UI; bundle identifier `ing.pharos.desktop` ([`tauri.conf.json`](apps/desktop/src-tauri/tauri.conf.json)). Use `npm run dev` for the web asset server only; use `npm run tauri dev` for the full desktop app.
 - **`.github/workflows/release-desktop.yml`** — On tags `v*.*.*`, matrix-builds macOS (aarch64 + x86_64), Linux, and Windows and attaches bundles to a **draft** GitHub Release.
-- **`scripts/paperclip-run-summary.sh`** — Append-only NDJSON run log helper for local agent/CI workflows; behavior and API checks in [docs/mvp-observability-slice.md](docs/mvp-observability-slice.md) (including run ↔ issue correlation when using a compatible control plane).
+- **`scripts/paperclip-run-summary.sh`** — Append-only NDJSON run log helper for local agent and CI workflows; behavior and checks in [docs/mvp-observability-slice.md](docs/mvp-observability-slice.md).
 
 ### Repository layout (top level)
 
