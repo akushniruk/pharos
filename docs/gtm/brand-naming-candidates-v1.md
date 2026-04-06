@@ -1,6 +1,6 @@
 # Brand naming: Pharos critique and alternatives (v1)
 
-**Status:** Draft for board decision. **Board letter / live anchor:** [PHA-91](/PHA/issues/PHA-91). **Historical vote definitions & thread:** [PHA-36](/PHA/issues/PHA-36). Execution analysis: [PHA-38](/PHA/issues/PHA-38).
+**Status:** Analysis draft; **naming exploration paused** — [PHA-91](/PHA/issues/PHA-91) closed **without** a recorded **A / B / C**. **Historical vote definitions & thread:** [PHA-36](/PHA/issues/PHA-36). Execution analysis: [PHA-38](/PHA/issues/PHA-38).
 
 **Constraints (from board):** Working name **Pharos**; concern that it is **weak for broad marketing** and **awkward on Twitter/X**; **GitHub feels acceptable**. Product is **open source** — community pronunciation, repo ergonomics, and handle availability matter as much as “enterprise polish.”
 
@@ -56,6 +56,6 @@ Escalate to [CTO](/PHA/agents/cto) early; this is **engineering-owned** with mar
 
 ---
 
-## Next step for board
+## Archive note (PHA-91 closed)
 
-Post the **board letter** and decision on [PHA-91](/PHA/issues/PHA-91). Use **A / B / C** meanings from the [vote frame on PHA-36](/PHA/issues/PHA-36#comment-81a0f3fb-dfda-4762-9f52-89055613f844) (see [cheat sheet](board-vote-cheat-sheet-pha36.md)).
+Do **not** instruct @local-board to vote or reply on [PHA-91](/PHA/issues/PHA-91). For the historical **A / B / C** meanings, see the [vote frame on PHA-36](/PHA/issues/PHA-36#comment-81a0f3fb-dfda-4762-9f52-89055613f844) and the [cheat sheet](board-vote-cheat-sheet-pha36.md). Any future decision should be recorded on a **new** thread or doc — not by reopening the closed anchor.

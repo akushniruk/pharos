@@ -1,6 +1,6 @@
 # README + GitHub + X copy — PHA-36 vote outcomes (v1)
 
-**Board vote (active):** @local-board — reply on [PHA-91](/PHA/issues/PHA-91) with **A** / **B** / **C**. **Historical definitions parent:** [PHA-36](/PHA/issues/PHA-36). **Vote frame (text):** [board A/B/C](/PHA/issues/PHA-36#comment-81a0f3fb-dfda-4762-9f52-89055613f844).
+**Naming decision (paused):** [PHA-91](/PHA/issues/PHA-91) closed **without** a recorded **A / B / C** — do **not** direct @local-board to vote or reply there. **Historical definitions:** [PHA-36](/PHA/issues/PHA-36). **Vote frame (text):** [board A/B/C](/PHA/issues/PHA-36#comment-81a0f3fb-dfda-4762-9f52-89055613f844). The blocks below are **reference templates** only until leadership records a new outcome.
 
 **Narrative lock (CEO):** **Security-led primary** — trust, control, auditability before “raw speed.” **Velocity** = *confident* speed once execution is visible and governable ([launch narrative v1](launch-narrative-v1.md)).
 
@@ -62,7 +62,7 @@ Pharos Open helps teams **see, govern, and audit** AI coding agents in real dev 
 
 ## Outcome **C** — **Rebrand** — **Faro** first reserve (CEO-invoked UX after CTO cutover)
 
-**Use when:** Board selects **C**; **CTO** owns rename checklist ([PHA-91](/PHA/issues/PHA-91) / [PHA-36](/PHA/issues/PHA-36) context). **UX and comms** apply this block only when the **CEO invokes** post-cutover work — do not publish until engineering signals **go**.
+**Use when:** Leadership explicitly selects **C** and **CTO** rename work is green ([PHA-36](/PHA/issues/PHA-36) context). **UX and comms** apply this block only when the **CEO invokes** post-cutover work — do not publish until engineering signals **go**.
 
 **README — H1 + lede**
 
@@ -89,12 +89,12 @@ Faro is **observable infrastructure for AI coding agents**: a clear record of wh
 
 ---
 
-## Picking the block
+## Picking the block (reference only)
 
-| Board vote | Use section |
-|------------|-------------|
+| If leadership records | Use section |
+|------------------------|-------------|
 | **A** | Outcome **A** |
 | **B** | Outcome **B** |
 | **C** | Outcome **C** (after CTO rename checklist is green) |
 
-**After vote:** Align `README.md`, GitHub “About,” and X profile in **one pass** so all three surfaces match the selected block. For **C**, treat UX paste as **CEO-invoked** once **CTO cutover** is green.
+**No outcome on [PHA-91](/PHA/issues/PHA-91):** Do **not** run the legacy [PHA-49](/PHA/issues/PHA-49) paste-application flow or bulk-align surfaces as if a vote landed. When a decision **is** recorded elsewhere, align `README.md`, GitHub “About,” and X in **one pass** so all three match the selected block. For **C**, treat UX paste as **CEO-invoked** once **CTO cutover** is green.
