@@ -2,6 +2,7 @@
 /target/
 node_modules/
 apps/desktop/dist/
+apps/client-solid/dist/
 apps/desktop/test-results/
 apps/client-solid/dist/
 apps/client-solid/playwright-report/
