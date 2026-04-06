@@ -48,6 +48,41 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf
 
+      - name: Build release notes
+        id: changelog
+        env:
+          GH_REF: ${{ github.ref }}
+          GH_REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          FILE="${RUNNER_TEMP}/relnotes.md"
+          if [[ "${GH_REF}" == refs/tags/v* ]]; then
+            VER="${GH_REF_NAME#v}"
+            {
+              echo "Automated **Pharos Agent Monitor** build for \`${GH_REF_NAME}\`."
+              echo ""
+              if awk -v v="$VER" '$0 ~ "^## \\[" v "\\]" {f=1;next} f && /^## \\[/ {exit} f' CHANGELOG.md | grep -q .; then
+                awk -v v="$VER" '$0 ~ "^## \\[" v "\\]" {f=1;next} f && /^## \\[/ {exit} f' CHANGELOG.md
+              else
+                echo "_No matching \`## [${VER}]\` section in \`CHANGELOG.md\` yet — edit this draft or amend the changelog._"
+              fi
+              echo ""
+              echo "---"
+              echo "This release is a **draft**. Complete QA per \`docs/releases.md\` before publishing. Coordinate release marketing copy with the CMO / marketing owner."
+            } > "$FILE"
+          else
+            {
+              echo "**workflow_dispatch** desktop build (not a version tag)."
+              echo ""
+              echo "For production GitHub Releases, push a semver tag \`v*.*.*\` per \`docs/releases.md\`."
+            } > "$FILE"
+          fi
+          {
+            echo 'body<<CHANGEEOF'
+            cat "$FILE"
+            echo 'CHANGEEOF'
+          } >> "$GITHUB_OUTPUT"
+
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -55,7 +90,7 @@ jobs:
           projectPath: apps/desktop/src-tauri
           tagName: ${{ github.ref_name }}
           releaseName: "Pharos Agent Monitor ${{ github.ref_name }}"
-          releaseBody: "Automated desktop build. See docs/releases.md for changelog process. This release is created as a **draft**; publish from the GitHub Releases UI after review."
+          releaseBody: ${{ steps.changelog.outputs.body }}
           releaseDraft: true
           prerelease: false
           args: --verbose

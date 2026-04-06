@@ -19,14 +19,18 @@ git push origin v0.1.0
 
 ## Icons / branding
 
-Bundle icons live under `apps/desktop/src-tauri/icons/`. Regenerate from a **square** source (e.g. **1024×1024** PNG or square SVG):
+Bundle icons live under `apps/desktop/src-tauri/icons/` (PNG, ICO, ICNS, plus platform extras). The **square master** used in-repo is:
+
+- `apps/desktop/src-tauri/icons/source/app-icon.svg` — Pharos mark centered on an indigo (`#6366f1`) rounded square (1024×1024).
+
+Regenerate all sizes after changing the master:
 
 ```bash
 cd apps/desktop/src-tauri
-npx @tauri-apps/cli@2 icon path/to/square-mark.png
+npx @tauri-apps/cli@2 icon icons/source/app-icon.svg
 ```
 
-The current `apps/client-solid/public/pharos-mark.svg` is **not square**; `tauri icon` will reject it until design exports a square master.
+The marketing asset `apps/client-solid/public/pharos-mark.svg` remains **non-square** (web header use only); do not point `tauri icon` at it directly.
 
 ## QA before publishing
 
