@@ -11,6 +11,22 @@ Release notes for **public** desktop builds should summarize from here into the 
 
 ### Added
 
+### Changed
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+### Security
+
+## [0.1.0] - 2026-04-06
+
+First tagged desktop release (`v0.1.0`); triggers draft GitHub Release builds per `release-desktop.yml`.
+
+### Added
+
 - Root **`LICENSE`** (MIT) and **`CONTRIBUTING.md`** contributor guide ([PHA-115](/PHA/issues/PHA-115)).
 - README hero visuals: architecture-flow SVG and optional UI screenshot-frame placeholder under `assets/readme/`, plus UX handoff (alt text, README placement snippets) in [docs/gtm/readme-hero-imagery-handoff-pha116.md](docs/gtm/readme-hero-imagery-handoff-pha116.md) ([PHA-116](/PHA/issues/PHA-116)).
 - `scripts/release/verify_desktop_versions.py` plus CI / release-workflow guards so `package.json`, `tauri.conf.json`, and `Cargo.toml` stay aligned and match `v*.*.*` tags before draft GitHub Releases build ([PHA-72](/PHA/issues/PHA-72)).
@@ -35,15 +51,5 @@ Release notes for **public** desktop builds should summarize from here into the 
 
 ### Security
 
----
-
-<!-- When cutting vX.Y.Z: rename [Unreleased] above, add date, start a fresh [Unreleased]. Example:
-
-## [0.1.0] - 2026-04-06
-
-### Added
-- Initial public description of changes.
-
 [Unreleased]: https://github.com/akushniruk/pharos/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/akushniruk/pharos/releases/tag/v0.1.0
--->
