@@ -5,7 +5,10 @@
 <section class="hero" aria-labelledby="hero-title">
   <div class="hero__glow" aria-hidden="true"></div>
   <div class="hero__inner">
-    <p class="eyebrow">Local observability · Open source</p>
+    <p class="eyebrow">
+      <span class="eyebrow__full">Local observability · Open source</span>
+      <span class="eyebrow__compact">Local-first · Open source</span>
+    </p>
     <div class="brand">
       <img src="/pharos-mark.svg" width="48" height="48" alt="" class="mark" />
       <h1 id="hero-title">Pharos</h1>
@@ -57,6 +60,20 @@
     text-transform: uppercase;
     color: var(--accent);
     font-family: var(--font-mono);
+  }
+
+  .eyebrow__compact {
+    display: none;
+  }
+
+  @media (max-width: 480px) {
+    .eyebrow__full {
+      display: none;
+    }
+
+    .eyebrow__compact {
+      display: inline;
+    }
   }
 
   .brand {
