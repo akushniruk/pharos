@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Edge kinds align with durable `agent_relationships.relationship_kind` (snake_case JSON).",
+  "enum": [
+    "delegates_to",
+    "spawned_sub_agent"
+  ],
+  "title": "GraphEdgeKind",
+  "type": "string"
+}

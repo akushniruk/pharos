@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Roster / table row: identity, display, and a dedicated stable sort key.",
+  "properties": {
+    "adapter_type": {
+      "description": "Optional adapter label (`cursor`, `codex_local`, …).",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "agent_id": {
+      "description": "Stable agent identity (UUID).",
+      "format": "uuid",
+      "type": "string"
+    },
+    "canonical_key": {
+      "description": "Stable slug for URLs and APIs; maps from persistence `url_key`.",
+      "type": "string"
+    },
+    "display_name": {
+      "description": "Human-facing name (may change without breaking URLs if `canonical_key` stays fixed).",
+      "type": "string"
+    },
+    "sort_key": {
+      "description": "Sort by ascending UTF-8 `sort_key` for deterministic UI lists. For valid agents equals `canonical_key`.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "agent_id",
+    "canonical_key",
+    "display_name",
+    "sort_key"
+  ],
+  "title": "AgentListItem",
+  "type": "object"
+}

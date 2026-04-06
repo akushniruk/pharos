@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-label="Pharos">
+  <defs>
+    <linearGradient id="pharos-bg" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#2563eb"/>
+      <stop offset="100%" stop-color="#1a56db"/>
+    </linearGradient>
+  </defs>
+  <rect width="1024" height="1024" rx="224" fill="url(#pharos-bg)"/>
+  <g fill="#f8fafc">
+    <ellipse cx="512" cy="784" rx="224" ry="58"/>
+    <!-- Tower (meets lantern bottom at y=410) -->
+    <path d="M 384 776 L 432 410 L 592 410 L 640 776 Z"/>
+    <!-- Lantern -->
+    <rect x="422" y="314" width="180" height="96" rx="16"/>
+    <!-- Lantern roof -->
+    <path d="M 402 314 L 512 232 L 622 314 Z"/>
+    <!-- Beacon window -->
+    <circle cx="512" cy="362" r="28" fill="#1244b4"/>
+  </g>
+</svg>

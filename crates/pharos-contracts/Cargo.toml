@@ -1,0 +1,20 @@
+[package]
+name = "pharos-contracts"
+version = "0.1.0"
+edition = "2021"
+description = "Pharos API read models, OpenAPI, and JSON Schema for TS clients."
+
+[dependencies]
+pharos-domain = { path = "../pharos-domain" }
+schemars = { version = "1.0", features = ["uuid1"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+utoipa = { version = "5.4", features = ["uuid"] }
+uuid = { version = "1", features = ["serde"] }
+
+[dev-dependencies]
+chrono = { version = "0.4", features = ["serde"] }
+
+[[bin]]
+name = "pharos-schema-export"
+path = "src/bin/pharos-schema-export.rs"

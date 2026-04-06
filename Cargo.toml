@@ -1,0 +1,9 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/pharos-domain",
+    "crates/pharos-persistence",
+    "crates/pharos-contracts",
+]
+# Tauri desktop crate keeps its own lockfile under apps/desktop/src-tauri.
+exclude = ["apps/desktop/src-tauri"]

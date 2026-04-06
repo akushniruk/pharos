@@ -1,0 +1,147 @@
+{
+  "components": {
+    "schemas": {
+      "AgentGraphEdge": {
+        "description": "One directed edge in the agent relationship graph.",
+        "properties": {
+          "from_agent_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/GraphEdgeKind"
+          },
+          "sort_key": {
+            "description": "Deterministic ordering: `from_agent_id`, kind string, `to_agent_id` (tab-separated UUID strings).",
+            "type": "string"
+          },
+          "to_agent_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "from_agent_id",
+          "to_agent_id",
+          "kind",
+          "sort_key"
+        ],
+        "type": "object"
+      },
+      "AgentGraphNode": {
+        "description": "Graph node card: same projections as list plus optional parent link for hierarchy.",
+        "properties": {
+          "adapter_type": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "agent_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "canonical_key": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "parent_agent_id": {
+            "format": "uuid",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sort_key": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "agent_id",
+          "canonical_key",
+          "display_name",
+          "sort_key"
+        ],
+        "type": "object"
+      },
+      "AgentListItem": {
+        "description": "Roster / table row: identity, display, and a dedicated stable sort key.",
+        "properties": {
+          "adapter_type": {
+            "description": "Optional adapter label (`cursor`, `codex_local`, …).",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "agent_id": {
+            "description": "Stable agent identity (UUID).",
+            "format": "uuid",
+            "type": "string"
+          },
+          "canonical_key": {
+            "description": "Stable slug for URLs and APIs; maps from persistence `url_key`.",
+            "type": "string"
+          },
+          "display_name": {
+            "description": "Human-facing name (may change without breaking URLs if `canonical_key` stays fixed).",
+            "type": "string"
+          },
+          "sort_key": {
+            "description": "Sort by ascending UTF-8 `sort_key` for deterministic UI lists. For valid agents equals `canonical_key`.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "agent_id",
+          "canonical_key",
+          "display_name",
+          "sort_key"
+        ],
+        "type": "object"
+      },
+      "GraphEdgeKind": {
+        "description": "Edge kinds align with durable `agent_relationships.relationship_kind` (snake_case JSON).",
+        "enum": [
+          "delegates_to",
+          "spawned_sub_agent"
+        ],
+        "type": "string"
+      },
+      "RelationshipGraphPayload": {
+        "description": "Typical graph read payload: nodes and edges sorted for stable snapshots.",
+        "properties": {
+          "edges": {
+            "items": {
+              "$ref": "#/components/schemas/AgentGraphEdge"
+            },
+            "type": "array"
+          },
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/AgentGraphNode"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "nodes",
+          "edges"
+        ],
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "description": "Read models and schemas for Pharos list/graph APIs (Rust source of truth).",
+    "license": {
+      "name": ""
+    },
+    "title": "Pharos contracts",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {}
+}

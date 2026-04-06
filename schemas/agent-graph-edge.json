@@ -1,0 +1,39 @@
+{
+  "$defs": {
+    "GraphEdgeKind": {
+      "description": "Edge kinds align with durable `agent_relationships.relationship_kind` (snake_case JSON).",
+      "enum": [
+        "delegates_to",
+        "spawned_sub_agent"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "One directed edge in the agent relationship graph.",
+  "properties": {
+    "from_agent_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "kind": {
+      "$ref": "#/$defs/GraphEdgeKind"
+    },
+    "sort_key": {
+      "description": "Deterministic ordering: `from_agent_id`, kind string, `to_agent_id` (tab-separated UUID strings).",
+      "type": "string"
+    },
+    "to_agent_id": {
+      "format": "uuid",
+      "type": "string"
+    }
+  },
+  "required": [
+    "from_agent_id",
+    "to_agent_id",
+    "kind",
+    "sort_key"
+  ],
+  "title": "AgentGraphEdge",
+  "type": "object"
+}

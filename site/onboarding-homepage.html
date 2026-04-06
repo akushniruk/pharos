@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pharos — hero copy reference (GitHub/X, not a live site)</title>
+    <meta
+      name="description"
+      content="Know what your AI coding agent is doing — on your machine, in your repo."
+    />
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #fafafa;
+        --fg: #0d0d0d;
+        --muted: #5c5c5c;
+        --border: rgba(0, 0, 0, 0.08);
+        --accent: #1a56db;
+        --accent-hover: #1244b4;
+        --card: #ffffff;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #0d0d0d;
+          --fg: #f2f2f2;
+          --muted: #a3a3a3;
+          --border: rgba(255, 255, 255, 0.12);
+          --accent: #5b8def;
+          --accent-hover: #7ba3f5;
+          --card: #161616;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+          "Helvetica Neue", Arial, sans-serif;
+        background: var(--bg);
+        color: var(--fg);
+        line-height: 1.6;
+        font-size: 1.0625rem;
+      }
+      .wrap {
+        max-width: 44rem;
+        margin: 0 auto;
+        padding: 4rem 1.5rem 5rem;
+      }
+      .eyebrow {
+        font-size: 0.8125rem;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--muted);
+        margin-bottom: 1rem;
+      }
+      h1 {
+        font-size: clamp(1.85rem, 4.5vw, 2.5rem);
+        font-weight: 700;
+        line-height: 1.15;
+        letter-spacing: -0.02em;
+        margin: 0 0 1.25rem;
+      }
+      .subhead {
+        font-size: 1.125rem;
+        color: var(--muted);
+        margin: 0 0 2rem;
+        max-width: 40rem;
+      }
+      .subhead strong {
+        color: var(--fg);
+        font-weight: 600;
+      }
+      ul.bullets {
+        list-style: none;
+        padding: 0;
+        margin: 0 0 2.5rem;
+      }
+      ul.bullets li {
+        position: relative;
+        padding-left: 1.35rem;
+        margin-bottom: 1rem;
+      }
+      ul.bullets li::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        top: 0.55em;
+        width: 0.4rem;
+        height: 0.4rem;
+        border-radius: 50%;
+        background: var(--accent);
+      }
+      ul.bullets strong {
+        font-weight: 600;
+      }
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        margin-bottom: 4rem;
+      }
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0.65rem 1.25rem;
+        font-size: 0.9375rem;
+        font-weight: 600;
+        border-radius: 0.5rem;
+        text-decoration: none;
+        border: 1px solid transparent;
+        cursor: pointer;
+        transition: background 0.15s ease, border-color 0.15s ease;
+      }
+      .btn-primary {
+        background: var(--accent);
+        color: #fff;
+      }
+      .btn-primary:hover {
+        background: var(--accent-hover);
+      }
+      .btn-secondary {
+        background: transparent;
+        color: var(--fg);
+        border-color: var(--border);
+      }
+      .btn-secondary:hover {
+        border-color: var(--muted);
+      }
+      .narrative {
+        border-top: 1px solid var(--border);
+        padding-top: 3rem;
+      }
+      .narrative h2 {
+        font-size: 1.25rem;
+        font-weight: 700;
+        margin: 0 0 1.5rem;
+        letter-spacing: -0.01em;
+      }
+      .narrative p {
+        margin: 0 0 1.25rem;
+        color: var(--muted);
+      }
+      .narrative p strong {
+        color: var(--fg);
+      }
+      .narrative .card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 0.75rem;
+        padding: 1.5rem 1.5rem 0.25rem;
+        margin-top: 1.5rem;
+      }
+      footer {
+        margin-top: 3rem;
+        padding-top: 2rem;
+        border-top: 1px solid var(--border);
+        font-size: 0.8125rem;
+        color: var(--muted);
+      }
+    </style>
+  </head>
+  <body>
+    <main class="wrap">
+      <p class="eyebrow">Reference deck — ship via README + releases + X</p>
+      <h1>Know what your AI coding agent is doing — on your machine, in your repo.</h1>
+      <p class="subhead">
+        See runs, follow what changed, and keep agents inside a workflow you can
+        <strong>govern</strong> — clear activity, sensible defaults, and a straight path from
+        “it ran” to “I understand what happened.”
+      </p>
+      <ul class="bullets" aria-label="Key benefits">
+        <li>
+          <strong>Observable by default</strong> — Surface runs, steps, and outcomes so nothing
+          “mysteriously” edits your project.
+        </li>
+        <li>
+          <strong>Built for real workflows</strong> — Fits how teams ship: reviews, handoffs, and
+          accountability — not one-off chats.
+        </li>
+        <li>
+          <strong>Confidence at scale</strong> — Turn agent assistance into something you can steer
+          as usage grows.
+        </li>
+      </ul>
+      <div class="actions">
+        <a class="btn btn-primary" href="#" title="Replace with repo README CTA URL"
+          >Star / watch the repo</a
+        >
+        <a class="btn btn-secondary" href="#" title="Replace with docs/ path in default branch"
+          >Open in-repo docs</a
+        >
+      </div>
+
+      <section class="narrative" aria-labelledby="narrative-heading">
+        <h2 id="narrative-heading">Why observable agents</h2>
+        <p>
+          Most agent tools optimize for <strong>output</strong>: faster diffs, more autonomy,
+          bigger context windows. They undersell <strong>observability</strong>: what is running,
+          on whose machine, with what permissions, and what changed while you were not looking.
+          That gap creates mistrust, review friction, and “I don’t know what this agent did” moments
+          — at exactly the scale where automation should reduce risk, not add it.
+        </p>
+        <p>
+          We exist to make AI coding agents <strong>observable and understandable</strong>: you can
+          see activity, reason about it, and stay in control — so you ship with confidence on
+          <strong>your</strong> machine and <strong>your</strong> codebase.
+        </p>
+        <div class="card">
+          <p>
+            <strong>Differentiation vs generic agent tooling</strong>
+          </p>
+          <ul class="bullets">
+            <li>
+              <strong>Transparency over black-box autonomy</strong> — clarity beats “it just
+              works” when the stakes are your source tree and credentials.
+            </li>
+            <li>
+              <strong>Understandability as a product surface</strong> — not only logs for experts,
+              but narratives and signals a human can scan in one pass.
+            </li>
+            <li>
+              <strong>Confidence, not just speed</strong> — aligned with teams who treat agents as
+              production participants, not demos.
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <footer>
+        Approved copy thread:
+        <a href="/PHA/issues/PHA-15#comment-90c579de-c094-43e1-bad5-15c64bae0de2"
+          >PHA-15 comment</a
+        >
+        · Strategy:
+        <a href="/PHA/issues/PHA-35">PHA-35</a>
+        /
+        <a href="/PHA/issues/PHA-37">PHA-37</a>
+        — do <strong>not</strong> treat this file as a production marketing URL; paste sections into
+        the default-branch README, release notes, and X posts.
+      </footer>
+    </main>
+  </body>
+</html>

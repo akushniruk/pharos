@@ -1,0 +1,99 @@
+{
+  "$defs": {
+    "AgentGraphEdge": {
+      "description": "One directed edge in the agent relationship graph.",
+      "properties": {
+        "from_agent_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/GraphEdgeKind"
+        },
+        "sort_key": {
+          "description": "Deterministic ordering: `from_agent_id`, kind string, `to_agent_id` (tab-separated UUID strings).",
+          "type": "string"
+        },
+        "to_agent_id": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "from_agent_id",
+        "to_agent_id",
+        "kind",
+        "sort_key"
+      ],
+      "type": "object"
+    },
+    "AgentGraphNode": {
+      "description": "Graph node card: same projections as list plus optional parent link for hierarchy.",
+      "properties": {
+        "adapter_type": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "agent_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "canonical_key": {
+          "type": "string"
+        },
+        "display_name": {
+          "type": "string"
+        },
+        "parent_agent_id": {
+          "format": "uuid",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sort_key": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "agent_id",
+        "canonical_key",
+        "display_name",
+        "sort_key"
+      ],
+      "type": "object"
+    },
+    "GraphEdgeKind": {
+      "description": "Edge kinds align with durable `agent_relationships.relationship_kind` (snake_case JSON).",
+      "enum": [
+        "delegates_to",
+        "spawned_sub_agent"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Typical graph read payload: nodes and edges sorted for stable snapshots.",
+  "properties": {
+    "edges": {
+      "items": {
+        "$ref": "#/$defs/AgentGraphEdge"
+      },
+      "type": "array"
+    },
+    "nodes": {
+      "items": {
+        "$ref": "#/$defs/AgentGraphNode"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "nodes",
+    "edges"
+  ],
+  "title": "RelationshipGraphPayload",
+  "type": "object"
+}

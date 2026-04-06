@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Graph node card: same projections as list plus optional parent link for hierarchy.",
+  "properties": {
+    "adapter_type": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "agent_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "canonical_key": {
+      "type": "string"
+    },
+    "display_name": {
+      "type": "string"
+    },
+    "parent_agent_id": {
+      "format": "uuid",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "sort_key": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "agent_id",
+    "canonical_key",
+    "display_name",
+    "sort_key"
+  ],
+  "title": "AgentGraphNode",
+  "type": "object"
+}
