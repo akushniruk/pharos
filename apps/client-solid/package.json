@@ -8,7 +8,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:e2e": "playwright test",
-    "check:lines": "node ../../scripts/check-line-budget.mjs"
+    "check:lines": "node ../../scripts/check-line-budget.mjs",
+    "check:docs-parity": "node ../../scripts/check-docs-desktop-web-parity.mjs"
   },
   "dependencies": {
     "solid-heroicons": "3.2.4",

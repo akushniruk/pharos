@@ -4,6 +4,9 @@ on:
   push:
     paths:
       - "apps/desktop/**"
+      - "apps/client-solid/src/lib/docsPortal.ts"
+      - "scripts/check-docs-desktop-web-parity.mjs"
+      - "scripts/docs-desktop-web-parity-allowlist.json"
       - ".github/workflows/ci-desktop.yml"
       - ".github/workflows/release-desktop.yml"
       - "scripts/release/**"
@@ -11,6 +14,9 @@ on:
   pull_request:
     paths:
       - "apps/desktop/**"
+      - "apps/client-solid/src/lib/docsPortal.ts"
+      - "scripts/check-docs-desktop-web-parity.mjs"
+      - "scripts/docs-desktop-web-parity-allowlist.json"
       - ".github/workflows/ci-desktop.yml"
       - ".github/workflows/release-desktop.yml"
       - "scripts/release/**"
@@ -31,6 +37,10 @@ jobs:
       - name: Verify desktop version manifests
         working-directory: ${{ github.workspace }}
         run: python3 scripts/release/verify_desktop_versions.py
+
+      - name: Docs desktop ↔ web parity
+        working-directory: ${{ github.workspace }}
+        run: node scripts/check-docs-desktop-web-parity.mjs
 
       - name: Setup Node
         uses: actions/setup-node@v4

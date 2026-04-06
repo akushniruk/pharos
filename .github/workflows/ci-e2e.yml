@@ -5,10 +5,16 @@ on:
     branches: [main]
     paths:
       - "apps/client-solid/**"
+      - "apps/desktop/src/docs/**"
+      - "scripts/check-docs-desktop-web-parity.mjs"
+      - "scripts/docs-desktop-web-parity-allowlist.json"
       - ".github/workflows/ci-e2e.yml"
   pull_request:
     paths:
       - "apps/client-solid/**"
+      - "apps/desktop/src/docs/**"
+      - "scripts/check-docs-desktop-web-parity.mjs"
+      - "scripts/docs-desktop-web-parity-allowlist.json"
       - ".github/workflows/ci-e2e.yml"
 
 jobs:
@@ -35,6 +41,9 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Docs desktop ↔ web parity
+        run: pnpm run check:docs-parity
 
       - name: Install Playwright Chromium
         run: pnpm exec playwright install chromium --with-deps
