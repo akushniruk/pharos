@@ -51,7 +51,23 @@ jobs:
       - name: Build client
         run: pnpm run build
 
-      - name: Run Playwright
+      - name: Run Playwright (includes hash-router `#/docs/*` — e2e/docs-hash-router.spec.ts)
         run: pnpm exec playwright test
         env:
           CI: true
+
+      - name: Upload Playwright HTML report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: apps/client-solid/playwright-report/
+          retention-days: 14
+
+      - name: Upload Playwright test-results (traces, screenshots, video)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-test-results
+          path: apps/client-solid/test-results/
+          retention-days: 14

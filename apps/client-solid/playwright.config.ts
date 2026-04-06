@@ -9,16 +9,28 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
  * E2E against the **built** Vite app (static preview). No Pharos daemon — hermetic UI shell only.
  * Tauri / packaged builds: future slice (WebDriver or manual QA); see docs/e2e-testing.md.
  */
+const isCi = Boolean(process.env.CI);
+
 export default defineConfig({
   testDir: './e2e',
   fullyParallel: true,
-  forbidOnly: Boolean(process.env.CI),
-  retries: process.env.CI ? 1 : 0,
-  workers: process.env.CI ? 1 : undefined,
-  reporter: process.env.CI ? 'github' : 'list',
+  forbidOnly: isCi,
+  retries: isCi ? 2 : 0,
+  workers: isCi ? 1 : undefined,
+  timeout: 60_000,
+  reporter: isCi
+    ? [
+        ['github'],
+        ['html', { outputFolder: 'playwright-report', open: 'never' }],
+      ]
+    : 'list',
   use: {
     baseURL: 'http://127.0.0.1:4173',
-    trace: 'on-first-retry',
+    actionTimeout: 15_000,
+    navigationTimeout: 30_000,
+    trace: isCi ? 'retain-on-failure' : 'on-first-retry',
+    screenshot: 'only-on-failure',
+    video: isCi ? 'retain-on-failure' : 'off',
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: {

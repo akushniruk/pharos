@@ -3,3 +3,5 @@
 node_modules/
 apps/desktop/dist/
 apps/desktop/test-results/
+apps/client-solid/playwright-report/
+apps/client-solid/test-results/

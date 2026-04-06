@@ -20,9 +20,11 @@ pnpm run build
 pnpm run test:e2e
 ```
 
+**Hash-router docs only (matches the `#/docs/*` CI gate file):** `pnpm run build && pnpm exec playwright test e2e/docs-hash-router.spec.ts`
+
 ## CI
 
-Workflow: [`.github/workflows/ci-e2e.yml`](../.github/workflows/ci-e2e.yml) (path-filtered to `apps/client-solid/**`). Installs Chromium deps on Ubuntu, builds, runs Playwright.
+Workflow: [`.github/workflows/ci-e2e.yml`](../.github/workflows/ci-e2e.yml) — job **`playwright`** under **E2E (client-solid)** runs `pnpm exec playwright test` after `vite build` (includes `e2e/docs-hash-router.spec.ts`); on failure, artifacts **`playwright-report`** (HTML) and **`playwright-test-results`** (traces/screenshots/video) are uploaded. Path-filtered to `apps/client-solid/**` and related docs parity scripts.
 
 ## Handoff (QA / PHA-64)
 
