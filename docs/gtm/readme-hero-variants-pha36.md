@@ -8,14 +8,12 @@
 
 ---
 
-## Outcome **A** — Keep **Pharos** + approved public-handle pattern (+ pronunciation line)
+## Outcome **A** — Keep **Pharos** + approved public-handle pattern
 
 **README — H1 + lede**
 
 ```markdown
 # Pharos
-
-**Pronunciation:** *FAIR-oss* (like “pharaoh,” lighthouse — signal you can trust.)
 
 Pharos makes **AI coding agents observable and governable** on your machine: see what ran, under what rules, and prove it — so security and platform teams can say **yes** to agents without trading away clarity. Speed follows once the lights are on.
 ```
@@ -45,8 +43,6 @@ Pharos makes **AI coding agents observable and governable** on your machine: see
 # Pharos Open
 
 *Open-source core of Pharos — observable coding agents.*
-
-**Pronunciation:** *FAIR-oss.*
 
 Pharos Open helps teams **see, govern, and audit** AI coding agents in real dev environments. Lead with **trust and control**; treat velocity as an outcome of visibility — not the headline trade.
 ```

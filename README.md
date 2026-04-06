@@ -1,7 +1,5 @@
 # Pharos
 
-**Pronunciation:** *FAIR-oss* (like “pharaoh,” lighthouse — a signal you can trust.)
-
 [Quickstart](#quickstart) · [Architecture](#architecture) · [Documentation](#documentation) · [Contributing](#contributing)
 
 [![Release desktop (draft)](https://github.com/akushniruk/pharos/actions/workflows/release-desktop.yml/badge.svg)](https://github.com/akushniruk/pharos/actions/workflows/release-desktop.yml)
@@ -193,13 +191,11 @@ npx tauri icon ../../assets/brand/pharos-mark-square.svg
 
 ## Contributing
 
-1. **User-visible changes** — Add an entry under `[Unreleased]` in [CHANGELOG.md](CHANGELOG.md) when the change belongs in release notes.
-2. **Releases** — Follow [docs/releases.md](docs/releases.md): bump the three desktop version fields together (see runbook), run `python3 scripts/release/verify_desktop_versions.py`, then tag, draft Release, run engineering smoke and release QA from the checklist, then publish.
-3. **Pull requests** — Use clear titles; link tracking issues in descriptions when your workflow uses them; keep `make test` and desktop builds green with the pinned Rust toolchain(s).
+See **[CONTRIBUTING.md](CONTRIBUTING.md)** for local setup, tests, pull requests, and release notes expectations.
 
 ## License
 
-Add a `LICENSE` file at the repository root before broad public distribution. Until then, third-party licenses for development dependencies live under `apps/desktop/node_modules`.
+This project is licensed under the **MIT License** — see [LICENSE](LICENSE).
 
 ## In this repository
 
