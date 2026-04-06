@@ -1,7 +1,9 @@
 import { expect, test } from '@playwright/test';
 
-/** First docs nav slug for `docs/README.md` ("Docs Portal Index"). */
-const FIRST_DOCS_SLUG = 'docs-portal-index';
+import { ALL_DOC_ROUTE_SLUGS } from '../src/features/docs-portal/slugRoutes';
+
+/** First portal slug (same order as `docs-all-slugs` crawl). */
+const FIRST_DOCS_SLUG = ALL_DOC_ROUTE_SLUGS[0];
 
 test.describe('static shell', () => {
   test('home shows projects chrome', async ({ page }) => {
