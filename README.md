@@ -8,6 +8,8 @@
 
 Pharos makes **AI coding agents observable and governable** on your machine: see what ran, under what rules, and prove it — so security and platform teams can say **yes** to agents without trading away clarity. Speed follows once the lights are on.
 
+**On this page:** [Quickstart](#quickstart) · [Development](#development) · [Architecture](#architecture) · [Documentation](#documentation) · [FAQ](#faq) · [Contributing](#contributing)
+
 ## Who it’s for
 
 - **Security and platform teams** who need audit-friendly visibility into agent execution in real repos.
@@ -26,7 +28,7 @@ Most agent tools optimize for **output**. Pharos focuses on **observability** an
 
 **Canonical surfaces:** this repo (README, `docs/`) and **GitHub Releases** — not a standalone marketing site. Product positioning notes live under [docs/gtm/](docs/gtm/).
 
-## Get started
+## Quickstart
 
 - **Star / watch** this repo for releases and default-branch doc updates.
 - **Releases & changelog** — [docs/releases.md](docs/releases.md), [CHANGELOG.md](CHANGELOG.md); paste-ready Release body: [docs/gtm/github-release-desktop-template.md](docs/gtm/github-release-desktop-template.md).
@@ -144,6 +146,19 @@ npx tauri icon ../../assets/brand/pharos-mark-square.svg
 | Graph UI spec | [docs/design/graph-view-pro-ui-spec.md](docs/design/graph-view-pro-ui-spec.md) |
 | In-app `/docs` UX spec (shell / desktop) | [docs/design/docs-page-ux-spec.md](docs/design/docs-page-ux-spec.md) |
 | Public `/docs` IA & page outlines (handoff for site build) | [docs/site/docs-ia-content-outline-v1.md](docs/site/docs-ia-content-outline-v1.md) |
+
+## FAQ
+
+- **What runs where?** The **daemon + Solid dashboard** use **4000** (HTTP/WebSocket) and **5173** (Vite) by default (`make daemon` / `make client`). The **Tauri desktop** dev shell loads **1420** (`npm run tauri dev` under `apps/desktop`). They are separate stacks; you do not need both unless you are working on both.
+- **Where is “truth” for events and sessions?** Session scan, JSONL tail, WebSocket fan-out, and the canonical event shape live in [`apps/daemon-rs`](apps/daemon-rs) — see [`apps/daemon-rs/src/model.rs`](apps/daemon-rs/src/model.rs) and [docs/mvp-observability-slice.md](docs/mvp-observability-slice.md).
+- **How do releases work?** Desktop ships on **semantic version tags** `v*.*.*` with a **draft** GitHub Release and attached bundles — see [docs/releases.md](docs/releases.md) and [CHANGELOG.md](CHANGELOG.md).
+
+## What Pharos is not
+
+- **Not a replacement for your coding agent** — Pharos observes and surfaces what agents already do locally; it does not replace Claude Code, Cursor, Codex, or similar runtimes.
+- **Not a hosted control plane** — this repo is oriented around **local** observation (daemon + desktop). There is no requirement to send transcripts to a SaaS to get value from the OSS slice.
+- **Not a full enterprise GRC suite** — Pharos emphasizes inspectability and durable signals for engineering and security partners; map it to your wider compliance program as needed.
+- **Not legal advice** — governance and audit language here is product direction, not counsel.
 
 ## Contributing
 
