@@ -83,8 +83,18 @@ export default function AppShell() {
     const hashParts = window.location.hash.replace(/^#\/?/, '').split('/');
     const slugFromPath = pathParts[0] === 'docs' ? decodeURIComponent(pathParts[1] ?? '') : '';
     const slugFromHash = hashParts[0] === 'docs' ? decodeURIComponent(hashParts[1] ?? '') : '';
-    const slug = slugFromPath || slugFromHash;
-    if (!slug) return;
+    let slug = slugFromPath || slugFromHash;
+    if (!slug) {
+      const defaultPath = firstDocsPath();
+      const defaultSlug = docsSlugForPath(defaultPath);
+      setSelectedDocPath(defaultPath);
+      if (docsByPath) {
+        navigateToPath(`/docs/${encodeURIComponent(defaultSlug)}`);
+      } else if (docsByHash) {
+        window.location.hash = `#/docs/${encodeURIComponent(defaultSlug)}`;
+      }
+      return;
+    }
     const resolved = docsPathForSlug(slug);
     if (resolved && resolved !== selectedDocPath()) {
       setSelectedDocPath(resolved);
