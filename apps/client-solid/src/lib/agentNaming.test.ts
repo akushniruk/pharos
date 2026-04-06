@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { mapAgentTypeLabel, resolveHybridAgentName, responsibilityFromPayload } from './agentNaming';
+import type { AgentInfo } from './types';
+import {
+  agentListInitials,
+  mapAgentTypeLabel,
+  resolveAgentListPrimaryName,
+  resolveAgentListSecondaryLine,
+  resolveHybridAgentName,
+  responsibilityFromPayload,
+} from './agentNaming';
 
 describe('agentNaming', () => {
   it('prefers responsibility over type and display names', () => {
@@ -26,5 +34,66 @@ describe('agentNaming', () => {
     expect(responsibilityFromPayload({
       description: '  draft release checklist  ',
     })).toBe('draft release checklist');
+  });
+
+  it('picks readable list titles for main vs subagents', () => {
+    const base: Omit<AgentInfo, 'agentId' | 'displayName' | 'agentType'> = {
+      avatarUrl: undefined,
+      runtimeLabel: undefined,
+      assignment: undefined,
+      assignmentDetail: undefined,
+      statusLabel: undefined,
+      statusTone: undefined,
+      statusDetail: undefined,
+      currentProgress: undefined,
+      currentProgressDetail: undefined,
+      currentAction: undefined,
+      currentActionDetail: undefined,
+      nextAction: undefined,
+      nextActionDetail: undefined,
+      modelName: undefined,
+      eventCount: 3,
+      lastEventAt: 0,
+      isActive: true,
+      parentId: undefined,
+    };
+
+    expect(
+      resolveAgentListPrimaryName({
+        ...base,
+        agentId: null,
+        displayName: 'Session',
+        agentType: 'main',
+        modelName: 'claude-sonnet-4',
+      }),
+    ).toMatch(/sonnet/i);
+
+    expect(
+      resolveAgentListPrimaryName({
+        ...base,
+        agentId: 'abc-123-def',
+        displayName: 'Agent',
+        agentType: 'explorer',
+      }),
+    ).toContain('Explorer');
+
+    expect(agentListInitials('Code Reviewer')).toBe('CR');
+    expect(agentListInitials('Main')).toBe('M');
+  });
+
+  it('builds secondary line with type and activity', () => {
+    const agent: AgentInfo = {
+      agentId: 'x',
+      displayName: 'Worker',
+      agentType: 'general-purpose',
+      modelName: 'claude-opus-4',
+      assignment: 'Tighten websocket reconnect',
+      eventCount: 12,
+      lastEventAt: 0,
+      isActive: true,
+    };
+    const line = resolveAgentListSecondaryLine(agent);
+    expect(line).toContain('General Purpose');
+    expect(line.toLowerCase()).toContain('websocket');
   });
 });

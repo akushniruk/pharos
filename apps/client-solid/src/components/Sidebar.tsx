@@ -5,8 +5,10 @@ import {
   projects,
   selectedProject,
   selectedSession,
+  selectedAgent,
   selectProject,
   selectSession,
+  selectAgent,
   sidebarSessionActivityTone,
 } from '../lib/store';
 import {
@@ -24,7 +26,13 @@ import {
 import { getAgentColor } from '../lib/colors';
 import { timeAgo } from '../lib/time';
 import { DOCS_PORTAL_RUN_COMMANDS, DOCS_PORTAL_SECTIONS, type DocsPortalSection } from '../lib/docsPortal';
-import { mapAgentTypeLabel } from '../lib/agentNaming';
+import {
+  agentListInitials,
+  mapAgentTypeLabel,
+  resolveAgentListPrimaryName,
+  resolveAgentListSecondaryLine,
+} from '../lib/agentNaming';
+import type { AgentInfo } from '../lib/types';
 
 interface SidebarProps {
   collapsed: boolean;
@@ -52,6 +60,32 @@ function projectInitial(name: string): string {
 function projectCollapsedTitle(project: ReturnType<typeof projects>[number]): string {
   const state = project.isActive ? 'Active' : 'Idle';
   return `${project.name} · ${state} · ${project.sessions.length} sessions`;
+}
+
+function sortAgentsForSidebar(agents: AgentInfo[]): AgentInfo[] {
+  return [...agents].sort((a, b) => {
+    const aMain = a.agentId == null ? 0 : 1;
+    const bMain = b.agentId == null ? 0 : 1;
+    if (aMain !== bMain) return aMain - bMain;
+    return b.lastEventAt - a.lastEventAt;
+  });
+}
+
+function sidebarAgentRowTone(agent: AgentInfo): SidebarActivityTone {
+  const t = agent.statusTone;
+  if (t === 'active' || t === 'blocked' || t === 'attention' || t === 'idle' || t === 'done') {
+    return t;
+  }
+  if (agent.isActive) return 'active';
+  if (agent.eventCount > 0) return 'idle';
+  return 'done';
+}
+
+function sidebarAgentStatusLabel(agent: AgentInfo): string {
+  if (agent.statusLabel?.trim()) return agent.statusLabel.trim();
+  if (agent.isActive) return 'Active';
+  if (agent.eventCount > 0) return 'Idle';
+  return 'Done';
 }
 
 export default function Sidebar(props: SidebarProps) {
@@ -429,6 +463,7 @@ export default function Sidebar(props: SidebarProps) {
                             return 'transparent';
                           };
                           return (
+                            <div style="display:flex;flex-direction:column;gap:0;">
                             <div
                               onClick={() => {
                                 const id = sessionId();
@@ -490,6 +525,107 @@ export default function Sidebar(props: SidebarProps) {
                                 <Icon path={statusIcon()} style="width:9px;height:9px;flex-shrink:0;" />
                                 <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{statusLabel()}</span>
                               </div>
+                            </div>
+
+                            <div style="display:flex;flex-direction:column;padding:2px 0 4px 30px;gap:2px;">
+                              <For each={sortAgentsForSidebar(s.agents)}>
+                                {(agent) => {
+                                  const agentKey = () => agent.agentId || '__main__';
+                                  const isAgentSelected = () => selectedAgent() === agentKey();
+                                  const primary = () => resolveAgentListPrimaryName(agent);
+                                  const secondary = () => resolveAgentListSecondaryLine(agent);
+                                  const agTone = () => sidebarAgentRowTone(agent);
+                                  const agPalette = () => statusPalette(agTone());
+                                  const agIcon = () => statusToneIcon(agTone());
+                                  const agAccent = () => {
+                                    const t = agTone();
+                                    if (t === 'attention') return 'border-left:2px solid var(--red);';
+                                    if (t === 'blocked') return 'border-left:2px solid var(--yellow);';
+                                    return 'border-left:2px solid transparent;';
+                                  };
+                                  const agBg = () => {
+                                    if (isAgentSelected()) return 'var(--bg-elevated)';
+                                    const t = agTone();
+                                    if (t === 'attention') return 'rgba(239, 68, 68, 0.06)';
+                                    if (t === 'blocked') return 'rgba(245, 158, 11, 0.06)';
+                                    return 'transparent';
+                                  };
+                                  const colorKey = agent.agentType || primary();
+                                  return (
+                                    <div
+                                      onClick={() => {
+                                        const sid = sessionId();
+                                        if (!sid) return;
+                                        selectSession(sid);
+                                        selectAgent(agentKey());
+                                      }}
+                                      style={[
+                                        'display:flex;align-items:center;gap:6px;padding:4px 8px;border-radius:6px;cursor:pointer;',
+                                        agAccent(),
+                                        `background:${agBg()};`,
+                                        isAgentSelected() ? 'box-shadow:inset 0 0 0 1px var(--accent);' : '',
+                                      ].join('')}
+                                      onMouseEnter={(e) => {
+                                        if (isAgentSelected()) return;
+                                        const el = e.currentTarget as HTMLDivElement;
+                                        const t = agTone();
+                                        if (t === 'attention') el.style.background = 'rgba(239, 68, 68, 0.1)';
+                                        else if (t === 'blocked') el.style.background = 'rgba(245, 158, 11, 0.1)';
+                                        else el.style.background = 'var(--bg-card)';
+                                      }}
+                                      onMouseLeave={(e) => {
+                                        if (isAgentSelected()) return;
+                                        (e.currentTarget as HTMLDivElement).style.background = agBg();
+                                      }}
+                                      aria-label={`${primary()}, ${sidebarAgentStatusLabel(agent)}. ${secondary()}`}
+                                    >
+                                      <div
+                                        style={[
+                                          'width:22px;height:22px;border-radius:9999px;flex-shrink:0;display:flex;',
+                                          'align-items:center;justify-content:center;font-size:9px;font-weight:700;',
+                                          `background:${getAgentColor(colorKey)}22;color:${getAgentColor(colorKey)};`,
+                                          'border:1px solid var(--border);',
+                                        ].join('')}
+                                        aria-hidden
+                                      >
+                                        {agentListInitials(primary())}
+                                      </div>
+                                      <Icon
+                                        path={agIcon()}
+                                        style={`width:9px;height:9px;color:${agPalette().text};flex-shrink:0;`}
+                                      />
+                                      <div style="display:flex;flex-direction:column;min-width:0;flex:1;gap:1px;">
+                                        <span style="font-size:var(--text-sm);font-weight:500;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                                          {primary()}
+                                        </span>
+                                        <span
+                                          style={[
+                                            'font-size:var(--text-sm);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;',
+                                            agTone() === 'attention' || agTone() === 'blocked'
+                                              ? `color:${agPalette().text};font-weight:600;`
+                                              : 'color:var(--text-dim);',
+                                          ].join('')}
+                                          title={secondary()}
+                                        >
+                                          {secondary()}
+                                        </span>
+                                      </div>
+                                      <div style={[
+                                        'display:flex;align-items:center;gap:2px;font-size:var(--text-sm);padding:1px 6px;',
+                                        'border-radius:9999px;font-weight:600;flex-shrink:0;max-width:min(120px,36%);',
+                                        `background:${agPalette().background};`,
+                                        `color:${agPalette().text};`,
+                                      ].join('')}>
+                                        <Icon path={agIcon()} style="width:8px;height:8px;flex-shrink:0;" />
+                                        <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                                          {sidebarAgentStatusLabel(agent)}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  );
+                                }}
+                              </For>
+                            </div>
                             </div>
                           );
                         }}
