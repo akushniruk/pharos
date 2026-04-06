@@ -5,13 +5,14 @@
 <footer class="foot">
   <div class="foot__inner">
     <p>
-      Pharos — <span class="mono">daemon + dashboard</span> for AI agent sessions. Copy aligns to
-      <a href={`${repoUrl}/blob/main/docs/gtm/launch-narrative-v1.md`}>launch narrative v1</a> and README hero
-      outcome <strong>A</strong> (      <a href={`${repoUrl}/blob/main/docs/gtm/readme-hero-variants-pha36.md`}>PHA-36 variants</a>).
+      Pharos pairs a <span class="mono">Rust daemon</span> with a dashboard so coding-agent sessions are
+      readable where they actually run. Positioning and proof points track
+      <a href={`${repoUrl}/blob/main/docs/gtm/launch-narrative-v1.md`}>launch narrative v1</a>; deeper detail
+      lives in the <a href={`${repoUrl}#readme`}>README</a> and
+      <a href={`${repoUrl}/releases`}>Releases</a>.
     </p>
     <p class="fine">
-      This page is a static marketing shell; canonical product story remains the GitHub README, Releases, and
-      in-repo docs.
+      Static landing only—the README and repo docs stay the source of truth.
     </p>
   </div>
 </footer>
