@@ -68,7 +68,7 @@ make client   # terminal 2 — dashboard on :5173
 
 Open `http://127.0.0.1:5173` and watch sessions as the daemon tails local agent transcripts.
 
-**Desktop app:** see [Development → Desktop app](#desktop-development) (Tauri + Vite, dev server on `:1420`).
+**Desktop app:** see [Development → Desktop app](#desktop-development) (Tauri wraps the Solid client; dev server on `:5173`).
 
 **Next:** [Architecture](#architecture) · [MVP observability slice](docs/mvp-observability-slice.md) · [Releases](docs/releases.md)
 
@@ -110,9 +110,9 @@ make client   # terminal 2 — http://127.0.0.1:5173
 
 ### Desktop app (Tauri 2 + Vite, `apps/desktop`)
 
-**Prerequisites:** Node.js **20.x** (matches [`.github/workflows/release-desktop.yml`](.github/workflows/release-desktop.yml); npm comes with Node) and **Rust 1.88+**, pinned in [`apps/desktop/src-tauri/rust-toolchain.toml`](apps/desktop/src-tauri/rust-toolchain.toml) (`rustup` uses it automatically when you build from that tree).
+**Prerequisites:** Node.js **20.x** (matches [`.github/workflows/release-desktop.yml`](.github/workflows/release-desktop.yml); npm comes with Node), **pnpm 9+** (for [`apps/client-solid`](apps/client-solid); enable with `corepack enable`), and **Rust 1.88+**, pinned in [`apps/desktop/src-tauri/rust-toolchain.toml`](apps/desktop/src-tauri/rust-toolchain.toml) (`rustup` uses it automatically when you build from that tree).
 
-**Dev ports:** Tauri loads the Vite app at [`http://localhost:1420`](http://localhost:1420) (`build.devUrl` in [`tauri.conf.json`](apps/desktop/src-tauri/tauri.conf.json), port fixed in [`vite.config.js`](apps/desktop/vite.config.js)). If you set `TAURI_DEV_HOST` for remote dev, Vite uses WebSocket HMR on **1421** for that host.
+**Dev ports:** Tauri loads the Solid dev server at [`http://localhost:5173`](http://localhost:5173) (`build.devUrl` in [`tauri.conf.json`](apps/desktop/src-tauri/tauri.conf.json), same port as `pnpm run dev` in `apps/client-solid`). Optional: set `TAURI_DEV_HOST` for LAN debugging (HMR follows that host).
 
 **Build entrypoint:** [`apps/desktop/package.json`](apps/desktop/package.json) via `npm run …` (see **npm scripts** below).
 
@@ -126,7 +126,7 @@ npm ci
 npm run tauri dev
 ```
 
-In dev, open `http://localhost:1420/docs` for the in-app docs shell.
+In dev, open `http://localhost:5173/docs/…` for the in-app docs portal (same Solid app as the web dashboard).
 
 **Production-style build**
 
@@ -140,10 +140,10 @@ npm run tauri build
 
 ```bash
 cd apps/desktop
-npx tauri icon ../../assets/brand/pharos-mark-square.svg
+npm run icons
 ```
 
-(Tauri’s SVG parser rejects XML `<!-- comments -->` in the source file.)
+(Release CI runs the same step before packaging. If the CLI rejects an SVG, try stripping comments or simplifying the file.)
 
 **Releases:** Ship **semantic version tags** `v*.*.*` per [docs/releases.md](docs/releases.md); [`.github/workflows/release-desktop.yml`](.github/workflows/release-desktop.yml) builds installers and opens a **draft** GitHub Release on those tags.
 
@@ -151,7 +151,7 @@ npx tauri icon ../../assets/brand/pharos-mark-square.svg
 
 - **`apps/daemon-rs`** — Rust service: session scan, JSONL tail, WebSocket fan-out; SQLite state (`PHAROS_DAEMON_DB_PATH`). Canonical event shape in [`apps/daemon-rs/src/model.rs`](apps/daemon-rs/src/model.rs).
 - **`apps/client-solid`** — SolidJS dashboard (Vite); talks to the daemon on the configured API/WebSocket port.
-- **`apps/desktop`** — Tauri 2 shell and Vite UI; bundle identifier `ing.pharos.desktop` ([`tauri.conf.json`](apps/desktop/src-tauri/tauri.conf.json)). Use `npm run dev` for the web asset server only; use `npm run tauri dev` for the full desktop app.
+- **`apps/desktop`** — Tauri 2 shell; bundles the Solid UI from `apps/client-solid`. Bundle identifier `ing.pharos.desktop` ([`tauri.conf.json`](apps/desktop/src-tauri/tauri.conf.json)). Use `npm run tauri dev` for the full desktop app (starts Solid on **5173**). Use `pnpm run dev` in `apps/client-solid` if you only want the browser UI.
 - **`.github/workflows/release-desktop.yml`** — On tags `v*.*.*`, matrix-builds macOS (aarch64 + x86_64), Linux, and Windows and attaches bundles to a **draft** GitHub Release.
 - **`scripts/paperclip-run-summary.sh`** — Append-only NDJSON run log helper for local agent and CI workflows; behavior and checks in [docs/mvp-observability-slice.md](docs/mvp-observability-slice.md).
 
@@ -186,7 +186,7 @@ npx tauri icon ../../assets/brand/pharos-mark-square.svg
 
 ## FAQ
 
-- **What runs where?** The **daemon + Solid dashboard** use **4000** (HTTP/WebSocket) and **5173** (Vite) by default (`make daemon` / `make client`). The **Tauri desktop** dev shell loads **1420** (`npm run tauri dev` under `apps/desktop`). They are separate stacks; you do not need both unless you are working on both.
+- **What runs where?** The **daemon + Solid dashboard** use **4000** (HTTP/WebSocket) and **5173** (Vite) by default (`make daemon` / `make client`). **Tauri desktop** dev uses the **same Solid dev server on 5173** (`npm run tauri dev` under `apps/desktop`). You still need the **daemon on 4000** for live sessions in any shell.
 - **Where is “truth” for events and sessions?** Session scan, JSONL tail, WebSocket fan-out, and the canonical event shape live in [`apps/daemon-rs`](apps/daemon-rs) — see [`apps/daemon-rs/src/model.rs`](apps/daemon-rs/src/model.rs) and [docs/mvp-observability-slice.md](docs/mvp-observability-slice.md).
 - **How do releases work?** Desktop ships on **semantic version tags** `v*.*.*` with a **draft** GitHub Release and attached bundles — see [docs/releases.md](docs/releases.md) and [CHANGELOG.md](CHANGELOG.md).
 

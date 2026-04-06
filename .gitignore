@@ -8,3 +8,29 @@ apps/client-solid/playwright-report/
 apps/client-solid/test-results/
 apps/landing-svelte/dist/
 **/.vite/
+
+# macOS
+.DS_Store
+**/.DS_Store
+
+# Local dev (daemon/client PIDs and logs)
+.run/
+
+# Cursor — machine-local hook state only
+.cursor/hooks/state/
+
+# Secrets / local env (keep examples tracked explicitly if you add them)
+.env
+.env.local
+.env.*.local
+
+# Package manager logs
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Editor swap files
+*.swp
+*.swo
+*~

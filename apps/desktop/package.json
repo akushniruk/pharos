@@ -4,19 +4,19 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
-    "test:e2e": "npm run build && playwright test",
+    "dev": "npm run dev:frontend",
+    "build": "npm run build:frontend",
+    "dev:frontend": "pnpm --dir ../client-solid run dev",
+    "build:frontend": "pnpm install --dir ../client-solid --frozen-lockfile && pnpm --dir ../client-solid run build",
+    "preview": "pnpm --dir ../client-solid run preview",
+    "icons": "tauri icon ../../assets/brand/pharos-mark-square.svg",
+    "test:e2e": "pnpm install --dir ../client-solid --frozen-lockfile && pnpm --dir ../client-solid run build && pnpm --dir ../client-solid run test:e2e",
     "tauri": "tauri"
   },
   "dependencies": {
-    "@tauri-apps/api": "^2",
-    "marked": "^15.0.0"
+    "@tauri-apps/api": "^2"
   },
   "devDependencies": {
-    "@playwright/test": "^1.51.0",
-    "@tauri-apps/cli": "^2",
-    "vite": "^6.0.0"
+    "@tauri-apps/cli": "^2"
   }
 }

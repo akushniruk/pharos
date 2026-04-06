@@ -4,6 +4,11 @@ import type { Project } from '../lib/types';
 import { projects, selectProject } from '../lib/store';
 import { connectionState, hasStreamData } from '../lib/ws';
 import { timeAgo } from '../lib/time';
+import {
+  agentAvatarDataUri,
+  projectFallbackIconDataUri,
+  resolveProjectLogo,
+} from '../widgets/sidebar/sidebarPresentation';
 
 /** Deduplicate useful agent badges by displayName, keeping the most active */
 function uniqueAgentBadges(p: Project): { name: string; isActive: boolean }[] {
@@ -63,52 +68,6 @@ function projectStatusLabel(p: Project): string {
   if (p.isActive) return 'Active';
   if (p.eventCount > 0) return 'Idle';
   return 'New';
-}
-
-function projectInitials(name: string): string {
-  const initials = name
-    .trim()
-    .split('')
-    .filter((char) => /[a-z0-9]/i.test(char))
-    .slice(0, 2)
-    .join('')
-    .toUpperCase();
-  return initials || 'P';
-}
-
-function projectFallbackIconDataUri(projectName: string): string {
-  const initials = projectInitials(projectName);
-  const escapedInitials = initials
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-  const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'>
-<text x='16' y='16' text-anchor='middle' dominant-baseline='central' font-family='Inter,Arial,sans-serif' font-size='15' font-weight='700' fill='#94A3B8'>${escapedInitials}</text>
-</svg>`;
-  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
-}
-
-function resolveProjectLogo(project: Project): string {
-  return projectFallbackIconDataUri(project.name);
-}
-
-function agentInitials(name: string): string {
-  const parts = name
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean);
-  if (parts.length === 0) return '?';
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return `${parts[0][0] || ''}${parts[1][0] || ''}`.toUpperCase();
-}
-
-function agentAvatarDataUri(name: string): string {
-  const initials = agentInitials(name);
-  const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'>
-<rect x='0' y='0' width='24' height='24' rx='12' fill='#1E293B'/>
-<text x='12' y='12' text-anchor='middle' dominant-baseline='central' font-family='Inter,Arial,sans-serif' font-size='13' font-weight='700' fill='white'>${initials}</text>
-</svg>`;
-  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
 }
 
 /** Inline home view — shown when no project selected */
@@ -235,6 +194,10 @@ export default function ProjectsHome() {
                         src={resolveProjectLogo(p)}
                         alt=""
                         style="width:32px;height:32px;object-fit:cover;"
+                        onError={(e) => {
+                          e.currentTarget.src = projectFallbackIconDataUri(p.name);
+                          e.currentTarget.onerror = null;
+                        }}
                       />
                     </div>
                     <div style="min-width:0;display:flex;flex-direction:column;gap:2px;">
@@ -280,6 +243,10 @@ export default function ProjectsHome() {
                               src={agentAvatarDataUri(badge.name)}
                               alt=""
                               style="width:100%;height:100%;object-fit:cover;"
+                              onError={(e) => {
+                                e.currentTarget.src = agentAvatarDataUri('Unknown');
+                                e.currentTarget.onerror = null;
+                              }}
                             />
                           </div>
                         )}

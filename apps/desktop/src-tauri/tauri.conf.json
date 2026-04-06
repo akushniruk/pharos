@@ -4,17 +4,17 @@
   "version": "0.1.0",
   "identifier": "ing.pharos.desktop",
   "build": {
-    "frontendDist": "../dist",
-    "devUrl": "http://localhost:1420",
-    "beforeDevCommand": "npm run dev",
-    "beforeBuildCommand": "npm run build"
+    "frontendDist": "../../client-solid/dist",
+    "devUrl": "http://localhost:5173",
+    "beforeDevCommand": "npm run dev:frontend",
+    "beforeBuildCommand": "npm run build:frontend"
   },
   "app": {
     "windows": [
       {
         "title": "Pharos",
-        "width": 800,
-        "height": 600,
+        "width": 1280,
+        "height": 800,
         "resizable": true,
         "fullscreen": false
       }

@@ -1,0 +1,113 @@
+
+  VITE v6.4.1  ready in 316 ms
+
+  ➜  Local:   http://localhost:5173/
+11:19:31 PM [vite] (client) hmr update /src/components/Sidebar.tsx
+11:19:37 PM [vite] (client) hmr update /src/pages/ProjectsHome.tsx
+11:19:37 PM [vite] Internal server error: Duplicate declaration "projectFallbackIconDataUri"
+  82 | }
+  83 |
+> 84 | function projectFallbackIconDataUri(projectName: string): string {
+     |          ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  85 |   const initials = projectInitials(projectName);
+  86 |   const escapedInitials = initials
+  87 |     .replace(/&/g, '&amp;')
+  Plugin: solid
+  File: /Users/akushniruk/home_projects/pharos/apps/client-solid/src/pages/ProjectsHome.tsx
+      at File.buildCodeFrameError (/Users/akushniruk/home_projects/pharos/apps/client-solid/node_modules/.pnpm/@babel+core@7.29.0/node_modules/@babel/core/lib/transformation/file/file.js:189:12)
+      at Scope.checkBlockScopedCollisions (/Users/akushniruk/home_projects/pharos/apps/client-solid/node_modules/.pnpm/@babel+traverse@7.29.0/node_modules/@babel/traverse/lib/scope/index.js:433:27)
+      at Scope.registerBinding (/Users/akushniruk/home_projects/pharos/apps/client-solid/node_modules/.pnpm/@babel+traverse@7.29.0/node_modules/@babel/traverse/lib/scope/index.js:530:16)
+      at Scope.registerDeclaration (/Users/akushniruk/home_projects/pharos/apps/client-solid/node_modules/.pnpm/@babel+traverse@7.29.0/node_modules/@babel/traverse/lib/scope/index.js:475:12)
+      at Object.BlockScoped (/Users/akushniruk/home_projects/pharos/apps/client-solid/node_modules/.pnpm/@babel+traverse@7.29.0/node_modules/@babel/traverse/lib/scope/index.js:276:12)
+      at Object.newFn (/Users/akushniruk/home_projects/pharos/apps/client-solid/node_modules/.pnpm/@babel+traverse@7.29.0/node_modules/@babel/traverse/lib/visitors.js:203:17)
+      at NodePath._call (/Users/akushniruk/home_projects/pharos/apps/client-solid/node_modules/.pnpm/@babel+traverse@7.29.0/node_modules/@babel/traverse/lib/path/context.js:50:20)
+      at NodePath.call (/Users/akushniruk/home_projects/pharos/apps/client-solid/node_modules/.pnpm/@babel+traverse@7.29.0/node_modules/@babel/traverse/lib/path/context.js:40:18)
+      at NodePath.visit (/Users/akushniruk/home_projects/pharos/apps/client-solid/node_modules/.pnpm/@babel+traverse@7.29.0/node_modules/@babel/traverse/lib/path/context.js:87:31)
+      at TraversalContext.visitQueue (/Users/akushniruk/home_projects/pharos/apps/client-solid/node_modules/.pnpm/@babel+traverse@7.29.0/node_modules/@babel/traverse/lib/context.js:96:16)
+      at TraversalContext.visitMultiple (/Users/akushniruk/home_projects/pharos/apps/client-solid/node_modules/.pnpm/@babel+traverse@7.29.0/node_modules/@babel/traverse/lib/context.js:68:17)
+      at TraversalContext.visit (/Users/akushniruk/home_projects/pharos/apps/client-solid/node_modules/.pnpm/@babel+traverse@7.29.0/node_modules/@babel/traverse/lib/context.js:117:19)
+      at traverseNode (/Users/akushniruk/home_projects/pharos/apps/client-solid/node_modules/.pnpm/@babel+traverse@7.29.0/node_modules/@babel/traverse/lib/traverse-node.js:130:17)
+      at traverse (/Users/akushniruk/home_projects/pharos/apps/client-solid/node_modules/.pnpm/@babel+traverse@7.29.0/node_modules/@babel/traverse/lib/index.js:53:34)
+      at NodePath.traverse (/Users/akushniruk/home_projects/pharos/apps/client-solid/node_modules/.pnpm/@babel+traverse@7.29.0/node_modules/@babel/traverse/lib/path/index.js:120:24)
+      at Scope.crawl (/Users/akushniruk/home_projects/pharos/apps/client-solid/node_modules/.pnpm/@babel+traverse@7.29.0/node_modules/@babel/traverse/lib/scope/index.js:695:10)
+      at Scope.init (/Users/akushniruk/home_projects/pharos/apps/client-solid/node_modules/.pnpm/@babel+traverse@7.29.0/node_modules/@babel/traverse/lib/scope/index.js:661:12)
+      at NodePath.setScope (/Users/akushniruk/home_projects/pharos/apps/client-solid/node_modules/.pnpm/@babel+traverse@7.29.0/node_modules/@babel/traverse/lib/path/context.js:139:55)
+      at NodePath.setContext (/Users/akushniruk/home_projects/pharos/apps/client-solid/node_modules/.pnpm/@babel+traverse@7.29.0/node_modules/@babel/traverse/lib/path/context.js:151:12)
+      at new File (/Users/akushniruk/home_projects/pharos/apps/client-solid/node_modules/.pnpm/@babel+core@7.29.0/node_modules/@babel/core/lib/transformation/file/file.js:80:8)
+      at normalizeFile (/Users/akushniruk/home_projects/pharos/apps/client-solid/node_modules/.pnpm/@babel+core@7.29.0/node_modules/@babel/core/lib/transformation/normalize-file.js:96:10)
+      at normalizeFile.next (<anonymous>)
+      at run (/Users/akushniruk/home_projects/pharos/apps/client-solid/node_modules/.pnpm/@babel+core@7.29.0/node_modules/@babel/core/lib/transformation/index.js:22:50)
+      at run.next (<anonymous>)
+      at transform (/Users/akushniruk/home_projects/pharos/apps/client-solid/node_modules/.pnpm/@babel+core@7.29.0/node_modules/@babel/core/lib/transform.js:22:33)
+      at transform.next (<anonymous>)
+      at step (/Users/akushniruk/home_projects/pharos/apps/client-solid/node_modules/.pnpm/gensync@1.0.0-beta.2/node_modules/gensync/index.js:261:32)
+      at /Users/akushniruk/home_projects/pharos/apps/client-solid/node_modules/.pnpm/gensync@1.0.0-beta.2/node_modules/gensync/index.js:273:13
+      at async.call.result.err.err (/Users/akushniruk/home_projects/pharos/apps/client-solid/node_modules/.pnpm/gensync@1.0.0-beta.2/node_modules/gensync/index.js:223:11)
+      at /Users/akushniruk/home_projects/pharos/apps/client-solid/node_modules/.pnpm/gensync@1.0.0-beta.2/node_modules/gensync/index.js:189:28
+      at /Users/akushniruk/home_projects/pharos/apps/client-solid/node_modules/.pnpm/@babel+core@7.29.0/node_modules/@babel/core/lib/gensync-utils/async.js:67:7
+      at /Users/akushniruk/home_projects/pharos/apps/client-solid/node_modules/.pnpm/gensync@1.0.0-beta.2/node_modules/gensync/index.js:113:33
+      at step (/Users/akushniruk/home_projects/pharos/apps/client-solid/node_modules/.pnpm/gensync@1.0.0-beta.2/node_modules/gensync/index.js:287:14)
+      at /Users/akushniruk/home_projects/pharos/apps/client-solid/node_modules/.pnpm/gensync@1.0.0-beta.2/node_modules/gensync/index.js:273:13
+      at async.call.result.err.err (/Users/akushniruk/home_projects/pharos/apps/client-solid/node_modules/.pnpm/gensync@1.0.0-beta.2/node_modules/gensync/index.js:223:11)
+11:19:37 PM [vite] (client) hmr invalidate /src/pages/ProjectsHome.tsx
+11:19:37 PM [vite] (client) hmr update /src/app/AppShell.tsx
+11:19:37 PM [vite] (client) Pre-transform error: Duplicate declaration "projectFallbackIconDataUri"
+  82 | }
+  83 |
+> 84 | function projectFallbackIconDataUri(projectName: string): string {
+     |          ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  85 |   const initials = projectInitials(projectName);
+  86 |   const escapedInitials = initials
+  87 |     .replace(/&/g, '&amp;')
+  Plugin: solid
+  File: /Users/akushniruk/home_projects/pharos/apps/client-solid/src/pages/ProjectsHome.tsx
+11:19:37 PM [vite] (client) hmr invalidate /src/app/AppShell.tsx
+11:19:37 PM [vite] (client) page reload src/app/AppShell.tsx
+11:19:38 PM [vite] Internal server error: Duplicate declaration "projectFallbackIconDataUri"
+  82 | }
+  83 |
+> 84 | function projectFallbackIconDataUri(projectName: string): string {
+     |          ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  85 |   const initials = projectInitials(projectName);
+  86 |   const escapedInitials = initials
+  87 |     .replace(/&/g, '&amp;')
+  Plugin: solid
+  File: /Users/akushniruk/home_projects/pharos/apps/client-solid/src/pages/ProjectsHome.tsx
+      at File.buildCodeFrameError (/Users/akushniruk/home_projects/pharos/apps/client-solid/node_modules/.pnpm/@babel+core@7.29.0/node_modules/@babel/core/lib/transformation/file/file.js:189:12)
+      at Scope.checkBlockScopedCollisions (/Users/akushniruk/home_projects/pharos/apps/client-solid/node_modules/.pnpm/@babel+traverse@7.29.0/node_modules/@babel/traverse/lib/scope/index.js:433:27)
+      at Scope.registerBinding (/Users/akushniruk/home_projects/pharos/apps/client-solid/node_modules/.pnpm/@babel+traverse@7.29.0/node_modules/@babel/traverse/lib/scope/index.js:530:16)
+      at Scope.registerDeclaration (/Users/akushniruk/home_projects/pharos/apps/client-solid/node_modules/.pnpm/@babel+traverse@7.29.0/node_modules/@babel/traverse/lib/scope/index.js:475:12)
+      at Object.BlockScoped (/Users/akushniruk/home_projects/pharos/apps/client-solid/node_modules/.pnpm/@babel+traverse@7.29.0/node_modules/@babel/traverse/lib/scope/index.js:276:12)
+      at Object.newFn (/Users/akushniruk/home_projects/pharos/apps/client-solid/node_modules/.pnpm/@babel+traverse@7.29.0/node_modules/@babel/traverse/lib/visitors.js:203:17)
+      at NodePath._call (/Users/akushniruk/home_projects/pharos/apps/client-solid/node_modules/.pnpm/@babel+traverse@7.29.0/node_modules/@babel/traverse/lib/path/context.js:50:20)
+      at NodePath.call (/Users/akushniruk/home_projects/pharos/apps/client-solid/node_modules/.pnpm/@babel+traverse@7.29.0/node_modules/@babel/traverse/lib/path/context.js:40:18)
+      at NodePath.visit (/Users/akushniruk/home_projects/pharos/apps/client-solid/node_modules/.pnpm/@babel+traverse@7.29.0/node_modules/@babel/traverse/lib/path/context.js:87:31)
+      at TraversalContext.visitQueue (/Users/akushniruk/home_projects/pharos/apps/client-solid/node_modules/.pnpm/@babel+traverse@7.29.0/node_modules/@babel/traverse/lib/context.js:96:16)
+      at TraversalContext.visitMultiple (/Users/akushniruk/home_projects/pharos/apps/client-solid/node_modules/.pnpm/@babel+traverse@7.29.0/node_modules/@babel/traverse/lib/context.js:68:17)
+      at TraversalContext.visit (/Users/akushniruk/home_projects/pharos/apps/client-solid/node_modules/.pnpm/@babel+traverse@7.29.0/node_modules/@babel/traverse/lib/context.js:117:19)
+      at traverseNode (/Users/akushniruk/home_projects/pharos/apps/client-solid/node_modules/.pnpm/@babel+traverse@7.29.0/node_modules/@babel/traverse/lib/traverse-node.js:130:17)
+      at traverse (/Users/akushniruk/home_projects/pharos/apps/client-solid/node_modules/.pnpm/@babel+traverse@7.29.0/node_modules/@babel/traverse/lib/index.js:53:34)
+      at NodePath.traverse (/Users/akushniruk/home_projects/pharos/apps/client-solid/node_modules/.pnpm/@babel+traverse@7.29.0/node_modules/@babel/traverse/lib/path/index.js:120:24)
+      at Scope.crawl (/Users/akushniruk/home_projects/pharos/apps/client-solid/node_modules/.pnpm/@babel+traverse@7.29.0/node_modules/@babel/traverse/lib/scope/index.js:695:10)
+      at Scope.init (/Users/akushniruk/home_projects/pharos/apps/client-solid/node_modules/.pnpm/@babel+traverse@7.29.0/node_modules/@babel/traverse/lib/scope/index.js:661:12)
+      at NodePath.setScope (/Users/akushniruk/home_projects/pharos/apps/client-solid/node_modules/.pnpm/@babel+traverse@7.29.0/node_modules/@babel/traverse/lib/path/context.js:139:55)
+      at NodePath.setContext (/Users/akushniruk/home_projects/pharos/apps/client-solid/node_modules/.pnpm/@babel+traverse@7.29.0/node_modules/@babel/traverse/lib/path/context.js:151:12)
+      at new File (/Users/akushniruk/home_projects/pharos/apps/client-solid/node_modules/.pnpm/@babel+core@7.29.0/node_modules/@babel/core/lib/transformation/file/file.js:80:8)
+      at normalizeFile (/Users/akushniruk/home_projects/pharos/apps/client-solid/node_modules/.pnpm/@babel+core@7.29.0/node_modules/@babel/core/lib/transformation/normalize-file.js:96:10)
+      at normalizeFile.next (<anonymous>)
+      at run (/Users/akushniruk/home_projects/pharos/apps/client-solid/node_modules/.pnpm/@babel+core@7.29.0/node_modules/@babel/core/lib/transformation/index.js:22:50)
+      at run.next (<anonymous>)
+      at transform (/Users/akushniruk/home_projects/pharos/apps/client-solid/node_modules/.pnpm/@babel+core@7.29.0/node_modules/@babel/core/lib/transform.js:22:33)
+      at transform.next (<anonymous>)
+      at step (/Users/akushniruk/home_projects/pharos/apps/client-solid/node_modules/.pnpm/gensync@1.0.0-beta.2/node_modules/gensync/index.js:261:32)
+      at /Users/akushniruk/home_projects/pharos/apps/client-solid/node_modules/.pnpm/gensync@1.0.0-beta.2/node_modules/gensync/index.js:273:13
+      at async.call.result.err.err (/Users/akushniruk/home_projects/pharos/apps/client-solid/node_modules/.pnpm/gensync@1.0.0-beta.2/node_modules/gensync/index.js:223:11)
+      at /Users/akushniruk/home_projects/pharos/apps/client-solid/node_modules/.pnpm/gensync@1.0.0-beta.2/node_modules/gensync/index.js:189:28
+      at /Users/akushniruk/home_projects/pharos/apps/client-solid/node_modules/.pnpm/@babel+core@7.29.0/node_modules/@babel/core/lib/gensync-utils/async.js:67:7
+      at /Users/akushniruk/home_projects/pharos/apps/client-solid/node_modules/.pnpm/gensync@1.0.0-beta.2/node_modules/gensync/index.js:113:33
+      at step (/Users/akushniruk/home_projects/pharos/apps/client-solid/node_modules/.pnpm/gensync@1.0.0-beta.2/node_modules/gensync/index.js:287:14)
+      at /Users/akushniruk/home_projects/pharos/apps/client-solid/node_modules/.pnpm/gensync@1.0.0-beta.2/node_modules/gensync/index.js:273:13
+      at async.call.result.err.err (/Users/akushniruk/home_projects/pharos/apps/client-solid/node_modules/.pnpm/gensync@1.0.0-beta.2/node_modules/gensync/index.js:223:11)
+11:19:44 PM [vite] (client) hmr update /src/pages/ProjectsHome.tsx
+11:19:45 PM [vite] (client) hmr update /src/pages/ProjectsHome.tsx
+11:19:47 PM [vite] (client) hmr update /src/pages/ProjectsHome.tsx
