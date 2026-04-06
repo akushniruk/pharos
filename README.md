@@ -4,6 +4,8 @@
 
 > Observable, governable AI coding agents — see what runs on your machine, control it, and ship with proof.
 
+**Canonical external promise (GitHub / releases / threads):** *See what your coding agent does, govern it, and prove it — then ship faster because the system is inspectable.* Strategic hierarchy (security-led, velocity secondary): [docs/gtm/launch-narrative-v1.md](docs/gtm/launch-narrative-v1.md).
+
 Pharos makes **AI coding agents observable and governable** on your machine: see what ran, under what rules, and prove it — so security and platform teams can say **yes** to agents without trading away clarity. Speed follows once the lights are on.
 
 ## Who it’s for
@@ -34,13 +36,45 @@ Most agent tools optimize for **output**. Pharos focuses on **observability** an
 
 ## Development
 
-**Desktop app (Tauri 2 + Vite)** lives in `apps/desktop`.
+This repo ships **two runnable surfaces**: the **daemon + Solid dashboard** (MVP web stack) and the **Tauri desktop** app. They use different ports and package managers; pick the path you are working on.
+
+### Daemon + web dashboard (`apps/daemon-rs`, `apps/client-solid`)
+
+**What it is:** Rust daemon tails local agent session transcripts and streams events over WebSocket; SolidJS UI is the dashboard. See [CLAUDE.md](CLAUDE.md) for model and session concepts.
+
+**Prerequisites:** **Rust 1.88.0** (repo root [`rust-toolchain.toml`](rust-toolchain.toml); `rustup` picks it up from the repo) and **pnpm** for the client.
+
+**Ports (defaults):** daemon HTTP/WebSocket **`4000`**; Vite dev server **`5173`**. Override with `SERVER_PORT` / `CLIENT_PORT` when invoking `make`.
+
+**Repo-root Makefile** — `make help` lists targets. Common ones:
+
+| Target | Purpose |
+| --- | --- |
+| `make daemon` | Run `cargo run -- serve` in `apps/daemon-rs` on `SERVER_PORT` |
+| `make client` | Run `pnpm dev` in `apps/client-solid` on `CLIENT_PORT` |
+| `make dev` / `make up` | Start daemon + client in the background (pid files under `.run/`) |
+| `make down` | Stop background daemon + client started by `up`/`dev` |
+| `make test` | `cargo test` in `apps/daemon-rs` |
+| `make build` | Production build of the Solid client |
+| `make health` | `curl` checks against daemon and client ports |
+| `make open` | Open `http://localhost:$(CLIENT_PORT)` in the default browser |
+
+**Run locally (foreground)**
+
+```bash
+make daemon   # terminal 1 — http://127.0.0.1:4000
+make client   # terminal 2 — http://127.0.0.1:5173
+```
+
+**CI:** [`.github/workflows/ci-e2e.yml`](.github/workflows/ci-e2e.yml) runs Playwright against `apps/client-solid` when that tree changes. [`.github/workflows/ci-desktop.yml`](.github/workflows/ci-desktop.yml) verifies desktop manifests and runs desktop Playwright tests when `apps/desktop` (or related release scripts) change. Rust daemon coverage is **`make test` locally** for now — there is no dedicated `apps/daemon-rs` workflow in `.github/workflows/` yet.
+
+### Desktop app (Tauri 2 + Vite, `apps/desktop`)
 
 **Prerequisites:** Node.js **20.x** (matches [`.github/workflows/release-desktop.yml`](.github/workflows/release-desktop.yml); npm comes with Node) and **Rust 1.88+**, pinned in [`apps/desktop/src-tauri/rust-toolchain.toml`](apps/desktop/src-tauri/rust-toolchain.toml) (`rustup` uses it automatically when you build from that tree).
 
-**Build entrypoint:** There is no repo-root `Makefile`; desktop work is driven from [`apps/desktop/package.json`](apps/desktop/package.json) via `npm run …` (see **npm scripts** below).
+**Dev ports:** Tauri loads the Vite app at [`http://localhost:1420`](http://localhost:1420) (`build.devUrl` in [`tauri.conf.json`](apps/desktop/src-tauri/tauri.conf.json), port fixed in [`vite.config.js`](apps/desktop/vite.config.js)). If you set `TAURI_DEV_HOST` for remote dev, Vite uses WebSocket HMR on **1421** for that host.
 
-**Dev ports:** In dev, Tauri loads the Vite app at [`http://localhost:1420`](http://localhost:1420) (`build.devUrl` in [`tauri.conf.json`](apps/desktop/src-tauri/tauri.conf.json), port fixed in [`vite.config.js`](apps/desktop/vite.config.js)). If you set `TAURI_DEV_HOST` for remote dev, Vite uses WebSocket HMR on **1421** for that host.
+**Build entrypoint:** [`apps/desktop/package.json`](apps/desktop/package.json) via `npm run …` (see **npm scripts** below).
 
 **npm scripts** (`apps/desktop`): `dev` (Vite only), `build` (production assets), `preview` (serve built assets), `tauri` (CLI passthrough — e.g. `npm run tauri dev`).
 
@@ -71,10 +105,14 @@ npx tauri icon ../../assets/brand/pharos-mark-square.svg
 
 (Tauri’s SVG parser rejects XML `<!-- comments -->` in the source file.)
 
+**Releases:** Ship **semantic version tags** `v*.*.*` per [docs/releases.md](docs/releases.md); [`.github/workflows/release-desktop.yml`](.github/workflows/release-desktop.yml) builds installers and opens a **draft** GitHub Release on those tags ([PHA-46](/PHA/issues/PHA-46)).
+
 [![Release desktop (draft)](https://github.com/akushniruk/pharos/actions/workflows/release-desktop.yml/badge.svg)](https://github.com/akushniruk/pharos/actions/workflows/release-desktop.yml)
 
 ## Architecture
 
+- **`apps/daemon-rs`** — Rust service: session scan, JSONL tail, WebSocket fan-out; SQLite state (`PHAROS_DAEMON_DB_PATH`). Canonical event shape in [`apps/daemon-rs/src/model.rs`](apps/daemon-rs/src/model.rs).
+- **`apps/client-solid`** — SolidJS dashboard (Vite); talks to the daemon on the configured API/WebSocket port.
 - **`apps/desktop`** — Tauri 2 shell and Vite UI; bundle identifier `ing.pharos.desktop` ([`tauri.conf.json`](apps/desktop/src-tauri/tauri.conf.json)). Use `npm run dev` for the web asset server only; use `npm run tauri dev` for the full desktop app.
 - **`.github/workflows/release-desktop.yml`** — On tags `v*.*.*`, matrix-builds macOS (aarch64 + x86_64), Linux, and Windows and attaches bundles to a **draft** GitHub Release ([PHA-46](/PHA/issues/PHA-46)).
 - **`scripts/paperclip-run-summary.sh`** — Append-only NDJSON run log for Paperclip-connected agents; behavior and API checks in [docs/mvp-observability-slice.md](docs/mvp-observability-slice.md) (including **M1** run ↔ issue correlation via the control plane).
@@ -83,7 +121,10 @@ npx tauri icon ../../assets/brand/pharos-mark-square.svg
 
 | Path | Role |
 | --- | --- |
+| `apps/daemon-rs/` | Rust daemon (WebSocket API, session tailing, SQLite) |
+| `apps/client-solid/` | SolidJS + Vite dashboard |
 | `apps/desktop/` | Tauri 2 + Vite desktop app (`package.json`, `src/`, `src-tauri/`) |
+| `Makefile` | Local dev orchestration for daemon + Solid client (ports 4000 / 5173) |
 | `docs/` | Product and engineering docs (releases, runbook pointer, MVP slice, design) |
 | `scripts/` | Workspace utilities (e.g. Paperclip run summary NDJSON) |
 | `.github/workflows/` | CI/CD (`release-desktop.yml`, etc.) |
@@ -108,7 +149,7 @@ npx tauri icon ../../assets/brand/pharos-mark-square.svg
 
 1. **User-visible changes** — Add an entry under `[Unreleased]` in [CHANGELOG.md](CHANGELOG.md) when the change belongs in release notes.
 2. **Releases** — Follow [docs/releases.md](docs/releases.md): bump the three desktop version fields together (see runbook), run `python3 scripts/release/verify_desktop_versions.py`, then tag, draft Release, engineering smoke, board QA on [PHA-44](/PHA/issues/PHA-44), then publish.
-3. **Pull requests** — Use clear titles; link issues with `[PHA-NN](/PHA/issues/PHA-NN)` when helpful; keep desktop builds working with the pinned Rust toolchain.
+3. **Pull requests** — Use clear titles; link issues with `[PHA-NN](/PHA/issues/PHA-NN)` when helpful; keep `make test` and desktop builds green with the pinned Rust toolchain(s).
 
 ## License
 

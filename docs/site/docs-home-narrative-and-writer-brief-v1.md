@@ -121,4 +121,4 @@ Use this when wiring a docs portal (e.g. in-app `/docs` shell, static site sideb
 
 ---
 
-*v1.0 — [PHA-59](/PHA/issues/PHA-59); parent epic [PHA-54](/PHA/issues/PHA-54).*
+*v1.1 — README root and in-app `/docs` home include the canonical external promise verbatim; traceability [PHA-81](/PHA/issues/PHA-81). v1.0 — [PHA-59](/PHA/issues/PHA-59); parent epic [PHA-54](/PHA/issues/PHA-54).*

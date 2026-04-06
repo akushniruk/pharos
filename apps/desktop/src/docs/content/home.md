@@ -4,6 +4,8 @@
 
 Pharos makes agent execution **observable and understandable** on the machine where you build software — so you can see what ran, under which rules, and prove it for review. **Confident speed comes after the lights are on.**
 
+*See what your coding agent does, govern it, and prove it — then ship faster because the system is inspectable.*
+
 Not another chat client: an **observability layer** for real agent workflows — traces, policy, and human-readable narratives of work.
 
 ## Choose a path

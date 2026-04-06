@@ -2,6 +2,8 @@
 
 Pharos is **not** a generic chat client. It is an **observability layer** for AI coding agent execution: durable signals about what ran, where, and under which rules — so humans can review, govern, and ship with confidence.
 
+*See what your coding agent does, govern it, and prove it — then ship faster because the system is inspectable.*
+
 ## Problem
 
 Agent workflows are often **opaque**: terminal scrollback disappears, context is fragmented across tools, and proving “what happened” across sessions is hard.

@@ -19,6 +19,7 @@ Release notes for **public** desktop builds should summarize from here into the 
 
 ### Changed
 
+- Docs portal index, root README, in-app `/docs` home and “What is Pharos?”, and `site/onboarding-homepage.html` meta/subhead aligned with the security-first GTM lock and canonical external promise in [docs/gtm/launch-narrative-v1.md](docs/gtm/launch-narrative-v1.md) ([PHA-81](/PHA/issues/PHA-81)).
 - Desktop `/docs` UX: denser sidebar nav, readable article measure (~72ch) and heading scale, skip link, in-page TOC with scroll-aware highlight, mobile slide-in drawer + backdrop (Docs menu), loading skeletons for article and TOC, and clearer missing-page copy — aligned with [docs/design/docs-page-ux-spec.md](docs/design/docs-page-ux-spec.md) ([PHA-58](/PHA/issues/PHA-58)).
 - README: clearer engineering setup — Node 20 (CI-aligned), dev URLs/ports for Vite + Tauri, npm scripts, no root Makefile, and a top-level repository layout table.
 

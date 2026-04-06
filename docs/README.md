@@ -2,6 +2,10 @@
 
 Use this page as the primary entry point for repo documentation.
 
+## Positioning and public `/docs`
+
+Shipped, visitor-facing copy for the in-app docs shell lives under [`apps/desktop/src/docs/content/`](../apps/desktop/src/docs/content/). Canonical narrative, CTAs, and writer brief: [docs/site/docs-home-narrative-and-writer-brief-v1.md](site/docs-home-narrative-and-writer-brief-v1.md). URL / IA outline: [docs/site/docs-ia-content-outline-v1.md](site/docs-ia-content-outline-v1.md). GTM lock (security-first): [docs/gtm/launch-narrative-v1.md](gtm/launch-narrative-v1.md). Static hero strings (paste deck, not a live site): [site/onboarding-homepage.html](../site/onboarding-homepage.html).
+
 ## Start Here
 
 - [Event Stream UX Guide](event-stream-ux-guide.md)
