@@ -25,6 +25,11 @@ for (const entry of allEntries) {
   DOC_ROUTE_PATH_TO_SLUG.set(entry.path, slug);
 }
 
+/** Every navigable `/docs/:slug` (insertion order matches portal nav). For Playwright + parity tooling. */
+export const ALL_DOC_ROUTE_SLUGS: readonly string[] = Object.freeze([
+  ...DOC_ROUTE_SLUG_TO_PATH.keys(),
+]);
+
 export function docsSlugForPath(path: string): string {
   return DOC_ROUTE_PATH_TO_SLUG.get(path) ?? slugifyHeading(path.replace(/\.md$/i, ''));
 }
