@@ -12,6 +12,7 @@ Release notes for **public** desktop builds should summarize from here into the 
 ### Added
 
 - Root **`LICENSE`** (MIT) and **`CONTRIBUTING.md`** contributor guide ([PHA-115](/PHA/issues/PHA-115)).
+- README hero visuals: architecture-flow SVG and optional UI screenshot-frame placeholder under `assets/readme/`, plus UX handoff (alt text, README placement snippets) in [docs/gtm/readme-hero-imagery-handoff-pha116.md](docs/gtm/readme-hero-imagery-handoff-pha116.md) ([PHA-116](/PHA/issues/PHA-116)).
 - `scripts/release/verify_desktop_versions.py` plus CI / release-workflow guards so `package.json`, `tauri.conf.json`, and `Cargo.toml` stay aligned and match `v*.*.*` tags before draft GitHub Releases build ([PHA-72](/PHA/issues/PHA-72)).
 - In-app documentation at `/docs` in the desktop Vite shell: SPA routing, sidebar + primary nav aligned with [PHA-55](/PHA/issues/PHA-55) IA, markdown rendering (`marked`), filterable page list, and bundled imports for `docs/mvp-observability-slice.md` and root `CHANGELOG.md` ([PHA-56](/PHA/issues/PHA-56)).
 - Tauri 2 desktop shell at `apps/desktop` (Vite + `ing.pharos.desktop` bundle id) with Pharos icons generated from `assets/brand/pharos-mark-square.svg` (canonical square master also at `icons/source/app-icon.svg`).

@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="480" viewBox="0 0 800 480" role="img">
+  <defs>
+    <linearGradient id="ph" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#2563eb"/>
+      <stop offset="100%" stop-color="#1a56db"/>
+    </linearGradient>
+    <style>
+      .bg { fill: #f1f5f9; }
+      .shell { fill: #ffffff; stroke: #cbd5e1; stroke-width: 1.5; }
+      .chrome { fill: #e2e8f0; }
+      .void { fill: #f8fafc; stroke: #e2e8f0; stroke-width: 2; stroke-dasharray: 8 6; }
+      .hint { fill: #64748b; font-family: ui-sans-serif, system-ui, sans-serif; font-size: 14px; }
+      .title { fill: #0f172a; font-family: ui-sans-serif, system-ui, sans-serif; font-size: 13px; font-weight: 600; }
+      @media (prefers-color-scheme: dark) {
+        .bg { fill: #020617; }
+        .shell { fill: #1e293b; stroke: #334155; }
+        .chrome { fill: #334155; }
+        .void { fill: #0f172a; stroke: #475569; }
+        .hint { fill: #94a3b8; }
+        .title { fill: #f1f5f9; }
+      }
+    </style>
+  </defs>
+  <rect class="bg" width="800" height="480" rx="16"/>
+  <g transform="translate(48,40)">
+    <rect class="shell" x="0" y="0" width="704" height="400" rx="12"/>
+    <path class="chrome" d="M0 0 H704 V40 H0 Z"/>
+    <circle cx="24" cy="20" r="6" fill="#f87171"/>
+    <circle cx="46" cy="20" r="6" fill="#fbbf24"/>
+    <circle cx="68" cy="20" r="6" fill="#4ade80"/>
+    <rect x="280" y="12" width="144" height="16" rx="4" fill="url(#ph)" opacity="0.9"/>
+    <text class="title" x="352" y="24" text-anchor="middle" font-size="10px" fill="#f8fafc">Pharos</text>
+    <rect class="void" x="24" y="56" width="656" height="320" rx="8"/>
+    <text class="hint" x="352" y="200" text-anchor="middle">Product screenshot placeholder</text>
+    <text class="hint" x="352" y="224" text-anchor="middle" font-size="12px" opacity="0.85">Export PNG from the dashboard; swap into README or replace this SVG.</text>
+  </g>
+</svg>
