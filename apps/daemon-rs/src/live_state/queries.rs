@@ -158,9 +158,9 @@ impl LiveStateData {
                 event_count: grouped_events.len(),
                 last_event_at: latest_at,
                 is_active: explicitly_active && (is_main_agent || recently_active),
-                parent_id: grouped_events
-                    .iter()
-                    .find_map(|event| super::util::payload_string(&event.payload, "parent_agent_id")),
+                parent_id: grouped_events.iter().find_map(|event| {
+                    crate::agent_identity::payload_parent_agent_id(&event.payload)
+                }),
             });
         }
 

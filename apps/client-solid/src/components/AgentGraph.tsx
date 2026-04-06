@@ -13,7 +13,7 @@ import GraphAgentFilterTabPanel, {
 import {
   type GraphNode,
   agentLabel,
-  computeClusterLayout,
+  computeHierarchicalLayout,
   METRO_COLORS,
   NODE_H,
   NODE_W,
@@ -173,7 +173,7 @@ export default function AgentGraph() {
       .filter((edge) => visibleIds.has(edge.parentId) && visibleIds.has(edge.childId));
   });
 
-  const layout = createMemo(() => computeClusterLayout(roots(), children()));
+  const layout = createMemo(() => computeHierarchicalLayout(nodes()));
 
   const applyGraphFit = () => {
     const el = graphViewport();
@@ -208,11 +208,11 @@ export default function AgentGraph() {
   });
 
   const nodePos = (node: GraphNode) => {
-    return layout().rootPositions.get(node.graphId) ?? layout().childPositions.get(node.graphId) ?? { x: 0, y: 0 };
+    return layout().positions.get(node.graphId) ?? { x: 0, y: 0 };
   };
   const edgePath = (parentId: string, childId: string) => {
-    const parentPos = layout().rootPositions.get(parentId) ?? layout().childPositions.get(parentId);
-    const childPos = layout().rootPositions.get(childId) ?? layout().childPositions.get(childId);
+    const parentPos = layout().positions.get(parentId);
+    const childPos = layout().positions.get(childId);
     if (!parentPos || !childPos) return undefined;
     return `M ${parentPos.x + NODE_W / 2} ${parentPos.y + NODE_H} C ${parentPos.x + NODE_W / 2} ${(parentPos.y + NODE_H + childPos.y) / 2}, ${childPos.x + NODE_W / 2} ${(parentPos.y + NODE_H + childPos.y) / 2}, ${childPos.x + NODE_W / 2} ${childPos.y}`;
   };

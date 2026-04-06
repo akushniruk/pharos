@@ -8,6 +8,7 @@ use thiserror::Error;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
 
+use crate::agent_identity::{control_plane_agent_label, payload_parent_agent_id};
 use crate::model::{
     AcquisitionMode, AgentRegistryEntry, EventEnvelope, EventKind, FilterOptions, LegacyHookEvent,
     SessionSummary,
@@ -160,7 +161,7 @@ impl Store {
                         display_name_score: display_name.score,
                         agent_type: payload_string(&event.payload, "agent_type"),
                         model_name: payload_string(&event.payload, "model"),
-                        parent_id: payload_string(&event.payload, "parent_agent_id"),
+                        parent_id: payload_parent_agent_id(&event.payload),
                         team_name: payload_string(&event.payload, "team_name"),
                         lifecycle_status: resolve_lifecycle_status(&event.event_kind).to_string(),
                         first_seen_at: event.occurred_at_ms,
@@ -184,7 +185,7 @@ impl Store {
             if let Some(model_name) = payload_string(&event.payload, "model") {
                 accumulator.model_name = Some(model_name);
             }
-            if let Some(parent_id) = payload_string(&event.payload, "parent_agent_id") {
+            if let Some(parent_id) = payload_parent_agent_id(&event.payload) {
                 accumulator.parent_id = Some(parent_id);
             }
             if let Some(team_name) = payload_string(&event.payload, "team_name") {
@@ -345,6 +346,13 @@ struct DisplayNameCandidate {
 }
 
 fn display_name_candidate_for_event(event: &EventEnvelope) -> DisplayNameCandidate {
+    if let Some(label) = control_plane_agent_label(&event.payload) {
+        return DisplayNameCandidate {
+            value: label,
+            score: 15,
+        };
+    }
+
     if let Some(responsibility) = payload_responsibility(&event.payload) {
         return DisplayNameCandidate {
             value: responsibility,

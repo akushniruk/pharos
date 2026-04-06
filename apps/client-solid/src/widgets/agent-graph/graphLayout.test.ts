@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { agentLabel, type GraphNode } from './graphLayout';
+import { agentLabel, computeHierarchicalLayout, type GraphNode } from './graphLayout';
 
 function node(partial: Partial<GraphNode> & Pick<GraphNode, 'graphId'>): GraphNode {
   return {
@@ -75,5 +75,26 @@ describe('agentLabel', () => {
         }),
       ),
     ).toBe('Worker');
+  });
+});
+
+describe('computeHierarchicalLayout', () => {
+  it('stacks a parent → child → grandchild chain vertically', () => {
+    const root = node({ graphId: 'ceo', agentId: '1', displayName: 'CEO' });
+    const mid = node({
+      graphId: 'cto',
+      agentId: '2',
+      displayName: 'CTO',
+      parentGraphId: 'ceo',
+    });
+    const leaf = node({
+      graphId: 'eng',
+      agentId: '3',
+      displayName: 'Engineer',
+      parentGraphId: 'cto',
+    });
+    const { positions } = computeHierarchicalLayout([root, mid, leaf]);
+    expect(positions.get('ceo')!.y).toBeLessThan(positions.get('cto')!.y);
+    expect(positions.get('cto')!.y).toBeLessThan(positions.get('eng')!.y);
   });
 });

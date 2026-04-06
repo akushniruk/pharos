@@ -192,3 +192,95 @@ export function computeClusterLayout(
 
   return { width, height, rootPositions, childPositions };
 }
+
+function sortGraphNodes(list: GraphNode[]): GraphNode[] {
+  return [...list].sort((a, b) => {
+    const d = (b.lastEventAt ?? 0) - (a.lastEventAt ?? 0);
+    if (d !== 0) return d;
+    return a.graphId.localeCompare(b.graphId);
+  });
+}
+
+/**
+ * Multi-level org layout: supports chains (e.g. CEO → CTO → Engineer) not only star trees.
+ */
+export function computeHierarchicalLayout(nodes: GraphNode[]): {
+  width: number;
+  height: number;
+  positions: Map<string, { x: number; y: number }>;
+} {
+  const positions = new Map<string, { x: number; y: number }>();
+  if (nodes.length === 0) {
+    return { width: PAD * 2 + NODE_W, height: PAD * 2 + NODE_H, positions };
+  }
+
+  const byId = new Map(nodes.map((n) => [n.graphId, n]));
+  const effectiveParentId = (n: GraphNode): string | undefined => {
+    const p = n.parentGraphId;
+    if (!p || !byId.has(p)) return undefined;
+    return p;
+  };
+
+  const childrenOf = new Map<string, GraphNode[]>();
+  const roots: GraphNode[] = [];
+  for (const n of nodes) {
+    const p = effectiveParentId(n);
+    if (!p) {
+      roots.push(n);
+    } else {
+      const arr = childrenOf.get(p) ?? [];
+      arr.push(n);
+      childrenOf.set(p, arr);
+    }
+  }
+  for (const id of byId.keys()) {
+    const kids = childrenOf.get(id);
+    if (kids) childrenOf.set(id, sortGraphNodes(kids));
+  }
+
+  function layoutSubtree(node: GraphNode, depth: number, xCursor: number): { endX: number } {
+    const y = PAD + depth * (NODE_H + V_GAP);
+    const kids = childrenOf.get(node.graphId) ?? [];
+    if (kids.length === 0) {
+      positions.set(node.graphId, { x: xCursor, y });
+      return { endX: xCursor + NODE_W + H_GAP };
+    }
+    let x = xCursor;
+    for (const kid of kids) {
+      const sub = layoutSubtree(kid, depth + 1, x);
+      x = sub.endX;
+    }
+    const firstX = positions.get(kids[0].graphId)!.x;
+    const lastX = positions.get(kids[kids.length - 1].graphId)!.x;
+    const spanMid = (firstX + lastX + NODE_W) / 2;
+    const parentX = spanMid - NODE_W / 2;
+    positions.set(node.graphId, { x: parentX, y });
+    return { endX: Math.max(x, parentX + NODE_W + H_GAP) };
+  }
+
+  let nextX = PAD;
+  for (const root of sortGraphNodes(roots)) {
+    const sub = layoutSubtree(root, 0, nextX);
+    nextX = sub.endX + CLUSTER_GAP;
+  }
+
+  let minX = Infinity;
+  let maxRight = PAD;
+  let maxBottom = PAD;
+  for (const [, pos] of positions) {
+    minX = Math.min(minX, pos.x);
+    maxRight = Math.max(maxRight, pos.x + NODE_W);
+    maxBottom = Math.max(maxBottom, pos.y + NODE_H);
+  }
+  const shift = minX < PAD ? PAD - minX : 0;
+  if (shift !== 0) {
+    for (const [id, pos] of positions) {
+      positions.set(id, { x: pos.x + shift, y: pos.y });
+    }
+    maxRight += shift;
+  }
+
+  const width = Math.max(PAD * 2 + NODE_W, maxRight + PAD);
+  const height = Math.max(PAD * 2 + NODE_H, maxBottom + PAD);
+  return { width, height, positions };
+}

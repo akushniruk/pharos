@@ -7,6 +7,8 @@ use crate::model::{
 use super::labels::{
     display_name_candidate_for_legacy_event, should_upgrade_project_label,
 };
+use crate::agent_identity::payload_parent_agent_id;
+
 use super::util::{build_registry_id, payload_string, resolve_lifecycle_status};
 
 #[derive(Default)]
@@ -72,7 +74,7 @@ impl LiveStateData {
                     display_name: display_name.value.clone(),
                     agent_type: event.agent_type.clone(),
                     model_name: event.model_name.clone(),
-                    parent_id: payload_string(&event.payload, "parent_agent_id"),
+                    parent_id: payload_parent_agent_id(&event.payload),
                     team_name: payload_string(&event.payload, "team_name"),
                     lifecycle_status: resolve_lifecycle_status(&event.hook_event_type).to_string(),
                     first_seen_at: event.timestamp,
@@ -97,7 +99,7 @@ impl LiveStateData {
         if let Some(model_name) = &event.model_name {
             state.entry.model_name = Some(model_name.clone());
         }
-        if let Some(parent_id) = payload_string(&event.payload, "parent_agent_id") {
+        if let Some(parent_id) = payload_parent_agent_id(&event.payload) {
             state.entry.parent_id = Some(parent_id);
         }
         if let Some(team_name) = payload_string(&event.payload, "team_name") {

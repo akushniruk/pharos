@@ -3,6 +3,8 @@ use std::collections::BTreeSet;
 use crate::model::{AgentSnapshot, LegacyHookEvent, SessionSnapshot};
 
 use super::describe::describe_legacy_event;
+use crate::agent_identity::control_plane_agent_label;
+
 use super::util::{
     clean_summary_text, content_preview, payload_responsibility, payload_string, truncate,
     workspace_name_from_cwd,
@@ -43,6 +45,9 @@ pub(crate) fn resolve_runtime_label(events: &[LegacyHookEvent]) -> Option<String
 
 pub(crate) fn resolve_agent_name(events: &[&LegacyHookEvent], is_main: bool) -> String {
     for event in events {
+        if let Some(label) = control_plane_agent_label(&event.payload) {
+            return label;
+        }
         if let Some(agent_type) = payload_string(&event.payload, "agent_type") {
             if let Some(mapped) = mapped_agent_type_label(&agent_type) {
                 if mapped != "Session" {
@@ -316,6 +321,12 @@ pub(crate) struct DisplayNameCandidate {
 }
 
 pub(crate) fn display_name_candidate_for_legacy_event(event: &LegacyHookEvent) -> DisplayNameCandidate {
+    if let Some(label) = control_plane_agent_label(&event.payload) {
+        return DisplayNameCandidate {
+            value: label,
+            score: 15,
+        };
+    }
     if let Some(agent_type) = payload_string(&event.payload, "agent_type") {
         if let Some(mapped) = mapped_agent_type_label(&agent_type) {
             if mapped != "Session" {

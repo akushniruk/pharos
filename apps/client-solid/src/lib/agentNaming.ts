@@ -13,6 +13,14 @@ const AGENT_TYPE_LABELS: Record<string, string> = {
   explore: 'Explorer',
   planner: 'Planner',
   main: 'Session',
+  ceo: 'CEO',
+  cto: 'CTO',
+  cmo: 'CMO',
+  cfo: 'CFO',
+  engineer: 'Engineer',
+  'ux-designer': 'UXDesigner',
+  uxdesigner: 'UXDesigner',
+  ux_designer: 'UXDesigner',
 };
 
 function collapseWhitespace(value: string): string {

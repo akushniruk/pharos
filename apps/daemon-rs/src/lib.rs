@@ -1,3 +1,4 @@
+pub mod agent_identity;
 pub mod api;
 pub mod config;
 pub mod connector;
