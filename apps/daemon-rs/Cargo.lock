@@ -737,6 +737,7 @@ dependencies = [
  "clap",
  "futures-util",
  "insta",
+ "pharos-domain",
  "rusqlite",
  "serde",
  "serde_json",
@@ -748,6 +749,15 @@ dependencies = [
  "tokio-tungstenite",
  "tower",
  "tower-http",
+ "uuid",
+]
+
+[[package]]
+name = "pharos-domain"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "thiserror",
  "uuid",
 ]
 

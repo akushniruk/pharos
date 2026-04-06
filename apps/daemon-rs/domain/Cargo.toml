@@ -1,0 +1,18 @@
+[package]
+name = "pharos-domain"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+description = "Pharos domain types and validation (no I/O, no API framework)"
+
+[lints.rust]
+unsafe_code = "warn"
+
+[lints.clippy]
+all = "warn"
+pedantic = "warn"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+thiserror = "2.0"
+uuid = { version = "1.18", features = ["serde", "v4"] }

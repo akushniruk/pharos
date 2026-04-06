@@ -1,3 +1,5 @@
+pub use pharos_domain;
+
 pub mod agent_identity;
 pub mod api;
 pub mod config;
