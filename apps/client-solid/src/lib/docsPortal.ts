@@ -118,3 +118,12 @@ export const DOCS_PORTAL_SECTIONS: DocsPortalSection[] = [
 ];
 
 export const DOCS_PORTAL_RUN_COMMANDS = ['make daemon', 'make client', 'make test'];
+
+/** Sidebar / browser title for a bundled docs path (e.g. `docs/README.md`). */
+export function docsPortalEntryTitle(path: string): string | undefined {
+  for (const section of DOCS_PORTAL_SECTIONS) {
+    const entry = section.entries.find((e) => e.path === path);
+    if (entry) return entry.title;
+  }
+  return undefined;
+}

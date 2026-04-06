@@ -10,13 +10,16 @@ import {
 import {
   selectedProject,
   selectedSession,
+  selectedProjectSnapshot,
+  selectedSessionSnapshot,
   selectedViewedChangesSnapshot,
   selectedAgent,
   selectProject,
 } from '../lib/store';
 import { connectWs } from '../lib/ws';
 import { initTheme } from '../lib/theme';
-import { DOCS_PORTAL_SECTIONS } from '../lib/docsPortal';
+import { DOCS_PORTAL_SECTIONS, docsPortalEntryTitle } from '../lib/docsPortal';
+import { APP_BROWSER_TITLE } from '../lib/appBranding';
 import { docContentForPath } from '../lib/docsPortalContent';
 import {
   docsPathForSlug,
@@ -36,6 +39,12 @@ import AppStatusBar from '../widgets/AppStatusBar';
 type ViewMode = 'logs' | 'graph';
 type AppRoute = 'main' | 'docs';
 const VIEW_MODE_STORAGE_KEY = 'pharos.view-mode';
+
+function formatBrowserTitle(parts: string[]): string {
+  const core = parts.filter(Boolean).join(' · ');
+  if (core.length <= 120) return core;
+  return `${core.slice(0, 117)}…`;
+}
 
 export default function AppShell() {
   const [sidebarCollapsed, setSidebarCollapsed] = createSignal(false);
@@ -143,6 +152,28 @@ export default function AppShell() {
   createEffect(() => {
     if (typeof localStorage === 'undefined') return;
     localStorage.setItem(VIEW_MODE_STORAGE_KEY, viewMode());
+  });
+
+  createEffect(() => {
+    if (typeof document === 'undefined') return;
+    const app = APP_BROWSER_TITLE;
+    if (route() === 'docs') {
+      const docName = docsPortalEntryTitle(selectedDocPath()) ?? 'Documentation';
+      document.title = formatBrowserTitle([docName, 'Docs', app]);
+      return;
+    }
+    const project = selectedProjectSnapshot();
+    if (!project) {
+      document.title = formatBrowserTitle(['Home', app]);
+      return;
+    }
+    const session = selectedSessionSnapshot();
+    const sessionLabel = session?.label?.trim();
+    if (sessionLabel) {
+      document.title = formatBrowserTitle([sessionLabel, project.name, app]);
+    } else {
+      document.title = formatBrowserTitle([project.name, app]);
+    }
   });
 
   /** Sidebar scope changes should show the stream; graph would otherwise stay visible from localStorage. */
