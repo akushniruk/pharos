@@ -42,17 +42,53 @@ function isNoisyRoleLabel(value: string): boolean {
   return false;
 }
 
+/** Placeholder display names that should not hide richer runtime / model labels on graph roots */
+function isGenericRootDisplayName(value: string): boolean {
+  const lower = value.replace(/\s+/g, ' ').trim().toLowerCase();
+  return lower === '' || lower === 'unknown' || lower === 'session' || lower === 'agent' || lower === 'orchestrator';
+}
+
+function shortModelName(model: string): string {
+  const trimmed = model.replace(/\s+/g, ' ').trim();
+  if (!trimmed) return '';
+  const tail = trimmed.split('/').pop() || trimmed;
+  return tail.length > 36 ? `${tail.slice(0, 33)}...` : tail;
+}
+
 export function agentLabel(agent: GraphNode): string {
-  if (!agent.parentGraphId) return 'Orchestrator';
+  // Root / main session: show a real operator-facing name (runtime, model, registry name), not a generic "Orchestrator".
+  if (!agent.parentGraphId) {
+    const name = agent.displayName?.replace(/\s+/g, ' ').trim() || '';
+    if (name && !isGenericRootDisplayName(name) && !isNoisyRoleLabel(name)) {
+      return name;
+    }
+    if (agent.agentType && agent.agentType !== 'main') {
+      const mapped = mapAgentTypeLabel(agent.agentType);
+      if (mapped && mapped !== 'Session') return mapped;
+    }
+    const runtime = agent.runtimeLabel?.replace(/\s+/g, ' ').trim() || '';
+    if (runtime && !isNoisyRoleLabel(runtime)) return runtime;
+    const model = shortModelName(agent.modelName || '');
+    if (model) return model;
+    if (name && name.toLowerCase() !== 'unknown' && !isGenericRootDisplayName(name) && !isNoisyRoleLabel(name)) {
+      return name;
+    }
+    return 'Main';
+  }
 
   if (agent.agentType && agent.agentType !== 'main') {
     const mapped = mapAgentTypeLabel(agent.agentType);
     if (mapped && mapped !== 'Session') return mapped;
   }
 
-  const name = agent.displayName?.replace(/\s+/g, ' ').trim() || '';
-  if (name && name.toLowerCase() !== 'unknown' && !isNoisyRoleLabel(name)) {
-    return name;
+  const childName = agent.displayName?.replace(/\s+/g, ' ').trim() || '';
+  if (
+    childName
+    && childName.toLowerCase() !== 'unknown'
+    && !isGenericRootDisplayName(childName)
+    && !isNoisyRoleLabel(childName)
+  ) {
+    return childName;
   }
   return 'Worker';
 }
