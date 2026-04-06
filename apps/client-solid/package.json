@@ -7,6 +7,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "vitest run",
+    "test:e2e": "playwright test",
     "check:lines": "node ../../scripts/check-line-budget.mjs"
   },
   "dependencies": {
@@ -14,6 +15,7 @@
     "solid-js": "^1.9.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.51.0",
     "typescript": "^5.7.0",
     "vite": "^6.0.0",
     "vite-plugin-solid": "^2.11.0",

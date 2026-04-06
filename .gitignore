@@ -73,6 +73,11 @@ apps/client/src/components/HelloWorld.vue
 apps/client/src/components/SpawnAgentModal.vue
 apps/client/src/composables/useHITLNotifications.ts
 
+# Playwright (apps/client-solid)
+apps/client-solid/test-results/
+apps/client-solid/playwright-report/
+apps/client-solid/blob-report/
+
 # Misc
 *.bak
 *.tmp
