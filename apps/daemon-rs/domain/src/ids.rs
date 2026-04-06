@@ -2,7 +2,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::DomainError;
 
-const MAX_ID_LEN: usize = 2048;
+/// Upper bound for opaque string identifiers (workspace, session, agent, host, etc.).
+pub const MAX_ID_LEN: usize = 2048;
 
 fn validate_non_empty(value: &str, empty: DomainError, too_long: DomainError) -> Result<(), DomainError> {
     let t = value.trim();
@@ -97,6 +98,33 @@ impl std::fmt::Display for AgentId {
     }
 }
 
+/// Host / machine identifier for a session (distinct from workspace scope).
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct HostId(String);
+
+impl HostId {
+    pub fn new(value: impl Into<String>) -> Result<Self, DomainError> {
+        let s = value.into();
+        validate_non_empty(
+            &s,
+            DomainError::EmptyHostId,
+            DomainError::HostIdTooLong { max: MAX_ID_LEN },
+        )?;
+        Ok(Self(s.trim().to_string()))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::fmt::Display for HostId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -110,5 +138,10 @@ mod tests {
     fn session_id_roundtrip() {
         let id = SessionId::new("550e8400-e29b-41d4-a716-446655440000").unwrap();
         assert_eq!(id.as_str(), "550e8400-e29b-41d4-a716-446655440000");
+    }
+
+    #[test]
+    fn host_id_rejects_empty() {
+        assert_eq!(HostId::new(""), Err(DomainError::EmptyHostId));
     }
 }

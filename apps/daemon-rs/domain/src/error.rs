@@ -15,4 +15,20 @@ pub enum DomainError {
     EmptyAgentId,
     #[error("agent id exceeds max length ({max} bytes)")]
     AgentIdTooLong { max: usize },
+    #[error("host id is empty")]
+    EmptyHostId,
+    #[error("host id exceeds max length ({max} bytes)")]
+    HostIdTooLong { max: usize },
+    #[error("registry entry id is empty")]
+    EmptyRegistryEntryId,
+    #[error("source_app is empty")]
+    EmptySourceApp,
+    #[error("lifecycle_status is empty")]
+    EmptyLifecycleStatus,
+    #[error("registry timestamps invalid: first_seen_at ({first}) is after last_seen_at ({last})")]
+    RegistryTimestampsOutOfOrder { first: i64, last: i64 },
+    #[error("parent and child agent ids must differ")]
+    InvalidAgentRelationship,
+    #[error("value exceeds max length ({max} bytes)")]
+    ValueTooLong { max: usize },
 }

@@ -20,6 +20,8 @@ pub enum StoreError {
     Sqlite(#[from] rusqlite::Error),
     #[error("json error: {0}")]
     Json(#[from] serde_json::Error),
+    #[error("domain validation error: {0}")]
+    Domain(#[from] crate::model::DomainError),
     #[error("store mutex poisoned")]
     Poisoned,
 }
@@ -64,6 +66,7 @@ impl Store {
     }
 
     pub fn insert_event(&self, event: &EventEnvelope) -> Result<bool, StoreError> {
+        event.validate()?;
         let runtime_source = serde_json::to_string(&event.runtime_source)?;
         let event_kind = serde_json::to_string(&event.event_kind)?;
         let json = serde_json::to_string(event)?;

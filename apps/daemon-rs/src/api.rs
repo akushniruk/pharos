@@ -22,8 +22,17 @@ use crate::{
         AgentRegistryEntry, DiscoveredSession, EventEnvelope, FilterOptions, LegacyHookEvent,
         ProjectSnapshot, SessionSummary,
     },
-    store::Store,
+    store::{Store, StoreError},
 };
+
+fn map_store_insert_err(err: StoreError) -> StatusCode {
+    match err {
+        StoreError::Domain(_) => StatusCode::BAD_REQUEST,
+        StoreError::Sqlite(_) | StoreError::Json(_) | StoreError::Poisoned => {
+            StatusCode::INTERNAL_SERVER_ERROR
+        }
+    }
+}
 
 #[derive(Debug, Clone, Default)]
 pub struct AppOptions {
@@ -112,7 +121,7 @@ async fn create_event(
     let inserted = state
         .store
         .insert_event(&event)
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .map_err(map_store_insert_err)?;
     if inserted {
         broadcast_compat_updates(&state, &event).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     }
@@ -264,7 +273,7 @@ async fn create_legacy_claude_event(
     let inserted = state
         .store
         .insert_event(&event)
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .map_err(map_store_insert_err)?;
     if inserted {
         broadcast_compat_updates(&state, &event).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     }
@@ -282,7 +291,7 @@ async fn create_legacy_hook_event(
     let inserted = state
         .store
         .insert_event(&envelope)
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .map_err(map_store_insert_err)?;
     if inserted {
         broadcast_compat_updates(&state, &envelope)
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -302,7 +311,7 @@ async fn create_connector_event(
     let inserted = state
         .store
         .insert_event(&event)
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .map_err(map_store_insert_err)?;
     if inserted {
         broadcast_compat_updates(&state, &event).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     }
