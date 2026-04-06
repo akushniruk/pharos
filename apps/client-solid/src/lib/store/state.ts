@@ -1612,7 +1612,8 @@ export function deriveRuntimeBridgeCandidates(
   return bridges;
 }
 
-const graphScopeEvents = createMemo((): HookEvent[] => {
+/** Project/session-scoped events for graph topology (ignores the per-agent event filter). */
+export const graphScopeEvents = createMemo((): HookEvent[] => {
   let scoped = events();
   const project = selectedProject();
   const session = selectedSession();

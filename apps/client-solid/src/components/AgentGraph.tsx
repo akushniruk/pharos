@@ -1,7 +1,7 @@
 import { For, Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
 import {
   graphAgents,
-  filteredEvents,
+  graphScopeEvents,
   selectAgent,
   selectedAgent,
 } from '../lib/store';
@@ -36,7 +36,7 @@ export default function AgentGraph() {
     const all = graphAgents();
     if (all.length === 0) return [];
 
-    const evts = filteredEvents();
+    const evts = graphScopeEvents();
     const parentMap = new Map<string, string>();
     for (const agent of all) {
       if (agent.parentId && agent.agentId) parentMap.set(agent.agentId, agent.parentId);
@@ -300,8 +300,8 @@ export default function AgentGraph() {
                       d={pathD()!}
                       fill="none"
                       stroke={edge.lineColor}
-                      stroke-opacity={edge.isActive ? '0.68' : '0.34'}
-                      stroke-width={edge.isActive ? '2.8' : '1.9'}
+                      stroke-opacity={edge.isActive ? '0.78' : '0.5'}
+                      stroke-width={edge.isActive ? '3' : '2.2'}
                       stroke-dasharray={edge.isActive ? undefined : '8 8'}
                       stroke-linecap="round"
                       filter="url(#metro-glow)"

@@ -66,6 +66,12 @@ pub fn control_plane_agent_label(payload: &Value) -> Option<String> {
             return Some(t.to_string());
         }
     }
+    if let Some(title) = pv(payload, "title").or_else(|| pv(payload, "agent_title")) {
+        let t = title.trim();
+        if !t.is_empty() && t.len() <= 80 && !is_prompt_like_agent_name(t) {
+            return Some(t.to_string());
+        }
+    }
     if let Some(key) = pv(payload, "url_key").or_else(|| pv(payload, "urlKey")) {
         let t = key.trim();
         if !t.is_empty() {
@@ -101,6 +107,8 @@ mod tests {
     fn control_plane_labels() {
         let j = json!({"name": "CTO"});
         assert_eq!(control_plane_agent_label(&j).as_deref(), Some("CTO"));
+        let t = json!({"title": "Software Engineer"});
+        assert_eq!(control_plane_agent_label(&t).as_deref(), Some("Software Engineer"));
         let k = json!({"url_key": "ux_designer"});
         assert_eq!(control_plane_agent_label(&k).as_deref(), Some("UXDesigner"));
         let r = json!({"role": "engineer"});
