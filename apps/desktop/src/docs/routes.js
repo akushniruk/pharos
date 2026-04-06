@@ -20,6 +20,12 @@ export const DOC_ROUTES = [
     load: () => import("./content/start.md?raw"),
   },
   {
+    path: "/docs/concepts",
+    title: "Concept library",
+    section: "Concepts",
+    load: () => import("./content/concepts.md?raw"),
+  },
+  {
     path: "/docs/concepts/what-is-pharos",
     title: "What is Pharos?",
     section: "Concepts",
@@ -38,6 +44,12 @@ export const DOC_ROUTES = [
     load: () => import("./content/agent-graph.md?raw"),
   },
   {
+    path: "/docs/guides",
+    title: "Guides",
+    section: "Guides",
+    load: () => import("./content/guides.md?raw"),
+  },
+  {
     path: "/docs/guides/install-desktop",
     title: "Install Pharos Desktop",
     section: "Guides",
@@ -50,6 +62,12 @@ export const DOC_ROUTES = [
     load: () => import("./content/releases-and-upgrades.md?raw"),
   },
   {
+    path: "/docs/reference",
+    title: "Reference",
+    section: "Reference",
+    load: () => import("./content/reference.md?raw"),
+  },
+  {
     path: "/docs/reference/cli-and-scripts",
     title: "CLI and automation",
     section: "Reference",
@@ -60,6 +78,12 @@ export const DOC_ROUTES = [
     title: "API reference",
     section: "Reference",
     load: () => import("./content/api-contracts.md?raw"),
+  },
+  {
+    path: "/docs/security",
+    title: "Security",
+    section: "Security",
+    load: () => import("./content/security.md?raw"),
   },
   {
     path: "/docs/security/trust-and-data",

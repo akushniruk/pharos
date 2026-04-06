@@ -20,3 +20,12 @@ test("docs shell loads and shows primary nav", async ({ page }) => {
     page.getByRole("link", { name: "Start", exact: true }),
   ).toBeVisible();
 });
+
+test("IA hub routes resolve from primary nav (Concepts)", async ({ page }) => {
+  await page.goto("/docs/start");
+  await page.getByRole("link", { name: "Concepts", exact: true }).click();
+  await expect(page).toHaveURL(/\/docs\/concepts$/);
+  await expect(
+    page.locator(".ph-docs-article h1"),
+  ).toHaveText("Concept library");
+});

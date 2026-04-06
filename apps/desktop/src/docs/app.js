@@ -10,10 +10,10 @@ import {
 
 const TOP_NAV = [
   { path: "/docs/start", label: "Start" },
-  { path: "/docs/concepts/what-is-pharos", label: "Concepts" },
-  { path: "/docs/guides/install-desktop", label: "Guides" },
-  { path: "/docs/reference/cli-and-scripts", label: "Reference" },
-  { path: "/docs/security/trust-and-data", label: "Security" },
+  { path: "/docs/concepts", label: "Concepts" },
+  { path: "/docs/guides", label: "Guides" },
+  { path: "/docs/reference", label: "Reference" },
+  { path: "/docs/security", label: "Security" },
   { path: "/docs/changelog", label: "Changelog" },
 ];
 
@@ -173,13 +173,10 @@ export function navigate(pathname) {
 function pathMatchesTopNav(path, topPath) {
   if (path === topPath) return true;
   if (topPath === "/docs/start" && path.startsWith("/docs/start")) return true;
-  if (topPath === "/docs/concepts/what-is-pharos" && path.startsWith("/docs/concepts"))
-    return true;
-  if (topPath === "/docs/guides/install-desktop" && path.startsWith("/docs/guides"))
-    return true;
-  if (topPath === "/docs/reference/cli-and-scripts" && path.startsWith("/docs/reference"))
-    return true;
-  if (topPath === "/docs/security/trust-and-data" && path.startsWith("/docs/security"))
+  if (topPath === "/docs/concepts" && path.startsWith("/docs/concepts")) return true;
+  if (topPath === "/docs/guides" && path.startsWith("/docs/guides")) return true;
+  if (topPath === "/docs/reference" && path.startsWith("/docs/reference")) return true;
+  if (topPath === "/docs/security" && path.startsWith("/docs/security"))
     return true;
   if (topPath === "/docs/changelog" && path.startsWith("/docs/changelog")) return true;
   return false;
