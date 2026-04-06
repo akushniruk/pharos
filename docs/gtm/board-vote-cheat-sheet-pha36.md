@@ -1,6 +1,8 @@
-# Board vote cheat sheet — brand name ([PHA-36](/PHA/issues/PHA-36))
+# Board vote cheat sheet — brand name (historical A/B/C on [PHA-36](/PHA/issues/PHA-36))
 
-**Action:** Reply **on [PHA-36](/PHA/issues/PHA-36)** with **one letter**: **A**, **B**, or **C** (optional: handle prefs, timing).
+**Board letter / live routing:** [PHA-91](/PHA/issues/PHA-91) — use that thread for the formal board letter and current decision flow.
+
+**What this doc is:** Short summary of **A**, **B**, **C**; full definitions stay on [PHA-36](/PHA/issues/PHA-36) ([vote frame](/PHA/issues/PHA-36#comment-81a0f3fb-dfda-4762-9f52-89055613f844)). Reply with **one letter**: **A**, **B**, or **C** where your process directs (see [PHA-91](/PHA/issues/PHA-91)) (optional: handle prefs, timing).
 
 | Vote | Meaning (summary) | What happens next (high level) |
 |------|-------------------|--------------------------------|

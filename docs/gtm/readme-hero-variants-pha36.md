@@ -1,6 +1,6 @@
 # README + GitHub + X copy — PHA-36 vote outcomes (v1)
 
-**Parent:** [PHA-36](/PHA/issues/PHA-36). **Vote frame:** [board A/B/C](/PHA/issues/PHA-36#comment-81a0f3fb-dfda-4762-9f52-89055613f844).
+**Board letter / live anchor:** [PHA-91](/PHA/issues/PHA-91). **Historical definitions parent:** [PHA-36](/PHA/issues/PHA-36). **Vote frame:** [board A/B/C](/PHA/issues/PHA-36#comment-81a0f3fb-dfda-4762-9f52-89055613f844).
 
 **Narrative lock (CEO):** **Security-led primary** — trust, control, auditability before “raw speed.” **Velocity** = *confident* speed once execution is visible and governable ([launch narrative v1](launch-narrative-v1.md)).
 
@@ -60,9 +60,9 @@ Pharos Open helps teams **see, govern, and audit** AI coding agents in real dev 
 
 ---
 
-## Outcome **C** — **Rebrand** — **Faro** first reserve (CMO comms after CEO call)
+## Outcome **C** — **Rebrand** — **Faro** first reserve (CEO-invoked UX after CTO cutover)
 
-**Use when:** Board selects **C**; **CTO** owns rename checklist ([PHA-36](/PHA/issues/PHA-36) thread). This copy is **post-cutover** language — do not publish until engineering signals **go**.
+**Use when:** Board selects **C**; **CTO** owns rename checklist ([PHA-91](/PHA/issues/PHA-91) / [PHA-36](/PHA/issues/PHA-36) context). **UX and comms** apply this block only when the **CEO invokes** post-cutover work — do not publish until engineering signals **go**.
 
 **README — H1 + lede**
 
@@ -97,4 +97,4 @@ Faro is **observable infrastructure for AI coding agents**: a clear record of wh
 | **B** | Outcome **B** |
 | **C** | Outcome **C** (after CTO rename checklist is green) |
 
-**CMO:** After vote, align `README.md`, GitHub “About,” and X profile in **one pass** so all three surfaces match the selected block.
+**After vote:** Align `README.md`, GitHub “About,” and X profile in **one pass** so all three surfaces match the selected block. For **C**, treat UX paste as **CEO-invoked** once **CTO cutover** is green.

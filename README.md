@@ -25,7 +25,7 @@ Strategic hierarchy and external-facing promise (security-led, velocity secondar
 - **Two ways to run it** — lightweight **daemon + web UI** for iteration; **Tauri desktop** when you want a packaged app and in-app docs.
 - **Docs and releases as the canonical story** — README + `docs/` + GitHub Releases stay the source of truth (no parallel marketing site requirement).
 
-Paste-ready hero variants and board-facing cheat sheets: [docs/gtm/readme-hero-variants-pha36.md](docs/gtm/readme-hero-variants-pha36.md), [docs/gtm/board-vote-cheat-sheet-pha36.md](docs/gtm/board-vote-cheat-sheet-pha36.md). **Canonical surfaces:** this repo and **GitHub Releases** — product positioning notes live under [docs/gtm/](docs/gtm/).
+**Board letter / live naming decision:** [PHA-91](/PHA/issues/PHA-91). **Historical A/B/C definitions** (paste-ready hero + cheat sheet): [docs/gtm/readme-hero-variants-pha36.md](docs/gtm/readme-hero-variants-pha36.md), [docs/gtm/board-vote-cheat-sheet-pha36.md](docs/gtm/board-vote-cheat-sheet-pha36.md) — anchored to [PHA-36](/PHA/issues/PHA-36). **Canonical surfaces:** this repo and **GitHub Releases** — product positioning notes live under [docs/gtm/](docs/gtm/).
 
 ## The problem
 
@@ -179,7 +179,7 @@ npx tauri icon ../../assets/brand/pharos-mark-square.svg
 | MVP observability slice + API verification | [docs/mvp-observability-slice.md](docs/mvp-observability-slice.md) |
 | CTO / engineering runbook | [docs/cto-runbook.md](docs/cto-runbook.md) |
 | Changelog | [CHANGELOG.md](CHANGELOG.md) |
-| Brand / naming exploration | [docs/gtm/brand-naming-candidates-v1.md](docs/gtm/brand-naming-candidates-v1.md) |
+| Brand / naming (board letter) | [PHA-91](/PHA/issues/PHA-91) · [docs/gtm/brand-naming-candidates-v1.md](docs/gtm/brand-naming-candidates-v1.md) |
 | Graph UI spec | [docs/design/graph-view-pro-ui-spec.md](docs/design/graph-view-pro-ui-spec.md) |
 | In-app `/docs` UX spec (shell / desktop) | [docs/design/docs-page-ux-spec.md](docs/design/docs-page-ux-spec.md) |
 | Public `/docs` IA & page outlines (handoff for site build) | [docs/site/docs-ia-content-outline-v1.md](docs/site/docs-ia-content-outline-v1.md) |
@@ -201,5 +201,5 @@ This project is licensed under the **MIT License** — see [LICENSE](LICENSE).
 ## In this repository
 
 - **Hero copy reference (paste deck):** [site/onboarding-homepage.html](site/onboarding-homepage.html) — aligned with onboarding strings in `docs/gtm/`.
-- **Brand naming (Pharos vs alternatives):** [docs/gtm/brand-naming-candidates-v1.md](docs/gtm/brand-naming-candidates-v1.md).
+- **Brand naming (Pharos vs alternatives):** [docs/gtm/brand-naming-candidates-v1.md](docs/gtm/brand-naming-candidates-v1.md) — board letter / decision thread [PHA-91](/PHA/issues/PHA-91); vote-option definitions [PHA-36](/PHA/issues/PHA-36).
 - **Maintenance** — This README is curated alongside engineering and GTM docs under `docs/`; default-branch changes land via normal review and release flow in [docs/releases.md](docs/releases.md).
