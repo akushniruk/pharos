@@ -227,7 +227,7 @@ body {
 
 /* Zone 2: Sidebar */
 .app-sidebar {
-  width: 252px;
+  width: 320px;
   flex-shrink: 0;
   background: var(--bg-secondary);
   border-right: 1px solid var(--border);
@@ -418,6 +418,11 @@ body {
   flex-shrink: 0;
 }
 
+.event-stream-toolbar {
+  flex-wrap: nowrap;
+  min-width: 0;
+}
+
 .event-stream-focusbar,
 .event-stream-filterchips {
   flex-wrap: wrap;
@@ -492,6 +497,11 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  flex-shrink: 0;
+}
+
+.event-stream-view-tabs {
+  flex-shrink: 0;
 }
 
 .event-stream-filter-toggle {
@@ -1957,7 +1967,7 @@ body {
 }
 
 .docs-sidebar-root {
-  width: 220px;
+  width: 320px;
   flex-shrink: 0;
   background: var(--bg-primary);
   border-right: 1px solid var(--border);

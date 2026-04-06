@@ -141,9 +141,9 @@ export function selectProject(name: string | null) {
   setSelectedAgent(null);
 }
 
-/** Toggle session selection (deselect if already selected) */
+/** Select a session, or clear the session when `id` is null. */
 export function selectSession(id: string | null) {
-  setSelectedSession(s => s === id ? null : id);
+  setSelectedSession(id);
   setSelectedAgent(null);
 }
 

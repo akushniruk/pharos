@@ -1,4 +1,13 @@
-import { For, Show, createSignal, createMemo, createEffect, onMount, onCleanup } from 'solid-js';
+import {
+  For,
+  Show,
+  createSignal,
+  createMemo,
+  createEffect,
+  onMount,
+  onCleanup,
+  type Accessor,
+} from 'solid-js';
 import { Icon } from 'solid-heroicons';
 import {
   bars_3BottomLeft,
@@ -33,7 +42,7 @@ import {
 } from '../widgets/event-stream/streamHelpers';
 
 interface EventStreamProps {
-  viewMode: 'logs' | 'graph';
+  viewMode: Accessor<'logs' | 'graph'>;
   onViewModeChange: (mode: 'logs' | 'graph') => void;
 }
 
@@ -214,7 +223,7 @@ export default function EventStream(props: EventStreamProps) {
         title: hasScopedFocus ? 'No events match the current focus' : 'No events captured for this project yet',
         body: hasScopedFocus
           ? 'Clear the selected session or agent to widen the scope.'
-          : `Project ${projectSnapshot()?.name || 'selection'} has no event rows yet.`,
+          : `Project ${projectSnapshot?.name || 'selection'} has no event rows yet.`,
       };
     }
 
@@ -380,7 +389,7 @@ export default function EventStream(props: EventStreamProps) {
         </div>
       </Show>
 
-      <Show when={props.viewMode === 'logs' && logsAttentionAlerts().length > 0}>
+      <Show when={props.viewMode() === 'logs' && logsAttentionAlerts().length > 0}>
         <div class="event-stream-attention-wrap" role="region" aria-label="Sessions needing attention">
           <For each={logsAttentionAlerts()}>
             {(alert) => (

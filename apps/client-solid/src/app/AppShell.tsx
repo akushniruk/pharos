@@ -9,6 +9,7 @@ import {
 
 import {
   selectedProject,
+  selectedSession,
   selectedViewedChangesSnapshot,
   selectedAgent,
   selectProject,
@@ -111,9 +112,9 @@ export default function AppShell() {
 
   onMount(() => {
     if (typeof localStorage !== 'undefined') {
-      const savedViewMode = localStorage.getItem(VIEW_MODE_STORAGE_KEY);
-      if (savedViewMode === 'logs' || savedViewMode === 'graph') {
-        setViewMode(savedViewMode);
+      const raw = localStorage.getItem(VIEW_MODE_STORAGE_KEY)?.trim();
+      if (raw === 'logs' || raw === 'graph') {
+        setViewMode(raw);
       }
     }
     connectWs();
@@ -132,6 +133,21 @@ export default function AppShell() {
   createEffect(() => {
     if (typeof localStorage === 'undefined') return;
     localStorage.setItem(VIEW_MODE_STORAGE_KEY, viewMode());
+  });
+
+  /** Sidebar scope changes should show the stream; graph would otherwise stay visible from localStorage. */
+  const prevSidebarScope = { project: null as string | null, session: null as string | null };
+  createEffect(() => {
+    const proj = selectedProject();
+    const sess = selectedSession();
+    const prev = prevSidebarScope;
+    const enteredProject = proj !== null && proj !== prev.project;
+    const focusedSession = proj !== null && sess !== null && sess !== prev.session;
+    if (enteredProject || focusedSession) {
+      setViewMode('logs');
+    }
+    prev.project = proj;
+    prev.session = sess;
   });
 
   createEffect(() => {
@@ -156,6 +172,60 @@ export default function AppShell() {
     }
   };
 
+  /** Avoid nested `<Show fallback>` for main panel — that pattern can miss `selectedProject()` updates. */
+  const mainPanel = createMemo((): 'docs' | 'home' | 'workspace' => {
+    if (route() === 'docs') return 'docs';
+    return selectedProject() ? 'workspace' : 'home';
+  });
+
+  const projectWorkspaceBody = createMemo(() => {
+    if (viewMode() === 'logs') {
+      return (
+        <div
+          style="flex:1;min-height:0;min-width:0;display:flex;flex-direction:column;overflow:hidden;"
+        >
+          <EventStream viewMode={viewMode} onViewModeChange={setViewMode} />
+        </div>
+      );
+    }
+    return (
+      <div style="display:flex;flex:1;overflow:hidden;min-height:0;">
+        <AgentGraph />
+        <Show when={selectedAgent()}>
+          <div style="width:300px;flex-shrink:0;border-left:1px solid var(--border);overflow-y:auto;">
+            <AgentDetail />
+          </div>
+        </Show>
+      </div>
+    );
+  });
+
+  const mainAreaContent = createMemo(() => {
+    if (mainPanel() === 'docs') {
+      return (
+        <div class="docs-route-main">
+          <DocsReadingGuide selectedDocContent={selectedDocContent()} />
+        </div>
+      );
+    }
+    if (mainPanel() === 'home') {
+      return <ProjectsHome />;
+    }
+    return (
+      <div style="display:flex;flex-direction:column;flex:1;min-width:0;overflow:hidden;">
+        <Show when={viewMode() === 'graph'}>
+          <div
+            class="event-stream-toolbar"
+            style="position:relative;z-index:30;flex-shrink:0;"
+          >
+            <ViewModeTabs viewMode={viewMode} onChange={setViewMode} />
+          </div>
+        </Show>
+        {projectWorkspaceBody()}
+      </div>
+    );
+  });
+
   return (
     <div class="app">
       <Header
@@ -171,6 +241,7 @@ export default function AppShell() {
             <Sidebar
               collapsed={sidebarCollapsed()}
               onToggle={() => setSidebarCollapsed((c) => !c)}
+              onEnsureLogsView={() => setViewMode('logs')}
             />
           }
         >
@@ -189,42 +260,7 @@ export default function AppShell() {
           />
         </Show>
 
-        <div class="app-main">
-          <Show
-            when={route() === 'docs'}
-            fallback={
-              <Show when={selectedProject()} fallback={<ProjectsHome />}>
-                <Show
-                  when={viewMode() === 'logs'}
-                  fallback={
-                    <div style="display:flex;flex-direction:column;flex:1;min-width:0;">
-                      <div style="display:flex;align-items:center;justify-content:flex-start;min-height:40px;padding:6px 16px;border-bottom:1px solid var(--border);flex-shrink:0;">
-                        <ViewModeTabs viewMode={viewMode()} onChange={setViewMode} />
-                      </div>
-                      <div style="display:flex;flex:1;overflow:hidden;">
-                        <AgentGraph />
-                        <Show when={selectedAgent() && viewMode() === 'graph'}>
-                          <div style="width:300px;flex-shrink:0;border-left:1px solid var(--border);overflow-y:auto;">
-                            <AgentDetail />
-                          </div>
-                        </Show>
-                      </div>
-                    </div>
-                  }
-                >
-                  <EventStream
-                    viewMode={viewMode()}
-                    onViewModeChange={setViewMode}
-                  />
-                </Show>
-              </Show>
-            }
-          >
-            <div class="docs-route-main">
-              <DocsReadingGuide selectedDocContent={selectedDocContent()} />
-            </div>
-          </Show>
-        </div>
+        <div class="app-main">{mainAreaContent()}</div>
       </div>
 
       <AppStatusBar />

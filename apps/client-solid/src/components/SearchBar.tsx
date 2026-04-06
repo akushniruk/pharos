@@ -22,7 +22,7 @@ export default function SearchBar() {
     invalid() ? 'var(--red)' : 'var(--border)';
 
   return (
-    <div style="position:relative;display:flex;align-items:center;flex:1;min-width:260px;">
+    <div style="position:relative;display:flex;align-items:center;flex:1;min-width:0;max-width:100%;">
       <Icon path={magnifyingGlass} style="width:16px;height:16px;position:absolute;left:10px;color:var(--text-dim);pointer-events:none;" />
       <input
         type="text"

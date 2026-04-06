@@ -29,6 +29,8 @@ import { mapAgentTypeLabel } from '../lib/agentNaming';
 interface SidebarProps {
   collapsed: boolean;
   onToggle: () => void;
+  /** Main app: jump to logs when user re-clicks the active project/session (avoids selectProject toggling off). */
+  onEnsureLogsView?: () => void;
   isDocsRoute?: boolean;
   docsQuery?: string;
   onDocsQueryChange?: (value: string) => void;
@@ -224,7 +226,13 @@ export default function Sidebar(props: SidebarProps) {
                     `background:${isSelected() ? 'var(--bg-elevated)' : 'transparent'};`,
                     `border-color:${isSelected() ? 'var(--accent)' : 'var(--border)'};`,
                   ].join('')}
-                  onClick={() => selectProject(p.name)}
+                  onClick={() => {
+                    if (isSelected()) {
+                      props.onEnsureLogsView?.();
+                      return;
+                    }
+                    selectProject(p.name);
+                  }}
                 >
                   <span>{projectInitial(p.name)}</span>
                   <span
@@ -242,7 +250,7 @@ export default function Sidebar(props: SidebarProps) {
     >
       {/* Expanded sidebar */}
       <div
-        style="width:220px;flex-shrink:0;background:var(--bg-primary);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;"
+        style="width:320px;flex-shrink:0;background:var(--bg-primary);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;"
       >
         {/* Toggle + Projects header */}
         <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 8px 8px 12px;border-bottom:1px solid var(--border);gap:8px;">
@@ -306,9 +314,11 @@ export default function Sidebar(props: SidebarProps) {
                   {/* Project row */}
                   <div
                     onClick={() => {
-                      if (!isSelected()) {
-                        selectProject(p.name);
+                      if (isSelected()) {
+                        props.onEnsureLogsView?.();
+                        return;
                       }
+                      selectProject(p.name);
                     }}
                     style={[
                       'display:flex;align-items:center;gap:8px;padding:7px 12px;cursor:pointer;',
@@ -421,12 +431,13 @@ export default function Sidebar(props: SidebarProps) {
                           return (
                             <div
                               onClick={() => {
-                                if (!isSelected()) {
-                                  selectProject(p.name);
+                                const id = sessionId();
+                                if (!id) return;
+                                if (isSessionSelected()) {
+                                  props.onEnsureLogsView?.();
+                                  return;
                                 }
-                                if (sessionId()) {
-                                  selectSession(sessionId());
-                                }
+                                selectSession(id);
                               }}
                               style={[
                                 'display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:7px;cursor:pointer;',
