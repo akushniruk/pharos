@@ -29,3 +29,10 @@ test("IA hub routes resolve from primary nav (Concepts)", async ({ page }) => {
     page.locator(".ph-docs-article h1"),
   ).toHaveText("Concept library");
 });
+
+/** Deep-link + body: validates reference hub content for integrators (daemon/API alignment). */
+test("API reference doc loads from deep link", async ({ page }) => {
+  await page.goto("/docs/reference/api-contracts");
+  await expect(page.locator(".ph-docs-article h1")).toHaveText("API reference");
+  await expect(page.getByText(/OpenAPI|snake_case/)).toBeVisible();
+});
