@@ -23,15 +23,15 @@ export default function SearchBar() {
 
   return (
     <div style="position:relative;display:flex;align-items:center;flex:1;min-width:260px;">
-      <Icon path={magnifyingGlass} style="width:14px;height:14px;position:absolute;left:8px;color:var(--text-dim);pointer-events:none;" />
+      <Icon path={magnifyingGlass} style="width:16px;height:16px;position:absolute;left:10px;color:var(--text-dim);pointer-events:none;" />
       <input
         type="text"
         placeholder="Search events (regex)..."
         value={searchQuery()}
         onInput={onInput}
         style={[
-          'height:32px;background:var(--bg-card);border-radius:9999px;',
-          'font-size:12px;padding:0 12px 0 30px;outline:none;color:var(--text-primary);',
+          'height:38px;background:var(--bg-card);border-radius:9999px;',
+          'font-size:var(--text-base);padding:0 14px 0 34px;outline:none;color:var(--text-primary);',
           'font-family:var(--font-sans);width:100%;',
           `border:1px solid ${borderColor()};`,
           'transition:border-color 0.15s;',

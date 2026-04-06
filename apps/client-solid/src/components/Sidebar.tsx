@@ -1,13 +1,6 @@
 import { For, Show, createMemo, createSignal } from 'solid-js';
 import { Icon } from 'solid-heroicons';
-import {
-  chevronLeft,
-  chevronRight,
-  bolt,
-  clock,
-  exclamationCircle,
-  exclamationTriangle,
-} from 'solid-heroicons/solid';
+import { chevronLeft, chevronRight } from 'solid-heroicons/solid';
 import {
   projects,
   selectedProject,
@@ -16,6 +9,18 @@ import {
   selectSession,
   sidebarSessionActivityTone,
 } from '../lib/store';
+import {
+  displayedProjectSessions,
+  friendlyProjectSummary,
+  friendlySessionLabel,
+  friendlySummary,
+  resolveProjectLogo,
+  resolveProjectTone,
+  sessionTitleForSidebar,
+  statusPalette,
+  statusToneIcon,
+  type SidebarActivityTone,
+} from '../widgets/sidebar/sidebarPresentation';
 import { getAgentColor } from '../lib/colors';
 import { timeAgo } from '../lib/time';
 import { DOCS_PORTAL_RUN_COMMANDS, DOCS_PORTAL_SECTIONS, type DocsPortalSection } from '../lib/docsPortal';
@@ -33,158 +38,6 @@ interface SidebarProps {
   onSelectDoc?: (path: string) => void;
   copiedValue?: string | null;
   onCopy?: (value: string) => void;
-}
-
-type ActivityTone = 'active' | 'blocked' | 'attention' | 'idle' | 'done';
-
-function statusPalette(tone: ActivityTone) {
-  switch (tone) {
-    case 'active':
-      return { background: 'var(--green-dim)', text: 'var(--green)', dot: 'var(--green)' };
-    case 'blocked':
-      return { background: 'rgba(245, 158, 11, 0.16)', text: 'var(--yellow)', dot: 'var(--yellow)' };
-    case 'attention':
-      return { background: 'rgba(239, 68, 68, 0.16)', text: 'var(--red)', dot: 'var(--red)' };
-    case 'idle':
-      return { background: 'var(--bg-card)', text: 'var(--text-secondary)', dot: 'var(--text-secondary)' };
-    case 'done':
-    default:
-      return { background: 'var(--bg-card)', text: 'var(--text-secondary)', dot: 'var(--text-secondary)' };
-  }
-}
-
-function statusToneIcon(tone: ActivityTone) {
-  switch (tone) {
-    case 'active':
-      return bolt;
-    case 'attention':
-      return exclamationTriangle;
-    case 'blocked':
-      return exclamationCircle;
-    default:
-      return clock;
-  }
-}
-
-function resolveProjectTone(project: ReturnType<typeof projects>[number]): ActivityTone {
-  const tones = project.sessions.map((session) => sidebarSessionActivityTone(project.name, session));
-  if (tones.includes('attention')) return 'attention';
-  if (tones.includes('blocked')) return 'blocked';
-  if (tones.includes('active')) return 'active';
-  if (tones.includes('idle')) return 'idle';
-  return 'done';
-}
-
-function friendlySessionLabel(label?: string | null): string {
-  if (!label) return 'Session';
-  const cleaned = label
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/\[image\]/gi, ' ')
-    .replace(/<image_files>/gi, ' ')
-    .replace(/the following images were provdied by the user and saved to the workspace/gi, ' ')
-    .replace(/<user_query>/gi, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-  if (!cleaned) return 'Current request';
-  if (cleaned.toLowerCase() === 'pending') return 'Current request';
-  return cleaned;
-}
-
-function sessionTitleForSidebar(label: string | undefined | null, index: number): string {
-  return `Session #${index + 1}`;
-}
-
-function displayedProjectSessions(
-  projectName: string,
-  sessions: Array<{
-    sessionId: string;
-    statusTone?: ActivityTone;
-    isActive: boolean;
-    eventCount: number;
-    lastEventAt: number;
-    activeAgentCount: number;
-  }>,
-): Array<{ sessionId: string; tone: ActivityTone }> {
-  const withBaseTone = sessions.map((session) => ({
-    sessionId: session.sessionId,
-    tone: sidebarSessionActivityTone(projectName, session),
-    lastEventAt: session.lastEventAt,
-  }));
-  const activeCandidates = withBaseTone
-    .filter((entry) => entry.tone === 'active')
-    .sort((left, right) => right.lastEventAt - left.lastEventAt);
-  const primaryActiveId = activeCandidates[0]?.sessionId;
-  return withBaseTone.map((entry) => ({
-    sessionId: entry.sessionId,
-    tone: entry.tone === 'active' && entry.sessionId !== primaryActiveId ? 'idle' : entry.tone,
-  }));
-}
-
-function friendlySummary(text?: string | null): string {
-  if (!text) return 'Working on your request';
-  return text
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/^Responded:\s*/i, 'Updated: ')
-    .replace(/^Prompted:\s*/i, '')
-    .replace(/^local-command-stdout\s*/i, '')
-    .replace(/^Using a tool$/i, 'Working on your request')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-function friendlyProjectSummary(text?: string | null): string | undefined {
-  if (!text) return undefined;
-  const cleaned = text
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/^Responded:\s*/i, '')
-    .replace(/^Prompted:\s*/i, '')
-    .replace(/^Updated:\s*/i, '')
-    .replace(/^local-command-stdout\s*/i, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-  return cleaned || undefined;
-}
-
-const DEFAULT_PROJECT_LOGO_STORAGE_KEY = 'pharos.default-project-logo';
-
-function projectInitials(name: string): string {
-  const initials = name
-    .trim()
-    .split('')
-    .filter((char) => /[a-z0-9]/i.test(char))
-    .slice(0, 2)
-    .join('')
-    .toUpperCase();
-  return initials || 'P';
-}
-
-function projectFallbackIconDataUri(projectName: string): string {
-  const initials = projectInitials(projectName);
-  const escapedInitials = initials
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-  const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'>
-<text x='12' y='12' text-anchor='middle' dominant-baseline='central' font-family='Inter,Arial,sans-serif' font-size='8.2' font-weight='700' fill='#94A3B8'>${escapedInitials}</text>
-</svg>`;
-  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
-}
-
-function normalizeLogoUrl(value?: string | null): string | undefined {
-  if (!value) return undefined;
-  const trimmed = value.trim();
-  if (!trimmed) return undefined;
-  if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('/')) {
-    return trimmed;
-  }
-  return undefined;
-}
-
-function resolveProjectLogo(project: ReturnType<typeof projects>[number]): string {
-  const custom = typeof localStorage === 'undefined'
-    ? undefined
-    : normalizeLogoUrl(localStorage.getItem(DEFAULT_PROJECT_LOGO_STORAGE_KEY));
-  return custom || projectFallbackIconDataUri(project.name);
 }
 
 function projectInitial(name: string): string {
@@ -219,7 +72,7 @@ export default function Sidebar(props: SidebarProps) {
 
   const labelStyle = [
     'display:block;padding:10px 12px 4px;',
-    'font-size:11px;font-weight:700;text-transform:uppercase;',
+    'font-size:var(--text-sm);font-weight:700;text-transform:uppercase;',
     'letter-spacing:0.09em;color:var(--text-secondary);',
   ].join('');
 
@@ -366,7 +219,7 @@ export default function Sidebar(props: SidebarProps) {
                   aria-label={`Open project ${p.name}`}
                   style={[
                     'background:none;cursor:pointer;padding:0;line-height:1;display:flex;align-items:center;justify-content:center;position:relative;',
-                    'width:24px;height:24px;border-radius:7px;border:1px solid var(--border);font-size:10px;font-weight:700;',
+                    'width:24px;height:24px;border-radius:7px;border:1px solid var(--border);font-size:var(--text-sm);font-weight:700;',
                     `color:${isSelected() ? 'var(--text-primary)' : 'var(--text-secondary)'};`,
                     `background:${isSelected() ? 'var(--bg-elevated)' : 'transparent'};`,
                     `border-color:${isSelected() ? 'var(--accent)' : 'var(--border)'};`,
@@ -428,7 +281,7 @@ export default function Sidebar(props: SidebarProps) {
               const projectSessions = () =>
                 activityFilter() === 'active' ? p.sessions.filter((session) => session.isActive) : p.sessions;
               const sessionToneById = () => {
-                const map = new Map<string, ActivityTone>();
+                const map = new Map<string, SidebarActivityTone>();
                 for (const entry of displayedProjectSessions(p.name, projectSessions())) {
                   map.set(entry.sessionId, entry.tone);
                 }
@@ -472,23 +325,23 @@ export default function Sidebar(props: SidebarProps) {
                     >
                     {/* Name */}
                     <div style="display:flex;flex-direction:column;min-width:0;flex:1;gap:2px;">
-                      <span style="font-size:12px;font-weight:500;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                      <span style="font-size:var(--text-base);font-weight:500;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
                         {p.name}
                       </span>
                       <span
                         title={primarySummary()}
-                        style="font-size:10px;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
+                        style="font-size:var(--text-sm);color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
                       >
                         {primarySummary()}
                       </span>
                       <Show when={secondarySummary()}>
-                        <span title={secondarySummary()} style="font-size:9px;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                        <span title={secondarySummary()} style="font-size:var(--text-sm);color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
                           {secondarySummary()}
                         </span>
                       </Show>
                     </div>
                     <div style={[
-                      'display:flex;align-items:center;gap:4px;font-size:9px;padding:1px 5px;border-radius:9999px;font-weight:500;flex-shrink:0;',
+                      'display:flex;align-items:center;gap:4px;font-size:var(--text-sm);padding:1px 5px;border-radius:9999px;font-weight:500;flex-shrink:0;',
                       `background:${projectPalette().background};`,
                       `color:${projectPalette().text};`,
                     ].join('')}>
@@ -513,7 +366,7 @@ export default function Sidebar(props: SidebarProps) {
                       <For each={selectedProjectAgentTypes()}>
                         {(type) => (
                           <span style={[
-                            'font-size:9px;padding:1px 5px;border-radius:9999px;font-weight:500;',
+                            'font-size:var(--text-sm);padding:1px 5px;border-radius:9999px;font-weight:500;',
                             `background:${getAgentColor(type)}22;color:${getAgentColor(type)};`,
                           ].join('')}>
                             {mapAgentTypeLabel(type) || type}
@@ -603,12 +456,12 @@ export default function Sidebar(props: SidebarProps) {
                                 style={`width:10px;height:10px;color:${statusPaletteForSession().text};flex-shrink:0;`}
                               />
                               <div style="display:flex;flex-direction:column;min-width:0;flex:1;gap:2px;">
-                                <span style="font-size:10px;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                                <span style="font-size:var(--text-base);color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
                                   {sessionTitleForSidebar(s.label, sessionIndex())}
                                 </span>
                                 <span
                                   style={[
-                                    'font-size:9px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;',
+                                    'font-size:var(--text-sm);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;',
                                     statusTone() === 'attention' || statusTone() === 'blocked'
                                       ? `color:${statusPaletteForSession().text};font-weight:600;`
                                       : 'color:var(--text-dim);',
@@ -619,7 +472,7 @@ export default function Sidebar(props: SidebarProps) {
                                 </span>
                               </div>
                               <div style={[
-                                'display:flex;align-items:center;gap:3px;font-size:8px;padding:2px 7px;border-radius:9999px;font-weight:600;flex-shrink:0;max-width:min(140px,38%);',
+                                'display:flex;align-items:center;gap:3px;font-size:var(--text-sm);padding:2px 7px;border-radius:9999px;font-weight:600;flex-shrink:0;max-width:min(140px,38%);',
                                 `background:${statusPaletteForSession().background};`,
                                 `color:${statusPaletteForSession().text};`,
                               ].join('')}>

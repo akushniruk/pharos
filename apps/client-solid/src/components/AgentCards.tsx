@@ -10,7 +10,7 @@ export default function AgentCards() {
   const [viewMode, setViewMode] = createSignal<ViewMode>('cards');
 
   const tabStyle = (mode: ViewMode) => [
-    'font-size:11px;font-weight:500;padding:4px 10px;border-radius:4px;cursor:pointer;border:none;',
+    'font-size:var(--text-sm);font-weight:500;padding:4px 10px;border-radius:4px;cursor:pointer;border:none;',
     'transition:background 0.15s,color 0.15s;',
     viewMode() === mode
       ? 'background:var(--bg-elevated);color:var(--text-primary);'
@@ -86,37 +86,37 @@ export default function AgentCards() {
                       path={agent.agentId ? cpuChip : commandLine}
                       style="width:12px;height:12px;color:var(--text-secondary);flex-shrink:0;"
                     />
-                    <span style="font-size:12px;font-weight:500;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                    <span style="font-size:var(--text-base);font-weight:500;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
                       {agent.displayName}
                     </span>
                   </div>
 
                   {/* Model */}
                   <Show when={agent.modelName}>
-                    <span style="font-size:11px;font-family:var(--font-mono);color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                    <span style="font-size:var(--text-sm);font-family:var(--font-mono);color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
                       {agent.modelName!.replace('claude-', '')}
                     </span>
                   </Show>
                   <Show when={agent.runtimeLabel}>
-                    <span style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;">
+                    <span style="font-size:var(--text-sm);color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;">
                       {agent.runtimeLabel}
                     </span>
                   </Show>
                   <Show when={agent.assignment}>
-                    <span style="font-size:10px;color:var(--text-primary);min-height:28px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">
+                    <span style="font-size:var(--text-sm);color:var(--text-primary);min-height:28px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">
                       {agent.assignment}
                     </span>
                   </Show>
                   <Show when={agent.currentAction && agent.currentAction !== agent.assignment}>
-                    <span style="font-size:10px;color:var(--text-secondary);min-height:28px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">
+                    <span style="font-size:var(--text-sm);color:var(--text-secondary);min-height:28px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">
                       {agent.currentAction}
                     </span>
                   </Show>
 
                   {/* Footer: event count + status */}
                   <div style="display:flex;justify-content:space-between;align-items:center;margin-top:2px;">
-                    <span style="font-size:11px;color:var(--text-tertiary);">{agent.eventCount} evts</span>
-                    <span style="font-size:11px;color:var(--text-tertiary);display:flex;align-items:center;gap:4px;">
+                    <span style="font-size:var(--text-sm);color:var(--text-tertiary);">{agent.eventCount} evts</span>
+                    <span style="font-size:var(--text-sm);color:var(--text-tertiary);display:flex;align-items:center;gap:4px;">
                       <Icon path={agent.isActive ? bolt : clock} style="width:11px;height:11px;" />
                       {statusLabel(agent)}
                     </span>
@@ -127,7 +127,7 @@ export default function AgentCards() {
           </For>
 
           <Show when={filteredAgents().length === 0}>
-            <span style="font-size:11px;color:var(--text-dim);padding:8px 0;">No agents</span>
+            <span style="font-size:var(--text-sm);color:var(--text-dim);padding:8px 0;">No agents</span>
           </Show>
         </div>
       </Show>

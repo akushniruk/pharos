@@ -71,17 +71,17 @@ export default function AgentDetail() {
           style={`width:7px;height:7px;border-radius:50%;margin-top:6px;flex-shrink:0;background:${statusColors().dot};`}
         />
         <div style="min-width:0;flex:1;display:flex;flex-direction:column;gap:3px;">
-          <span style="font-size:13px;font-weight:600;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+          <span style="font-size:var(--text-base);font-weight:600;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
             {detail()?.agent.displayName ?? 'Agent'}
           </span>
-          <span style="font-size:10px;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+          <span style="font-size:var(--text-sm);color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
             {headerContext()}
           </span>
         </div>
         <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;">
           <div
             style={[
-              'display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:4px 8px;font-size:10px;font-weight:600;',
+              'display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:4px 8px;font-size:var(--text-sm);font-weight:600;',
               `background:${statusColors().background};`,
               `color:${statusColors().text};`,
             ].join('')}
@@ -90,7 +90,7 @@ export default function AgentDetail() {
             <span>{detail()?.statusLabel ?? 'Unknown'}</span>
           </div>
           <Show when={statusDetail()}>
-            <span style="max-width:170px;font-size:9px;color:var(--text-dim);text-align:right;line-height:1.35;">
+            <span style="max-width:170px;font-size:var(--text-sm);color:var(--text-dim);text-align:right;line-height:1.35;">
               {statusDetail()}
             </span>
           </Show>
@@ -105,7 +105,7 @@ export default function AgentDetail() {
       </div>
 
       <Show when={detail()} fallback={
-        <div style="padding:18px 12px;color:var(--text-dim);font-size:12px;line-height:1.5;">
+        <div style="padding:18px 12px;color:var(--text-dim);font-size:var(--text-sm);line-height:1.5;">
           The selected agent is present, but its live snapshot is not available yet.
         </div>
       }>
@@ -114,30 +114,30 @@ export default function AgentDetail() {
             {(focus) => (
               <div style="padding:10px;border:1px solid var(--border);border-radius:8px;background:linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.01));display:flex;flex-direction:column;gap:8px;">
                 <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
-                  <span style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);">
+                  <span style="font-size:var(--text-sm);font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);">
                     {focus().scopeLabel}
                   </span>
-                  <span style="font-size:10px;padding:2px 8px;border-radius:9999px;border:1px solid var(--border);background:var(--bg-elevated);color:var(--text-secondary);">
+                  <span style="font-size:var(--text-sm);padding:2px 8px;border-radius:9999px;border:1px solid var(--border);background:var(--bg-elevated);color:var(--text-secondary);">
                     {focus().eventCount} events
                   </span>
                 </div>
-                <span style="font-size:13px;font-weight:600;color:var(--text-primary);line-height:1.35;">
+                <span style="font-size:var(--text-base);font-weight:600;color:var(--text-primary);line-height:1.35;">
                   {focus().headline}
                 </span>
-                <span style="font-size:11px;color:var(--text-secondary);line-height:1.45;">
+                <span style="font-size:var(--text-sm);color:var(--text-secondary);line-height:1.45;">
                   {focus().subheadline}
                 </span>
                 <div style="display:flex;flex-wrap:wrap;gap:6px;">
-                  <span style="font-size:10px;padding:2px 8px;border-radius:9999px;border:1px solid var(--border);background:var(--bg-elevated);color:var(--text-dim);">
+                  <span style="font-size:var(--text-sm);padding:2px 8px;border-radius:9999px;border:1px solid var(--border);background:var(--bg-elevated);color:var(--text-dim);">
                     {focus().projectName}
                   </span>
                   <Show when={focus().sessionLabel}>
-                    <span style="font-size:10px;padding:2px 8px;border-radius:9999px;border:1px solid var(--border);background:var(--bg-elevated);color:var(--text-dim);">
+                    <span style="font-size:var(--text-sm);padding:2px 8px;border-radius:9999px;border:1px solid var(--border);background:var(--bg-elevated);color:var(--text-dim);">
                       Session {focus().sessionLabel}
                     </span>
                   </Show>
                   <Show when={focus().agentLabel}>
-                    <span style="font-size:10px;padding:2px 8px;border-radius:9999px;border:1px solid var(--border);background:var(--bg-elevated);color:var(--text-dim);">
+                    <span style="font-size:var(--text-sm);padding:2px 8px;border-radius:9999px;border:1px solid var(--border);background:var(--bg-elevated);color:var(--text-dim);">
                       Agent {focus().agentLabel}
                     </span>
                   </Show>
@@ -148,14 +148,14 @@ export default function AgentDetail() {
 
           <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;">
             <div style="padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg-card);display:flex;flex-direction:column;gap:4px;">
-              <span style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;">Runtime in use</span>
-              <span style="font-size:11px;color:var(--text-primary);line-height:1.4;">
+              <span style="font-size:var(--text-sm);color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;">Runtime in use</span>
+              <span style="font-size:var(--text-sm);color:var(--text-primary);line-height:1.4;">
                 {detail()!.runtimeLabel}
               </span>
             </div>
             <div style="padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg-card);display:flex;flex-direction:column;gap:4px;">
-              <span style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;">Current status</span>
-              <span style={`font-size:11px;font-weight:600;line-height:1.4;color:${statusColors().text};`}>
+              <span style="font-size:var(--text-sm);color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;">Current status</span>
+              <span style={`font-size:var(--text-sm);font-weight:600;line-height:1.4;color:${statusColors().text};`}>
                 {detail()!.statusLabel}
               </span>
             </div>
@@ -163,14 +163,14 @@ export default function AgentDetail() {
 
           <Show when={detail()!.statusTone === 'blocked' || detail()!.statusTone === 'attention'}>
             <div style="padding:10px;border:1px solid var(--border);border-radius:8px;background:rgba(239, 68, 68, 0.08);display:flex;flex-direction:column;gap:4px;">
-              <span style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;">
+              <span style="font-size:var(--text-sm);color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;">
                 Needs review
               </span>
-              <span style={`font-size:11px;font-weight:600;line-height:1.45;color:${statusColors().text};`}>
+              <span style={`font-size:var(--text-sm);font-weight:600;line-height:1.45;color:${statusColors().text};`}>
                 {detail()!.statusLabel}
               </span>
               <Show when={statusDetail()}>
-                <span style="font-size:10px;color:var(--text-dim);line-height:1.45;">
+                <span style="font-size:var(--text-sm);color:var(--text-dim);line-height:1.45;">
                   {statusDetail()}
                 </span>
               </Show>
@@ -178,41 +178,41 @@ export default function AgentDetail() {
           </Show>
 
           <div style="padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg-card);display:flex;flex-direction:column;gap:4px;">
-            <span style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;">Current progress</span>
-            <span style="font-size:11px;color:var(--text-primary);line-height:1.45;">
+            <span style="font-size:var(--text-sm);color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;">Current progress</span>
+            <span style="font-size:var(--text-sm);color:var(--text-primary);line-height:1.45;">
               {detail()!.currentActionLabel}
             </span>
             <Show when={detail()!.currentActionDetail}>
-              <span style="font-size:10px;color:var(--text-dim);line-height:1.45;">
+              <span style="font-size:var(--text-sm);color:var(--text-dim);line-height:1.45;">
                 {detail()!.currentActionDetail}
               </span>
             </Show>
           </div>
 
           <div style="padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg-card);display:flex;flex-direction:column;gap:4px;">
-            <span style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;">Next action</span>
-            <span style="font-size:11px;color:var(--text-primary);line-height:1.45;">
+            <span style="font-size:var(--text-sm);color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;">Next action</span>
+            <span style="font-size:var(--text-sm);color:var(--text-primary);line-height:1.45;">
               {detail()!.assignmentLabel}
             </span>
             <Show when={detail()!.assignmentDetail}>
-              <span style="font-size:10px;color:var(--text-dim);line-height:1.45;">
+              <span style="font-size:var(--text-sm);color:var(--text-dim);line-height:1.45;">
                 {detail()!.assignmentDetail}
               </span>
             </Show>
           </div>
 
           <div style="padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg-card);display:flex;flex-direction:column;gap:4px;">
-            <span style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;">Most recent useful output</span>
-            <span style="font-size:11px;color:var(--text-primary);line-height:1.45;">
+            <span style="font-size:var(--text-sm);color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;">Most recent useful output</span>
+            <span style="font-size:var(--text-sm);color:var(--text-primary);line-height:1.45;">
               {detail()!.lastUsefulResultLabel}
             </span>
             <Show when={detail()!.lastUsefulResultDetail}>
-              <span style="font-size:10px;color:var(--text-dim);line-height:1.45;">
+              <span style="font-size:var(--text-sm);color:var(--text-dim);line-height:1.45;">
                 {detail()!.lastUsefulResultDetail}
               </span>
             </Show>
             <Show when={detail()!.lastUsefulResultAt}>
-              <span style="font-size:10px;color:var(--text-dim);">
+              <span style="font-size:var(--text-sm);color:var(--text-dim);">
                 {formatTime(detail()!.lastUsefulResultAt!)}
               </span>
             </Show>
@@ -220,7 +220,7 @@ export default function AgentDetail() {
         </div>
 
         <div style="padding:8px 12px;flex-shrink:0;">
-          <span style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);">
+          <span style="font-size:var(--text-sm);font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);">
             Activity trail ({detail()!.recentEvents.length})
           </span>
         </div>
@@ -233,26 +233,26 @@ export default function AgentDetail() {
                 onMouseEnter={(ev) => { (ev.currentTarget as HTMLElement).style.background = 'var(--bg-card-hover)'; }}
                 onMouseLeave={(ev) => { (ev.currentTarget as HTMLElement).style.background = 'transparent'; }}
               >
-                <span style="font-size:9px;font-family:var(--font-mono);color:var(--text-dim);min-width:48px;flex-shrink:0;">
+                <span style="font-size:var(--text-sm);font-family:var(--font-mono);color:var(--text-dim);min-width:48px;flex-shrink:0;">
                   {formatTime(e.timestamp)}
                 </span>
                 <span
                   style={[
-                    'font-size:9px;font-weight:600;text-transform:uppercase;padding:1px 4px;border-radius:2px;flex-shrink:0;',
+                    'font-size:var(--text-sm);font-weight:600;text-transform:uppercase;padding:1px 4px;border-radius:2px;flex-shrink:0;',
                     `background:${getEventTypeBgColor(e.hook_event_type)};`,
                     `color:${getEventTypeTextColor(e.hook_event_type)};`,
                   ].join('')}
                 >
                   {getEventTypeLabel(e.hook_event_type)}
                 </span>
-                <span style="font-size:10px;color:var(--text-primary);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                <span style="font-size:var(--text-sm);color:var(--text-primary);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
                   {describeEvent(e)}
                 </span>
               </div>
             )}
           </For>
           <Show when={detail()!.recentEvents.length === 0}>
-            <div style="padding:20px 12px;text-align:center;font-size:11px;color:var(--text-dim);">
+            <div style="padding:20px 12px;text-align:center;font-size:var(--text-sm);color:var(--text-dim);">
               No recent activity for this agent
             </div>
           </Show>

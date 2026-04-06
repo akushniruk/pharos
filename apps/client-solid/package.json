@@ -6,7 +6,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "check:lines": "node ../../scripts/check-line-budget.mjs"
   },
   "dependencies": {
     "solid-heroicons": "3.2.4",

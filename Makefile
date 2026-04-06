@@ -14,7 +14,7 @@ CLIENT_PID_FILE := $(RUN_DIR)/client.pid
 DAEMON_DB_PATH ?= $(PROJECT_ROOT)/apps/daemon-rs/pharos-daemon.db
 DAEMON_BIN := $(PROJECT_ROOT)/apps/daemon-rs/target/debug/pharos-daemon
 
-.PHONY: help dev up down daemon client build test health open db-reset
+.PHONY: help dev up down daemon client build test health open db-reset line-budget
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -112,6 +112,9 @@ test: ## Run all daemon tests
 
 clippy: ## Run clippy lints on daemon
 	cd $(PROJECT_ROOT)/apps/daemon-rs && $(CARGO) clippy
+
+line-budget: ## Fail if any daemon .rs or client .tsx file exceeds the line budget
+	cd $(PROJECT_ROOT)/apps/client-solid && pnpm run check:lines
 
 # ─── Database ───────────────────────────────────────────
 

@@ -7,16 +7,16 @@ import type {
   AgentEntry,
   HookEvent,
   ViewedChangesSnapshot,
-} from './types';
-import { agents, events, projectSnapshots } from './ws';
-import { describeEvent, describeEventDetail, formatRuntimeLabel } from './describe';
+} from '../types';
+import { agents, events, projectSnapshots } from '../ws';
+import { describeEvent, describeEventDetail, formatRuntimeLabel } from '../describe';
 import {
   mapAgentTypeLabel,
   resolveEventAgentName,
   resolveHybridAgentName,
   responsibilityFromPayload,
-} from './agentNaming';
-import { buildAttentionSuggestions } from './attentionHints';
+} from '../agentNaming';
+import { buildAttentionSuggestions } from '../attentionHints';
 
 /** Navigation state (legacy, kept for compatibility) */
 export const [view, setView] = createSignal<View>({ page: 'projects' });
