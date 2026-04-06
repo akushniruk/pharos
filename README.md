@@ -22,17 +22,17 @@ Most agent tools optimize for **output**. Pharos focuses on **observability** an
 
 - **Observable by default** — surface runs, steps, and outcomes so nothing “mysteriously” edits your project.
 - **Built for real workflows** — reviews, handoffs, and accountability — not one-off chats.
-- **Confidence at scale** — govern agent use as adoption grows. We lead with **trust, control, and auditability** before “raw speed” ([PHA-36](/PHA/issues/PHA-36) narrative frame; paste-ready copy blocks in [docs/gtm/readme-hero-variants-pha36.md](docs/gtm/readme-hero-variants-pha36.md); **board A/B/C cheat sheet** in [docs/gtm/board-vote-cheat-sheet-pha36.md](docs/gtm/board-vote-cheat-sheet-pha36.md)).
+- **Confidence at scale** — govern agent use as adoption grows. We lead with **trust, control, and auditability** before “raw speed.” README and GitHub copy variants (including board A/B/C framing) live in [docs/gtm/readme-hero-variants-pha36.md](docs/gtm/readme-hero-variants-pha36.md) and [docs/gtm/board-vote-cheat-sheet-pha36.md](docs/gtm/board-vote-cheat-sheet-pha36.md).
 
-**Canonical surfaces:** this repo (README, `docs/`) and **GitHub Releases** — not a standalone marketing site ([PHA-35](/PHA/issues/PHA-35), [PHA-37](/PHA/issues/PHA-37)).
+**Canonical surfaces:** this repo (README, `docs/`) and **GitHub Releases** — not a standalone marketing site.
 
 ## Get started
 
 - **Star / watch** this repo for releases and default-branch doc updates.
-- **Releases & changelog** — [docs/releases.md](docs/releases.md), [CHANGELOG.md](CHANGELOG.md); paste-ready Release body: [docs/gtm/github-release-desktop-template.md](docs/gtm/github-release-desktop-template.md) ([PHA-44](/PHA/issues/PHA-44), [PHA-45](/PHA/issues/PHA-45)).
-- **Desktop app (Tauri)** — `apps/desktop`; `npm ci && npm run tauri build` (Rust **1.88+** via `apps/desktop/src-tauri/rust-toolchain.toml`); icons from `assets/brand/pharos-mark-square.svg` via `npx tauri icon` ([PHA-46](/PHA/issues/PHA-46)).
+- **Releases & changelog** — [docs/releases.md](docs/releases.md), [CHANGELOG.md](CHANGELOG.md); paste-ready Release body: [docs/gtm/github-release-desktop-template.md](docs/gtm/github-release-desktop-template.md).
+- **Desktop app (Tauri)** — `apps/desktop`; `npm ci && npm run tauri build` (Rust **1.88+** via `apps/desktop/src-tauri/rust-toolchain.toml`); icons from `assets/brand/pharos-mark-square.svg` via `npx tauri icon`.
 - **MVP observability slice** — [docs/mvp-observability-slice.md](docs/mvp-observability-slice.md).
-- **Engineering runbook** — [docs/cto-runbook.md](docs/cto-runbook.md) (Paperclip document: [PHA-4](/PHA/issues/PHA-4#document-engineering-runbook)).
+- **Engineering runbook** — [docs/cto-runbook.md](docs/cto-runbook.md).
 
 ## Development
 
@@ -86,7 +86,7 @@ npm ci
 npm run tauri dev
 ```
 
-In dev, open `http://localhost:1420/docs` for the in-app docs shell ([PHA-56](/PHA/issues/PHA-56)).
+In dev, open `http://localhost:1420/docs` for the in-app docs shell.
 
 **Production-style build**
 
@@ -105,7 +105,7 @@ npx tauri icon ../../assets/brand/pharos-mark-square.svg
 
 (Tauri’s SVG parser rejects XML `<!-- comments -->` in the source file.)
 
-**Releases:** Ship **semantic version tags** `v*.*.*` per [docs/releases.md](docs/releases.md); [`.github/workflows/release-desktop.yml`](.github/workflows/release-desktop.yml) builds installers and opens a **draft** GitHub Release on those tags ([PHA-46](/PHA/issues/PHA-46)).
+**Releases:** Ship **semantic version tags** `v*.*.*` per [docs/releases.md](docs/releases.md); [`.github/workflows/release-desktop.yml`](.github/workflows/release-desktop.yml) builds installers and opens a **draft** GitHub Release on those tags.
 
 [![Release desktop (draft)](https://github.com/akushniruk/pharos/actions/workflows/release-desktop.yml/badge.svg)](https://github.com/akushniruk/pharos/actions/workflows/release-desktop.yml)
 
@@ -114,8 +114,8 @@ npx tauri icon ../../assets/brand/pharos-mark-square.svg
 - **`apps/daemon-rs`** — Rust service: session scan, JSONL tail, WebSocket fan-out; SQLite state (`PHAROS_DAEMON_DB_PATH`). Canonical event shape in [`apps/daemon-rs/src/model.rs`](apps/daemon-rs/src/model.rs).
 - **`apps/client-solid`** — SolidJS dashboard (Vite); talks to the daemon on the configured API/WebSocket port.
 - **`apps/desktop`** — Tauri 2 shell and Vite UI; bundle identifier `ing.pharos.desktop` ([`tauri.conf.json`](apps/desktop/src-tauri/tauri.conf.json)). Use `npm run dev` for the web asset server only; use `npm run tauri dev` for the full desktop app.
-- **`.github/workflows/release-desktop.yml`** — On tags `v*.*.*`, matrix-builds macOS (aarch64 + x86_64), Linux, and Windows and attaches bundles to a **draft** GitHub Release ([PHA-46](/PHA/issues/PHA-46)).
-- **`scripts/paperclip-run-summary.sh`** — Append-only NDJSON run log for Paperclip-connected agents; behavior and API checks in [docs/mvp-observability-slice.md](docs/mvp-observability-slice.md) (including **M1** run ↔ issue correlation via the control plane).
+- **`.github/workflows/release-desktop.yml`** — On tags `v*.*.*`, matrix-builds macOS (aarch64 + x86_64), Linux, and Windows and attaches bundles to a **draft** GitHub Release.
+- **`scripts/paperclip-run-summary.sh`** — Append-only NDJSON run log helper for local agent/CI workflows; behavior and API checks in [docs/mvp-observability-slice.md](docs/mvp-observability-slice.md) (including run ↔ issue correlation when using a compatible control plane).
 
 ### Repository layout (top level)
 
@@ -126,7 +126,7 @@ npx tauri icon ../../assets/brand/pharos-mark-square.svg
 | `apps/desktop/` | Tauri 2 + Vite desktop app (`package.json`, `src/`, `src-tauri/`) |
 | `Makefile` | Local dev orchestration for daemon + Solid client (ports 4000 / 5173) |
 | `docs/` | Product and engineering docs (releases, runbook pointer, MVP slice, design) |
-| `scripts/` | Workspace utilities (e.g. Paperclip run summary NDJSON) |
+| `scripts/` | Workspace utilities (e.g. run summary NDJSON helper) |
 | `.github/workflows/` | CI/CD (`release-desktop.yml`, etc.) |
 | `assets/brand/` | Canonical brand assets (e.g. square mark for `tauri icon`) |
 | `site/` | Static reference pages (e.g. onboarding copy), not the shipped desktop bundle |
@@ -135,21 +135,21 @@ npx tauri icon ../../assets/brand/pharos-mark-square.svg
 
 | Topic | Doc |
 | --- | --- |
-| Releases: tags, drafts, smoke, board QA | [docs/releases.md](docs/releases.md) ([PHA-44](/PHA/issues/PHA-44)) |
-| GitHub Release body template (desktop) | [docs/gtm/github-release-desktop-template.md](docs/gtm/github-release-desktop-template.md) ([PHA-45](/PHA/issues/PHA-45)) |
+| Releases: tags, drafts, smoke, QA checklist | [docs/releases.md](docs/releases.md) |
+| GitHub Release body template (desktop) | [docs/gtm/github-release-desktop-template.md](docs/gtm/github-release-desktop-template.md) |
 | MVP observability slice + API verification | [docs/mvp-observability-slice.md](docs/mvp-observability-slice.md) |
-| CTO / engineering runbook | [docs/cto-runbook.md](docs/cto-runbook.md) ([PHA-4](/PHA/issues/PHA-4#document-engineering-runbook)) |
+| CTO / engineering runbook | [docs/cto-runbook.md](docs/cto-runbook.md) |
 | Changelog | [CHANGELOG.md](CHANGELOG.md) |
-| Brand / naming exploration | [docs/gtm/brand-naming-candidates-v1.md](docs/gtm/brand-naming-candidates-v1.md) ([PHA-38](/PHA/issues/PHA-38)) |
+| Brand / naming exploration | [docs/gtm/brand-naming-candidates-v1.md](docs/gtm/brand-naming-candidates-v1.md) |
 | Graph UI spec | [docs/design/graph-view-pro-ui-spec.md](docs/design/graph-view-pro-ui-spec.md) |
-| In-app `/docs` UX spec (shell / desktop) | [docs/design/docs-page-ux-spec.md](docs/design/docs-page-ux-spec.md) ([PHA-57](/PHA/issues/PHA-57)) |
-| Public `/docs` IA & page outlines (handoff for site build) | [docs/site/docs-ia-content-outline-v1.md](docs/site/docs-ia-content-outline-v1.md) ([PHA-55](/PHA/issues/PHA-55)) |
+| In-app `/docs` UX spec (shell / desktop) | [docs/design/docs-page-ux-spec.md](docs/design/docs-page-ux-spec.md) |
+| Public `/docs` IA & page outlines (handoff for site build) | [docs/site/docs-ia-content-outline-v1.md](docs/site/docs-ia-content-outline-v1.md) |
 
 ## Contributing
 
 1. **User-visible changes** — Add an entry under `[Unreleased]` in [CHANGELOG.md](CHANGELOG.md) when the change belongs in release notes.
-2. **Releases** — Follow [docs/releases.md](docs/releases.md): bump the three desktop version fields together (see runbook), run `python3 scripts/release/verify_desktop_versions.py`, then tag, draft Release, engineering smoke, board QA on [PHA-44](/PHA/issues/PHA-44), then publish.
-3. **Pull requests** — Use clear titles; link issues with `[PHA-NN](/PHA/issues/PHA-NN)` when helpful; keep `make test` and desktop builds green with the pinned Rust toolchain(s).
+2. **Releases** — Follow [docs/releases.md](docs/releases.md): bump the three desktop version fields together (see runbook), run `python3 scripts/release/verify_desktop_versions.py`, then tag, draft Release, run engineering smoke and release QA from the checklist, then publish.
+3. **Pull requests** — Use clear titles; link tracking issues in descriptions when your workflow uses them; keep `make test` and desktop builds green with the pinned Rust toolchain(s).
 
 ## License
 
@@ -157,6 +157,6 @@ Add a `LICENSE` file at the repository root before broad public distribution. Un
 
 ## In this repository
 
-- **Hero copy reference (paste deck):** [site/onboarding-homepage.html](site/onboarding-homepage.html) — approved strings aligned with [PHA-15](/PHA/issues/PHA-15#comment-90c579de-c094-43e1-bad5-15c64bae0de2).
-- **Brand naming (Pharos vs alternatives):** [docs/gtm/brand-naming-candidates-v1.md](docs/gtm/brand-naming-candidates-v1.md) ([PHA-38](/PHA/issues/PHA-38)).
-- **README refresh traceability** — Epic [PHA-50](/PHA/issues/PHA-50): technical + layout [PHA-51](/PHA/issues/PHA-51), product narrative [PHA-52](/PHA/issues/PHA-52), engineering fact pass [PHA-53](/PHA/issues/PHA-53). This file is the **Paperclip Pharos project primary workspace** root; GitHub or other clones may lag until those changes are merged and pushed from the authoritative git remote.
+- **Hero copy reference (paste deck):** [site/onboarding-homepage.html](site/onboarding-homepage.html) — aligned with onboarding strings in `docs/gtm/`.
+- **Brand naming (Pharos vs alternatives):** [docs/gtm/brand-naming-candidates-v1.md](docs/gtm/brand-naming-candidates-v1.md).
+- **Maintenance** — This README is curated alongside engineering and GTM docs under `docs/`; default-branch changes land via normal review and release flow in [docs/releases.md](docs/releases.md).
