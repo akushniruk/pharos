@@ -112,6 +112,10 @@ apps/desktop/src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/
 
 This first release is intentionally an unsigned internal tester build. See [docs/macos-desktop-release.md](docs/macos-desktop-release.md) for maintainer build steps and tester install instructions.
 
+## Releases
+
+CI publishes **draft** GitHub Releases for desktop when a semver tag `v*.*.*` is pushed. Maintainer flow, changelog discipline, and pre-publish QA are documented in [docs/releases.md](docs/releases.md). User-facing notes accumulate in [CHANGELOG.md](CHANGELOG.md).
+
 ## What You See
 
 - **Live sessions** — detected the moment an agent starts
