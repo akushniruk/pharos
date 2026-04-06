@@ -7,7 +7,7 @@ import {
   deriveRuntimeBridgeCandidates,
   resolveActivityState,
   resolveConservativeStatusDetail,
-} from './store';
+} from './store/snapshots';
 import type { AgentInfo, HookEvent, Project, SessionInfo } from './types';
 
 describe('buildProjectFocusSnapshot', () => {
