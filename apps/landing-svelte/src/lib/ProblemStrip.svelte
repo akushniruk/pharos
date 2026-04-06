@@ -5,16 +5,17 @@
       <div class="col">
         <p class="label">Without a local observability layer</p>
         <p>
-          Agent work disappears into chat scrollback and scattered logs. It is hard to answer “what ran,
-          where, and under what assumptions?” — so <strong class="warn">trust breaks first</strong> and
-          rollouts stall.
+          Work disappears into chat scrollback and one-off logs. When nobody can answer “what ran, where,
+          and under what assumptions?”, <strong class="warn">trust breaks first</strong>—and agent rollouts
+          stall before they scale.
         </p>
       </div>
       <div class="col col--accent">
         <p class="label">With Pharos</p>
         <p>
-          Sessions and events stay <strong>addressable</strong> — skim, search, and trace what happened.
-          Structured events from transcripts make behavior legible for security, leads, and builders alike.
+          Sessions stay <strong>addressable</strong>: skim, search, and trace runs from structured events—not
+          from memory. That legibility is what lets security reviewers, engineering leads, and daily
+          practitioners stay aligned.
         </p>
       </div>
     </div>
@@ -23,8 +24,9 @@
 
 <style>
   .strip {
-    padding: 3rem 1.5rem;
+    padding: var(--space-2xl) var(--space-lg);
     border-block: 1px solid var(--stroke);
+    background: linear-gradient(180deg, transparent, var(--surface) 100%);
   }
 
   .strip__inner {
@@ -33,52 +35,63 @@
   }
 
   h2 {
-    margin: 0 0 1.5rem;
-    font-size: 0.75rem;
-    font-weight: 600;
+    margin: 0 0 var(--space-lg);
+    font-size: 0.6875rem;
+    font-weight: 700;
     color: var(--muted);
     text-transform: uppercase;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.11em;
+    font-family: var(--font-mono);
   }
 
   .cols {
     display: grid;
-    gap: 1.25rem;
+    gap: var(--space-md);
     grid-template-columns: 1fr;
   }
 
   @media (min-width: 720px) {
     .cols {
       grid-template-columns: 1fr 1fr;
+      gap: var(--space-lg);
     }
   }
 
   .col {
-    padding: 1.25rem 1.35rem;
+    padding: var(--space-lg) var(--space-lg);
     border-radius: var(--radius);
-    border: 1px solid var(--stroke);
-    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid var(--stroke-strong);
+    background: var(--surface);
+    box-shadow: var(--shadow-sm);
   }
 
   .col--accent {
-    border-color: rgba(94, 234, 212, 0.35);
-    background: var(--accent-dim);
+    border-color: color-mix(in srgb, var(--accent) 42%, var(--stroke-strong));
+    background: linear-gradient(160deg, var(--accent-dim), var(--surface) 70%);
+    box-shadow:
+      var(--shadow-sm),
+      0 0 0 1px color-mix(in srgb, var(--accent) 12%, transparent) inset;
   }
 
   .label {
-    margin: 0 0 0.5rem;
+    margin: 0 0 var(--space-sm);
     font-family: var(--font-mono);
-    font-size: 0.75rem;
-    font-weight: 500;
+    font-size: 0.6875rem;
+    font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: var(--muted);
+    letter-spacing: 0.08em;
+    color: var(--accent);
+  }
+
+  .col--accent .label {
+    color: var(--accent);
   }
 
   .col p:last-child {
     margin: 0;
-    color: var(--muted);
-    font-size: 0.98rem;
+    color: var(--text-secondary);
+    font-size: 0.9375rem;
+    line-height: 1.62;
   }
 
   .col strong {

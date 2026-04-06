@@ -4,22 +4,25 @@
 
 <footer class="foot">
   <div class="foot__inner">
-    <p>
-      Pharos — <span class="mono">daemon + dashboard</span> for AI agent sessions. Copy aligns to
-      <a href={`${repoUrl}/blob/main/docs/gtm/launch-narrative-v1.md`}>launch narrative v1</a> and README hero
-      outcome <strong>A</strong> (      <a href={`${repoUrl}/blob/main/docs/gtm/readme-hero-variants-pha36.md`}>PHA-36 variants</a>).
-    </p>
-    <p class="fine">
-      This page is a static marketing shell; canonical product story remains the GitHub README, Releases, and
-      in-repo docs.
-    </p>
+    <div class="foot__main">
+      <p class="foot__lead">
+        Pharos pairs a <span class="mono">Rust daemon</span> with a dashboard so coding-agent sessions are
+        readable where they actually run. Positioning and proof points track
+        <a href={`${repoUrl}/blob/main/docs/gtm/launch-narrative-v1.md`}>launch narrative v1</a>; deeper
+        detail lives in the <a href={`${repoUrl}#readme`}>README</a> and
+        <a href={`${repoUrl}/releases`}>Releases</a>.
+      </p>
+      <p class="fine">
+        Static landing only — the README and repo docs stay the source of truth.
+      </p>
+    </div>
   </div>
 </footer>
 
 <style>
   .foot {
-    padding: 2.5rem 1.5rem 3rem;
-    border-top: 1px solid var(--stroke);
+    padding: var(--space-2xl) var(--space-lg) var(--space-3xl);
+    border-top: 1px solid var(--stroke-strong);
     background: var(--bg0);
   }
 
@@ -28,21 +31,31 @@
     margin: 0 auto;
   }
 
-  p {
-    margin: 0 0 0.75rem;
-    color: var(--muted);
-    font-size: 0.9rem;
+  .foot__main {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+    max-width: 42rem;
+  }
+
+  .foot__lead {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 0.9375rem;
+    line-height: 1.62;
   }
 
   .fine {
     margin: 0;
-    font-size: 0.8rem;
-    opacity: 0.85;
+    font-size: 0.8125rem;
+    line-height: 1.55;
+    color: var(--muted);
   }
 
   .mono {
     font-family: var(--font-mono);
-    font-size: 0.85em;
+    font-size: 0.9em;
+    font-weight: 500;
     color: var(--text);
   }
 </style>

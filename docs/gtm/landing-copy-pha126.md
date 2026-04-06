@@ -30,14 +30,14 @@
 
 ## Hero
 
-- **Eyebrow:** `Local-first · Open source`  
-  - *UX:* ~28 chars; keep single line on mobile if possible.
+- **Eyebrow:** `Local observability · Open source`  
+  - *UX:* ~32 chars; keep single line on mobile if possible (trim to `Local-first · Open source` only if it wraps).
 - **Title (H1):** `Pharos`  
   - *UX:* Short wordmark-style H1; pair with lede for SEO/title tag separately in head if needed.
 - **Lede:**  
-  `Pharos makes **AI coding agents observable and governable** on your machine: see what ran, under what rules, and prove it — so security and platform teams can say **yes** to agents without trading away clarity. Speed follows once the lights are on.`
+  `A **local observability layer** for coding agents: the daemon tails session transcripts on your machine, normalizes them into events, and the dashboard shows what ran—so security and platform teams get **evidence**, not screenshots of a chat thread.`
 - **Promise band:**  
-  `See what your coding agent does, govern it, and prove it — then ship faster because the system is inspectable.`
+  `**See what your agent did, govern it, and prove it.** Velocity comes after the lights are on.`
 - **Primary CTA:** `View on GitHub` → repo root.
 - **Secondary CTA:** `Read the README` → repo `#readme`.
 
@@ -47,34 +47,34 @@
 
 - **Section label (H2):** `The problem`
 - **Column A label:** `Without a local observability layer`  
-  **Body:** Agent work disappears into chat scrollback and scattered logs. It is hard to answer “what ran, where, and under what assumptions?” — so **trust breaks first** and rollouts stall.
+  **Body:** Work disappears into chat scrollback and one-off logs. When nobody can answer “what ran, where, and under what assumptions?”, **trust breaks first**—and agent rollouts stall before they scale.
 - **Column B label:** `With Pharos`  
-  **Body:** Sessions and events stay **addressable** — skim, search, and trace what happened. Structured events from transcripts make behavior legible for security, leads, and builders alike.
+  **Body:** Sessions stay **addressable**: skim, search, and trace runs from structured events—not from memory. That legibility is what lets security reviewers, engineering leads, and daily practitioners stay aligned.
 
 ---
 
 ## Proof points
 
-- **Section title:** `Why teams choose observability first`
+- **Section title:** `Why observability comes first`
 - **Subhead:**  
-  `Aligned to our launch narrative: **security-led** story, **velocity** as confident speed once visibility is in place.`
+  `Lead with **trust and evidence**; treat speed as the outcome once behavior is legible—not something you buy by hiding the trail.`
 
 **Cards (title + body):**
 
-1. **Auditability first** — Agent actions surface so practitioners and reviewers can scan, share, and reproduce them — not bury them in unstructured logs.
-2. **Observable by default** — “What ran, in what order, under what rules” is a first-class story, not an afterthought.
-3. **Local-first clarity** — Understand execution in your environment before cloud handoff narratives dominate.
-4. **Control enables scale** — Policies and guardrails are what let more people use agents safely — not optional friction.
-5. **Mission-aligned onboarding** — Understand what is running → govern with confidence → ship faster with proof.
+1. **Auditability first** — Actions show up where reviewers already work—scan, share, and reproduce runs instead of reverse-engineering chat.
+2. **Observable by default** — “What ran, in what order, under what rules” is modeled as events—not an afterthought once something breaks.
+3. **Local-first clarity** — Truth starts on the machine where the agent ran: your files, your retention, your scope—before any cloud story.
+4. **Control as scale** — Guardrails are how more people get to use agents safely; they are not busywork bolted on at the end.
+5. **Clarity, then velocity** — Understand what is running, govern with confidence, ship faster with proof—same order every time.
 
 ---
 
 ## Footer
 
 - **Paragraph 1:**  
-  Pharos — `daemon + dashboard` for AI agent sessions. Copy aligns to [launch narrative v1](https://github.com/akushniruk/pharos/blob/main/docs/gtm/launch-narrative-v1.md) and README hero outcome **A** ([PHA-36 variants](https://github.com/akushniruk/pharos/blob/main/docs/gtm/readme-hero-variants-pha36.md)).
+  Pharos pairs a `Rust daemon` with a dashboard so coding-agent sessions are readable where they actually run. Positioning and proof points track [launch narrative v1](https://github.com/akushniruk/pharos/blob/main/docs/gtm/launch-narrative-v1.md); deeper detail lives in the [README](https://github.com/akushniruk/pharos#readme) and [Releases](https://github.com/akushniruk/pharos/releases).
 - **Fine print:**  
-  This page is a static marketing shell; canonical product story remains the GitHub README, Releases, and in-repo docs.
+  Static landing only—the README and repo docs stay the source of truth.
 
 *(Replace `github.com/akushniruk/pharos` in footer hrefs if the canonical org/repo URL changes.)*
 
@@ -97,4 +97,4 @@
 
 ---
 
-*Deck version: 2026-04-06 — synced to strings in `apps/landing-svelte`.*
+*Deck version: 2026-04-06 (PHA-135 polish) — synced to strings in `apps/landing-svelte` and `index.html` meta/title.*

@@ -35,39 +35,49 @@
     position: sticky;
     top: 0;
     z-index: 10;
-    backdrop-filter: blur(10px);
-    background: rgba(11, 15, 20, 0.72);
+    backdrop-filter: blur(14px) saturate(1.2);
+    -webkit-backdrop-filter: blur(14px) saturate(1.2);
+    background: color-mix(in srgb, var(--bg0) 78%, transparent);
     border-bottom: 1px solid var(--stroke);
   }
 
   .top__inner {
     max-width: var(--max);
     margin: 0 auto;
-    padding: 0.85rem 1.5rem;
+    padding: var(--space-md) var(--space-lg);
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 1rem;
+    gap: var(--space-md);
   }
 
   .top__wordmark {
     font-weight: 700;
-    letter-spacing: -0.02em;
+    font-size: 1.05rem;
+    letter-spacing: -0.03em;
+    color: var(--text);
   }
 
   .top__nav {
     display: flex;
-    gap: 1.25rem;
-    font-size: 0.9rem;
-    font-weight: 500;
+    align-items: center;
+    gap: var(--space-xs);
+    font-size: 0.875rem;
+    font-weight: 600;
   }
 
   .top__nav a {
+    padding: var(--space-sm) var(--space-md);
+    border-radius: 999px;
     text-decoration: none;
     color: var(--muted);
+    transition:
+      background 0.15s ease,
+      color 0.15s ease;
   }
 
   .top__nav a:hover {
+    background: var(--surface);
     color: var(--accent);
   }
 

@@ -1,20 +1,64 @@
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap');
 
 :root {
-  color-scheme: dark;
-  --bg0: #0b0f14;
-  --bg1: #111822;
-  --bg2: #1a2332;
-  --stroke: rgba(255, 255, 255, 0.08);
-  --text: #e8edf5;
-  --muted: #9aa8bc;
-  --accent: #5eead4;
-  --accent-dim: rgba(94, 234, 212, 0.15);
-  --warn: #fbbf24;
-  --radius: 12px;
+  color-scheme: dark light;
+  --bg0: #080c10;
+  --bg1: #0f141c;
+  --bg2: #151d28;
+  --surface: rgba(255, 255, 255, 0.03);
+  --stroke: rgba(255, 255, 255, 0.09);
+  --stroke-strong: rgba(255, 255, 255, 0.14);
+  --text: #f0f4f8;
+  --text-secondary: #c5d0e0;
+  --muted: #8b9cb3;
+  --accent: #4fd1c5;
+  --accent-hover: #7fe8dc;
+  --accent-foreground: #042a28;
+  --accent-dim: rgba(79, 209, 197, 0.12);
+  --accent-glow: rgba(79, 209, 197, 0.22);
+  --warn: #f0b429;
+  --radius-sm: 8px;
+  --radius: 14px;
+  --radius-lg: 20px;
   --font-sans: 'DM Sans', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, monospace;
-  --max: 1120px;
+  --max: 1080px;
+  --space-xs: 0.25rem;
+  --space-sm: 0.5rem;
+  --space-md: 1rem;
+  --space-lg: 1.5rem;
+  --space-xl: 2rem;
+  --space-2xl: 3rem;
+  --space-3xl: 4.5rem;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.45);
+  --page-glow: radial-gradient(ellipse 100% 70% at 50% -15%, rgba(45, 120, 115, 0.35) 0%, transparent 52%),
+    radial-gradient(ellipse 80% 50% at 100% 0%, rgba(30, 58, 95, 0.25) 0%, transparent 45%);
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    color-scheme: light;
+    --bg0: #f6f8fb;
+    --bg1: #eef2f7;
+    --bg2: #e4eaf2;
+    --surface: rgba(255, 255, 255, 0.72);
+    --stroke: rgba(15, 23, 42, 0.1);
+    --stroke-strong: rgba(15, 23, 42, 0.16);
+    --text: #0f172a;
+    --text-secondary: #334155;
+    --muted: #64748b;
+    --accent: #0d9488;
+    --accent-hover: #0f766e;
+    --accent-foreground: #f0fdfa;
+    --accent-dim: rgba(13, 148, 136, 0.1);
+    --accent-glow: rgba(13, 148, 136, 0.18);
+    --warn: #b45309;
+    --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+    --shadow-md: 0 12px 40px rgba(15, 23, 42, 0.1);
+    --page-glow: radial-gradient(ellipse 100% 65% at 50% -10%, rgba(13, 148, 136, 0.12) 0%, transparent 50%),
+      radial-gradient(ellipse 70% 45% at 100% 0%, rgba(59, 130, 246, 0.08) 0%, transparent 42%);
+  }
 }
 
 *,
@@ -31,10 +75,23 @@ body {
   margin: 0;
   min-height: 100vh;
   font-family: var(--font-sans);
-  font-size: 1.05rem;
-  line-height: 1.6;
+  font-size: 1.0625rem;
+  line-height: 1.65;
+  font-optical-sizing: auto;
   color: var(--text);
-  background: radial-gradient(120% 80% at 50% -20%, #1e3a4a 0%, var(--bg0) 55%);
+  background-color: var(--bg0);
+  background-image: var(--page-glow);
+  background-attachment: fixed;
+}
+
+::selection {
+  background: var(--accent-dim);
+  color: var(--text);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
 }
 
 a {
@@ -44,7 +101,7 @@ a {
 }
 
 a:hover {
-  color: #99f6e4;
+  color: var(--accent-hover);
 }
 
 .sr-only {
