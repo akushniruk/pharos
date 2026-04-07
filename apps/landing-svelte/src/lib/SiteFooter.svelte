@@ -15,7 +15,7 @@
     </div>
 
     <nav class="foot__nav" aria-label="Footer">
-      <a class="foot__link" href={docsUrl} target="_blank" rel="noopener noreferrer">
+      <a class="foot__link" href="#/docs">
         DOCUMENTATION
       </a>
       <a class="foot__link" href={privacyUrl} target="_blank" rel="noopener noreferrer">

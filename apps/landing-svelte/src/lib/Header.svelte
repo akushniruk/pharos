@@ -4,23 +4,21 @@
   let {
     gitPullUrl = 'https://github.com/akushniruk/pharos',
     initSessionHref = '#cta-heading',
+    isDocsRoute = false,
   }: {
     gitPullUrl?: string
     initSessionHref?: string
+    isDocsRoute?: boolean
   } = $props()
 
-  let activeNav = $state<NavKey>('features')
+  let activeNav = $derived<NavKey>(isDocsRoute ? 'docs' : 'features')
 
   const navItems: { key: NavKey; label: string; href: string }[] = [
     { key: 'features', label: 'FEATURES', href: '#features-heading' },
     { key: 'why', label: 'WHY_PHAROS', href: '#why-pharos-heading' },
     { key: 'install', label: 'INSTALL', href: '#deploy-heading' },
-    { key: 'docs', label: 'DOCS', href: 'https://github.com/akushniruk/pharos#readme' },
+    { key: 'docs', label: 'DOCS', href: '#/docs' },
   ]
-
-  function setActive(key: NavKey) {
-    activeNav = key
-  }
 </script>
 
 <header class="header">
@@ -42,7 +40,6 @@
               href={item.href}
               target={item.href.startsWith('http') ? '_blank' : undefined}
               rel={item.href.startsWith('http') ? 'noopener noreferrer' : undefined}
-              onclick={() => setActive(item.key)}
             >
               {item.label}
             </a>

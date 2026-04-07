@@ -20,9 +20,8 @@ type InlinePart =
 
 function resolveDocAssetSrc(src: string): string {
   if (src.startsWith('http://') || src.startsWith('https://')) return src;
-  const base = import.meta.env.BASE_URL;
   const path = src.replace(/^\.?\//, '');
-  return `${base}${path}`;
+  return `/${path}`;
 }
 
 function DocLink(props: {
