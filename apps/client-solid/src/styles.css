@@ -171,8 +171,7 @@ body {
   cursor: pointer;
   color: var(--accent);
   text-decoration: none;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: -0.01em;
   font-weight: 600;
   font-size: 0.8125rem;
 }
@@ -189,9 +188,8 @@ body {
 }
 
 .brand__svg {
-  width: 1.5rem;
-  height: auto;
   display: block;
+  flex-shrink: 0;
 }
 
 .app-header-brand-text {
@@ -200,7 +198,11 @@ body {
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--accent);
-  text-shadow: 0 0 8px rgba(0, 255, 65, 0.6);
+}
+
+.brand__suffix {
+  opacity: 0.5;
+  font-weight: 500;
 }
 
 .app-header-actions {

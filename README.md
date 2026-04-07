@@ -134,7 +134,7 @@ npm ci
 npm run tauri build
 ```
 
-**Icons** — Regenerate from the canonical square master [`assets/brand/pharos-mark-square.svg`](assets/brand/pharos-mark-square.svg):
+**Icons** — Regenerate from the canonical square master [`assets/brand/pharos-mark-square.svg`](assets/brand/pharos-mark-square.svg) (same mark geometry as [`apps/client-solid/public/pharos-mark.svg`](apps/client-solid/public/pharos-mark.svg), centered on a dark tile for `tauri icon`):
 
 ```bash
 cd apps/desktop

@@ -2,6 +2,10 @@ import { Icon } from 'solid-heroicons';
 import { sun, moon, academicCap } from 'solid-heroicons/solid';
 import { theme, toggleTheme } from '../lib/theme';
 
+import PharosMark from './PharosMark';
+
+const isDesktop = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+
 interface HeaderProps {
   isDocsRoute?: boolean;
   onNavigateHome?: () => void;
@@ -19,9 +23,11 @@ export default function Header(props: HeaderProps) {
         class="app-header-brand"
       >
         <span class="brand__icon" aria-hidden="true">
-          <img class="brand__svg" src="/pharos-mark.svg" alt="" />
+          <PharosMark size={22} class="brand__svg" />
         </span>
-        <span class="app-header-brand-text">PHAROS</span>
+        <span class="app-header-brand-text">
+          PHAROS{isDesktop && <span class="brand__suffix">.DESKTOP</span>}
+        </span>
       </button>
 
       <div class="flex-1" />

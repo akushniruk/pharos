@@ -6,7 +6,7 @@ Back to [Docs Portal](README.md).
 
 - **Platform:** macOS (Apple Silicon and Intel builds ship from CI; local example below is Apple Silicon).
 - **Artifact:** Unsigned `.dmg` from draft GitHub Releases (unless signing is configured).
-- **Bundle name:** `pharos-desktop.app` — from [`productName`](https://v2.tauri.app/reference/config/) in [`apps/desktop/src-tauri/tauri.conf.json`](../apps/desktop/src-tauri/tauri.conf.json). (The in-window product title may still say “Pharos Agent Monitor”; that is separate from the `.app` filename.)
+- **Bundle name:** `Pharos.app` — from [`productName`](https://v2.tauri.app/reference/config/) in [`apps/desktop/src-tauri/tauri.conf.json`](../apps/desktop/src-tauri/tauri.conf.json). (The in-window window title is configured separately.)
 
 Unsigned builds are normal for internal testing. **macOS Gatekeeper** may block first launch or show messages such as the app being **“damaged”** and suggesting you **move it to the Trash**. That wording usually means **code signature / quarantine validation failed**, not a corrupt download or a wrong icon. Icons affect appearance and packaging; they do not fix Gatekeeper.
 
@@ -60,7 +60,7 @@ Use the `.dmg` under `bundle/dmg/` for distribution. The raw `.app` under `bundl
 
 ### Maintainer smoke test
 
-1. Open the built `pharos-desktop.app` from `bundle/macos/`.
+1. Open the built `Pharos.app` from `bundle/macos/`.
 2. Confirm the window launches outside `npm run tauri dev`.
 3. Exercise the flows you care about (daemon, UI, agents) per your release checklist.
 
@@ -71,7 +71,7 @@ Share the `.dmg` only with trusted testers.
 ### Tester steps
 
 1. Open the DMG.
-2. Drag **`pharos-desktop.app`** into **Applications** (if the DMG presents the shortcut).
+2. Drag **`Pharos.app`** into **Applications** (if the DMG presents the shortcut).
 3. Eject the DMG.
 4. In **Applications**, **right-click** the app → **Open** (first launch).
 5. If blocked, open **System Settings → Privacy & Security** and use **Open Anyway**, then retry.
@@ -83,15 +83,15 @@ Try, on a copy in **Applications** or on the `.app` inside the DMG:
 1. **Clear quarantine** (common for files downloaded from the browser or GitHub):
 
    ```bash
-   xattr -cr /path/to/pharos-desktop.app
+   xattr -cr /path/to/Pharos.app
    ```
 
 2. **Inspect signing** (unsigned/ad-hoc builds will not pass strict assessment—that is expected until you ship a Developer ID build):
 
    ```bash
-   codesign --verify --deep --strict --verbose=2 /path/to/pharos-desktop.app
-   spctl --assess --verbose /path/to/pharos-desktop.app
-   xattr -l /path/to/pharos-desktop.app
+   codesign --verify --deep --strict --verbose=2 /path/to/Pharos.app
+   spctl --assess --verbose /path/to/Pharos.app
+   xattr -l /path/to/Pharos.app
    ```
 
    Look for `com.apple.quarantine` on the bundle or contained files.
