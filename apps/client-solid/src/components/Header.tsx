@@ -1,7 +1,6 @@
 import { Icon } from 'solid-heroicons';
 import { sun, moon, academicCap } from 'solid-heroicons/solid';
 import { theme, toggleTheme } from '../lib/theme';
-import PharosMark from './PharosMark';
 
 interface HeaderProps {
   isDocsRoute?: boolean;
@@ -17,17 +16,15 @@ export default function Header(props: HeaderProps) {
         type="button"
         onClick={() => props.onNavigateHome?.()}
         title="Go to home dashboard"
-        style="display:flex;align-items:center;gap:10px;flex-shrink:0;min-width:0;background:none;border:none;padding:0;cursor:pointer;"
+        class="app-header-brand"
       >
-        <PharosMark size={18} class="pharos-mark" />
-        <div style="display:flex;flex-direction:column;gap:1px;min-width:0;">
-          <span style={`font-size:var(--text-base);font-weight:700;color:var(--text-primary);letter-spacing:0.01em;`}>
-            Pharos
-          </span>
-        </div>
+        <span class="brand__icon" aria-hidden="true">
+          <img class="brand__svg" src="/pharos-mark.svg" alt="" />
+        </span>
+        <span class="app-header-brand-text">PHAROS</span>
       </button>
 
-      <div style="flex:1;" />
+      <div class="flex-1" />
 
       {/* Right: Docs + theme (monochrome icon buttons) */}
       <div class="app-header-actions">

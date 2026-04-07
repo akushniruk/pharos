@@ -222,18 +222,16 @@ export default function AppShell() {
   const projectWorkspaceBody = createMemo(() => {
     if (viewMode() === 'logs') {
       return (
-        <div
-          style="flex:1;min-height:0;min-width:0;display:flex;flex-direction:column;overflow:hidden;"
-        >
+        <div class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           <EventStream viewMode={viewMode} onViewModeChange={setViewMode} />
         </div>
       );
     }
     return (
-      <div style="display:flex;flex:1;overflow:hidden;min-height:0;">
+      <div class="flex min-h-0 flex-1 overflow-hidden">
         <AgentGraph />
         <Show when={selectedAgent()}>
-          <div style="width:300px;flex-shrink:0;border-left:1px solid var(--border);overflow-y:auto;">
+          <div class="w-[300px] shrink-0 overflow-y-auto border-l border-[var(--border)]">
             <AgentDetail />
           </div>
         </Show>
@@ -253,12 +251,9 @@ export default function AppShell() {
       return <ProjectsHome />;
     }
     return (
-      <div style="display:flex;flex-direction:column;flex:1;min-width:0;overflow:hidden;">
+      <div class="flex min-w-0 flex-1 flex-col overflow-hidden">
         <Show when={viewMode() === 'graph'}>
-          <div
-            class="event-stream-toolbar"
-            style="position:relative;z-index:30;flex-shrink:0;"
-          >
+          <div class="event-stream-toolbar relative z-30 shrink-0">
             <ViewModeTabs viewMode={viewMode} onChange={setViewMode} />
           </div>
         </Show>

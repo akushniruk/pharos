@@ -20,18 +20,29 @@ function streamStatusLabel(): string {
 }
 
 export default function AppStatusBar() {
+  const dotColor = () => {
+    if (connectionState() === 'connected') return 'var(--accent)';
+    if (connectionState() === 'connecting') return 'var(--yellow)';
+    return 'var(--red)';
+  };
+  const dotGlow = () => {
+    if (connectionState() === 'connected')
+      return '0 0 6px color-mix(in srgb, var(--accent) 55%, transparent)';
+    return 'none';
+  };
+  const dotAnim = () =>
+    connectionState() !== 'connected' ? 'blink 1.5s ease-in-out infinite' : 'none';
+
   return (
     <div class="app-statusbar">
-      <div style="display:flex;align-items:center;gap:6px">
+      <div class="flex items-center gap-1.5">
         <span
-          style={[
-            'width:6px;height:6px;border-radius:50%;display:inline-block;',
-            connectionState() === 'connected'
-              ? 'background:var(--green);'
-              : connectionState() === 'connecting'
-                ? 'background:var(--yellow);animation:blink 1.5s ease-in-out infinite;'
-                : 'background:var(--red);animation:blink 1.5s ease-in-out infinite;',
-          ].join('')}
+          class="inline-block h-[5px] w-[5px] rounded-full"
+          style={{
+            background: dotColor(),
+            'box-shadow': dotGlow(),
+            animation: dotAnim(),
+          }}
         />
         <span>{streamStatusLabel()}</span>
       </div>

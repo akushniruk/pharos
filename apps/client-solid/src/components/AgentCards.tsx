@@ -47,8 +47,8 @@ export default function AgentCards() {
   ].join('');
 
   return (
-    <div style="border-bottom:1px solid var(--border);">
-      <div style="display:flex;align-items:center;gap:4px;padding:6px 12px;border-bottom:1px solid var(--border);">
+    <div class="border-b border-[var(--border)]">
+      <div class="flex items-center gap-1 border-b border-[var(--border)] px-3 py-1.5">
         <button style={tabStyle('list')} onClick={() => setViewMode('list')}>
           <span style="display:flex;align-items:center;gap:6px;">
             <Icon path={listBullet} style="width:12px;height:12px;" />
@@ -64,7 +64,7 @@ export default function AgentCards() {
       </div>
 
       <Show when={viewMode() === 'list'}>
-        <div style="display:flex;flex-direction:column;padding:8px 12px 12px;gap:2px;">
+        <div class="flex flex-col gap-0.5 px-3 pb-3 pt-2">
           <For each={graphAgents()}>
             {(agent) => {
               const id = agent.agentId || '__main__';
@@ -73,15 +73,21 @@ export default function AgentCards() {
               const tone = () => agentRowTone(agent);
               const palette = () => statusPalette(tone());
               const isSelected = () => selectedAgent() === id;
-              const rowAccent = () => {
+              const [hovered, setHovered] = createSignal(false);
+              const rowBorderLeft = () => {
                 const t = tone();
-                if (t === 'attention') return 'border-left:2px solid var(--red);';
-                if (t === 'blocked') return 'border-left:2px solid var(--yellow);';
-                return 'border-left:2px solid transparent;';
+                if (t === 'attention') return '2px solid var(--red)';
+                if (t === 'blocked') return '2px solid var(--yellow)';
+                return '2px solid transparent';
               };
               const rowBackground = () => {
                 if (isSelected()) return 'var(--bg-elevated)';
                 const t = tone();
+                if (hovered()) {
+                  if (t === 'attention') return 'rgba(239, 68, 68, 0.12)';
+                  if (t === 'blocked') return 'rgba(245, 158, 11, 0.12)';
+                  return 'var(--bg-card)';
+                }
                 if (t === 'attention') return 'rgba(239, 68, 68, 0.08)';
                 if (t === 'blocked') return 'rgba(245, 158, 11, 0.08)';
                 return 'transparent';
@@ -89,25 +95,22 @@ export default function AgentCards() {
               const colorKey = agent.agentType || primary();
               return (
                 <div
-                  style={[
-                    'display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:7px;cursor:pointer;',
-                    rowAccent(),
-                    `background:${rowBackground()};`,
-                    isSelected() ? 'box-shadow:inset 0 0 0 1px var(--accent);' : '',
-                  ].join('')}
+                  style={{
+                    display: 'flex',
+                    'align-items': 'center',
+                    gap: '8px',
+                    padding: '6px 10px',
+                    'border-radius': '7px',
+                    cursor: 'pointer',
+                    border: 'none',
+                    'border-left': rowBorderLeft(),
+                    background: rowBackground(),
+                    outline: 'none',
+                    'box-shadow': isSelected() ? 'inset 0 0 0 1px var(--accent)' : 'none',
+                  }}
                   onClick={() => selectAgent(id)}
-                  onMouseEnter={(e) => {
-                    if (isSelected()) return;
-                    const el = e.currentTarget as HTMLDivElement;
-                    const t = tone();
-                    if (t === 'attention') el.style.background = 'rgba(239, 68, 68, 0.12)';
-                    else if (t === 'blocked') el.style.background = 'rgba(245, 158, 11, 0.12)';
-                    else el.style.background = 'var(--bg-card)';
-                  }}
-                  onMouseLeave={(e) => {
-                    if (isSelected()) return;
-                    (e.currentTarget as HTMLDivElement).style.background = rowBackground();
-                  }}
+                  onMouseEnter={() => setHovered(true)}
+                  onMouseLeave={() => setHovered(false)}
                   aria-label={`${primary()}, ${statusPillLabel(agent)}. ${secondary()}`}
                 >
                   <div
@@ -158,7 +161,7 @@ export default function AgentCards() {
           </For>
 
           <Show when={graphAgents().length === 0}>
-            <span style="font-size:var(--text-sm);color:var(--text-dim);padding:8px 4px;">No agents</span>
+            <span class="px-1 py-2 text-[var(--text-sm)] text-[var(--text-dim)]">No agents</span>
           </Show>
         </div>
       </Show>

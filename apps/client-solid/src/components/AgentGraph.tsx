@@ -253,7 +253,7 @@ export default function AgentGraph() {
 
   return (
     <div
-      style="flex:1;overflow:hidden;position:relative;display:flex;flex-direction:column;min-height:0;background:var(--bg-canvas);user-select:none;"
+      class="flex min-h-0 flex-1 select-none flex-col overflow-hidden bg-[var(--bg-canvas)]"
     >
       <div class="event-stream-toolbar graph-graph-toolbar">
         <GraphAgentFilterTabPanel
@@ -268,7 +268,7 @@ export default function AgentGraph() {
       </div>
 
       <div
-        style="flex:1;position:relative;min-height:0;cursor:grab;"
+        class="relative min-h-0 flex-1 cursor-grab"
         onWheel={onWheel}
         onMouseDown={onMouseDown}
         onMouseMove={onMouseMove}
@@ -276,7 +276,7 @@ export default function AgentGraph() {
         onMouseLeave={onMouseUp}
       >
         {/* Zoom controls bottom-right */}
-        <div style="position:absolute;bottom:12px;right:12px;display:flex;gap:8px;z-index:10;">
+        <div class="absolute bottom-3 right-3 z-10 flex gap-2">
           <button type="button" class="graph-zoom-btn" onClick={() => setZoom(z => Math.min(ZOOM_MAX, z + 0.2))}>+</button>
           <button type="button" class="graph-zoom-btn graph-zoom-btn--fit" onClick={() => applyGraphFit()}>Fit</button>
           <button type="button" class="graph-zoom-btn" onClick={() => setZoom(z => Math.max(ZOOM_MIN, z - 0.2))}>-</button>
@@ -290,8 +290,8 @@ export default function AgentGraph() {
           style="position:absolute;inset:0;overflow:hidden;background:var(--bg-canvas);"
         >
         <Show when={nodes().length > 0} fallback={
-          <div style="display:flex;align-items:center;justify-content:center;height:100%;padding:24px 16px;">
-            <div style="max-width:360px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:12px;">
+          <div class="flex h-full items-center justify-center px-4 py-6">
+            <div class="flex max-w-[360px] flex-col items-center gap-3 text-center">
               <Icon path={squares_2x2} style="width:28px;height:28px;color:var(--text-tertiary);flex-shrink:0;" />
               <p style="font-size:var(--text-base);font-weight:600;color:var(--text-primary);margin:0;">No agents to show</p>
               <p style="font-size:var(--text-sm);line-height:1.5;color:var(--text-secondary);margin:0;">

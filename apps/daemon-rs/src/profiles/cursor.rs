@@ -37,6 +37,7 @@ pub enum CursorSessionEvent {
         display_name: String,
         description: Option<String>,
         parent_agent_id: Option<String>,
+        subagent_type: Option<String>,
     },
 }
 
@@ -267,11 +268,16 @@ pub fn parse_cursor_jsonl_line(line: &str) -> Vec<CursorSessionEvent> {
                         .and_then(Value::as_str)
                         .or_else(|| input.get("message").and_then(Value::as_str))
                         .map(ToString::to_string);
+                    let subagent_type = input
+                        .get("subagent_type")
+                        .and_then(Value::as_str)
+                        .or_else(|| input.get("agent_type").and_then(Value::as_str))
+                        .map(ToString::to_string);
                     let display_name = input
                         .get("display_name")
                         .and_then(Value::as_str)
                         .or_else(|| input.get("agent_name").and_then(Value::as_str))
-                        .or_else(|| input.get("agent_type").and_then(Value::as_str))
+                        .or_else(|| subagent_type.as_deref())
                         .map(title_case)
                         .unwrap_or_else(|| "Cursor Helper".to_string());
                     let parent_agent_id = input
@@ -285,6 +291,7 @@ pub fn parse_cursor_jsonl_line(line: &str) -> Vec<CursorSessionEvent> {
                         display_name,
                         description,
                         parent_agent_id,
+                        subagent_type,
                     });
                 }
                 events.push(CursorSessionEvent::ToolUse {

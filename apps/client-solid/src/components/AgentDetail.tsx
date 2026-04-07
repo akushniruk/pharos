@@ -65,20 +65,20 @@ export default function AgentDetail() {
   };
 
   return (
-    <div style="width:320px;flex-shrink:0;border-left:1px solid var(--border);background:var(--bg-primary);display:flex;flex-direction:column;overflow:hidden;">
-      <div style="display:flex;align-items:flex-start;gap:10px;padding:12px;border-bottom:1px solid var(--border);flex-shrink:0;">
+    <div class="phx-shell flex w-[320px] shrink-0 flex-col overflow-hidden border-l border-[var(--border)]">
+      <div class="flex shrink-0 items-start gap-2.5 border-b border-[var(--border)] p-3">
         <span
           style={`width:7px;height:7px;border-radius:50%;margin-top:6px;flex-shrink:0;background:${statusColors().dot};`}
         />
-        <div style="min-width:0;flex:1;display:flex;flex-direction:column;gap:3px;">
-          <span style="font-size:var(--text-base);font-weight:600;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+        <div class="flex min-w-0 flex-1 flex-col gap-1">
+          <span class="overflow-hidden text-ellipsis whitespace-nowrap text-[var(--text-base)] font-semibold text-[var(--text-primary)]">
             {detail()?.agent.displayName ?? 'Agent'}
           </span>
-          <span style="font-size:var(--text-sm);color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+          <span class="overflow-hidden text-ellipsis whitespace-nowrap text-[var(--text-sm)] text-[var(--text-dim)]">
             {headerContext()}
           </span>
         </div>
-        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;">
+        <div class="flex flex-col items-end gap-1">
           <div
             style={[
               'display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:4px 8px;font-size:var(--text-sm);font-weight:600;',
@@ -90,14 +90,14 @@ export default function AgentDetail() {
             <span>{detail()?.statusLabel ?? 'Unknown'}</span>
           </div>
           <Show when={statusDetail()}>
-            <span style="max-width:170px;font-size:var(--text-sm);color:var(--text-dim);text-align:right;line-height:1.35;">
+            <span class="max-w-[170px] text-right text-[var(--text-sm)] leading-[1.35] text-[var(--text-dim)]">
               {statusDetail()}
             </span>
           </Show>
         </div>
         <button
           onClick={() => selectAgent(null)}
-          style="background:none;border:none;cursor:pointer;color:var(--text-dim);padding:2px;display:flex;align-items:center;"
+          class="flex items-center p-0.5 text-[var(--text-dim)]"
           title="Close"
         >
           <Icon path={xMark} style="width:16px;height:16px;" />
@@ -105,14 +105,14 @@ export default function AgentDetail() {
       </div>
 
       <Show when={detail()} fallback={
-        <div style="padding:18px 12px;color:var(--text-dim);font-size:var(--text-sm);line-height:1.5;">
+        <div class="px-3 py-[18px] text-[var(--text-sm)] leading-[1.5] text-[var(--text-dim)]">
           The selected agent is present, but its live snapshot is not available yet.
         </div>
       }>
-        <div style="padding:12px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:10px;flex-shrink:0;">
+        <div class="flex shrink-0 flex-col gap-2.5 border-b border-[var(--border)] p-3">
           <Show when={detail()!.focus}>
             {(focus) => (
-              <div style="padding:10px;border:1px solid var(--border);border-radius:8px;background:linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.01));display:flex;flex-direction:column;gap:8px;">
+              <div class="phx-panel-elevated flex flex-col gap-2 p-2.5">
                 <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
                   <span style="font-size:var(--text-sm);font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);">
                     {focus().scopeLabel}
@@ -146,14 +146,14 @@ export default function AgentDetail() {
             )}
           </Show>
 
-          <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;">
-            <div style="padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg-card);display:flex;flex-direction:column;gap:4px;">
+          <div class="grid grid-cols-2 gap-2">
+            <div class="phx-panel flex flex-col gap-1 p-2.5">
               <span style="font-size:var(--text-sm);color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;">Runtime in use</span>
               <span style="font-size:var(--text-sm);color:var(--text-primary);line-height:1.4;">
                 {detail()!.runtimeLabel}
               </span>
             </div>
-            <div style="padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg-card);display:flex;flex-direction:column;gap:4px;">
+            <div class="phx-panel flex flex-col gap-1 p-2.5">
               <span style="font-size:var(--text-sm);color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;">Current status</span>
               <span style={`font-size:var(--text-sm);font-weight:600;line-height:1.4;color:${statusColors().text};`}>
                 {detail()!.statusLabel}
@@ -162,7 +162,7 @@ export default function AgentDetail() {
           </div>
 
           <Show when={detail()!.statusTone === 'blocked' || detail()!.statusTone === 'attention'}>
-            <div style="padding:10px;border:1px solid var(--border);border-radius:8px;background:rgba(239, 68, 68, 0.08);display:flex;flex-direction:column;gap:4px;">
+            <div class="flex flex-col gap-1 rounded-[var(--radius)] border border-[var(--border)] bg-[rgba(239,68,68,0.08)] p-2.5">
               <span style="font-size:var(--text-sm);color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;">
                 Needs review
               </span>
@@ -177,7 +177,7 @@ export default function AgentDetail() {
             </div>
           </Show>
 
-          <div style="padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg-card);display:flex;flex-direction:column;gap:4px;">
+          <div class="phx-panel flex flex-col gap-1 p-2.5">
             <span style="font-size:var(--text-sm);color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;">Current progress</span>
             <span style="font-size:var(--text-sm);color:var(--text-primary);line-height:1.45;">
               {detail()!.currentActionLabel}
@@ -189,7 +189,7 @@ export default function AgentDetail() {
             </Show>
           </div>
 
-          <div style="padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg-card);display:flex;flex-direction:column;gap:4px;">
+          <div class="phx-panel flex flex-col gap-1 p-2.5">
             <span style="font-size:var(--text-sm);color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;">Next action</span>
             <span style="font-size:var(--text-sm);color:var(--text-primary);line-height:1.45;">
               {detail()!.assignmentLabel}
@@ -201,7 +201,7 @@ export default function AgentDetail() {
             </Show>
           </div>
 
-          <div style="padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg-card);display:flex;flex-direction:column;gap:4px;">
+          <div class="phx-panel flex flex-col gap-1 p-2.5">
             <span style="font-size:var(--text-sm);color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;">Most recent useful output</span>
             <span style="font-size:var(--text-sm);color:var(--text-primary);line-height:1.45;">
               {detail()!.lastUsefulResultLabel}

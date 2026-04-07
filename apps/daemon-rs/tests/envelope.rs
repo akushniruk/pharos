@@ -370,6 +370,7 @@ fn converts_cursor_subagent_start_to_envelope() {
         display_name: "Cursor Helper".to_string(),
         description: Some("inspect scanner dedupe behavior".to_string()),
         parent_agent_id: Some("main".to_string()),
+        subagent_type: None,
     };
 
     let envelope = cursor_event_to_envelope(&event, "pharos", "cursor-sess", 1_711_234_567_000);

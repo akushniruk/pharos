@@ -126,123 +126,113 @@ export default function ProjectsHome() {
   });
 
   return (
-    <div style="padding:24px 28px;max-width:1400px;margin:0 auto;overflow-y:auto;flex:1;width:100%;">
-      <div style="display:flex;flex-direction:column;gap:14px;margin-bottom:20px;">
-        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;">
-          <div style="display:flex;align-items:baseline;gap:12px;">
-            <h1 style="font-size: 27px;font-weight:600;letter-spacing:-0.03em">Overview</h1>
-            <span style="font-size:var(--text-base);color:var(--text-tertiary)">{projectList().length} projects</span>
+    <div class="phx-shell flex flex-1 justify-center overflow-y-auto">
+      <div class="flex w-full max-w-[1400px] flex-col gap-3.5 p-10">
+        <div class="mb-2 flex flex-col gap-3.5">
+          <div class="flex flex-wrap items-baseline justify-between gap-3">
+            <div class="flex items-baseline gap-3">
+              <h1 class="phx-title text-[27px]">Overview</h1>
+              <span class="text-[var(--text-base)] text-[var(--text-tertiary)]">{projectList().length} projects</span>
+            </div>
+            <span class="font-mono text-[var(--text-sm)] text-[var(--text-dim)]">
+              {streamStateText()}
+            </span>
           </div>
-          <span style="font-size:var(--text-sm);color:var(--text-dim);font-family:var(--font-mono);">
-            {streamStateText()}
-          </span>
-        </div>
-        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-          <div style="flex:1;min-width:240px;">
+          <div class="flex flex-wrap items-center gap-2">
+            <div class="min-w-[240px] flex-1">
             <input
               type="text"
               value={projectQuery()}
               onInput={(event) => setProjectQuery(event.currentTarget.value)}
               placeholder="Search projects..."
-              style="width:100%;height:40px;border-radius:8px;border:1px solid var(--border);background:var(--bg-card);color:var(--text-primary);padding:0 12px;font-size:var(--text-base);"
+                class="phx-input"
             />
+            </div>
           </div>
         </div>
-      </div>
-
       <Show when={projectList().length === 0}>
-        <div style="display:flex;flex-direction:column;align-items:center;padding:80px 20px;text-align:center;border:1px dashed var(--border);border-radius:14px;background:linear-gradient(180deg,rgba(255,255,255,0.015),transparent);">
-          <p style="font-size: 18px;color:var(--text-secondary);margin-bottom:4px">No projects have been captured yet.</p>
-          <p style="font-size:var(--text-sm);color:var(--text-dim)">Open a session and wait for the first snapshot to land here.</p>
+        <div class="my-4 flex flex-col items-center rounded-[10px] border border-dashed border-[var(--border)] bg-[var(--bg-card)] px-5 py-20 text-center">
+          <p class="mb-1 text-[18px] text-[var(--text-secondary)]">No projects have been captured yet.</p>
+          <p class="text-[var(--text-sm)] text-[var(--text-dim)]">Open a session and wait for the first snapshot to land here.</p>
         </div>
       </Show>
 
-      <div style="display:flex;align-items:center;gap:12px;margin:0 0 10px 0;flex-wrap:wrap;">
-        <span style="font-size:var(--text-sm);color:var(--text-secondary);">
+      <div class="mb-1 flex flex-wrap items-center gap-3">
+        <span class="text-[var(--text-sm)] text-[var(--text-secondary)]">
           {activeCount()} active projects
         </span>
-        <span style="font-size:var(--text-sm);color:var(--text-secondary);">
+        <span class="text-[var(--text-sm)] text-[var(--text-secondary)]">
           {totalAgents()} agents
         </span>
-        <span style="font-size:var(--text-sm);color:var(--text-secondary);">
+        <span class="text-[var(--text-sm)] text-[var(--text-secondary)]">
           {totalEvents()} events
         </span>
-        <span style="font-size:var(--text-sm);color:var(--text-dim);">
+        <span class="text-[var(--text-sm)] text-[var(--text-dim)]">
           {streamStateDetail()}
         </span>
       </div>
 
-      <div style="display:flex;flex-direction:column;gap:10px;min-width:0;">
-        <p style="font-size:var(--text-base);font-weight:600;color:var(--text-primary);">Projects</p>
-        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;align-items:stretch;">
+      <div class="mt-2 flex min-w-0 flex-col gap-2.5">
+        <p class="text-[var(--text-base)] font-semibold text-[var(--text-primary)]">Projects</p>
+        <div class="phx-card-grid items-stretch">
           <For each={filteredProjectList()}>
             {(p) => (
               <div
-                style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:14px;cursor:pointer;transition:border-color 0.15s;min-height:188px;display:flex;flex-direction:column;gap:8px;"
-                onMouseOver={(el) => el.currentTarget.style.borderColor = 'var(--border-hover)'}
-                onMouseOut={(el) => el.currentTarget.style.borderColor = 'var(--border)'}
+                class="phx-panel flex min-h-[188px] cursor-pointer flex-col gap-2 p-3.5 transition-colors hover:border-[var(--border-hover)]"
                 onClick={() => selectProject(p.name)}
               >
-                <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
-                  <div style="display:flex;align-items:center;gap:8px;min-width:0;">
-                    <div
-                      style={[
-                        'width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;',
-                      ].join('')}
-                    >
+                <div class="flex items-center justify-between gap-2">
+                  <div class="flex min-w-0 items-center gap-2">
+                    <div class="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-[9px]">
                       <img
                         src={resolveProjectLogo(p)}
                         alt=""
-                        style="width:32px;height:32px;object-fit:cover;"
+                        class="h-8 w-8 object-cover"
                         onError={(e) => {
                           e.currentTarget.src = projectFallbackIconDataUri(p.name);
                           e.currentTarget.onerror = null;
                         }}
                       />
                     </div>
-                    <div style="min-width:0;display:flex;flex-direction:column;gap:2px;">
-                      <span style="font-size: 17px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{p.name}</span>
-                      <span style="font-size:var(--text-sm);color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.06em;">
+                    <div class="flex min-w-0 flex-col gap-0.5">
+                      <span class="overflow-hidden text-ellipsis whitespace-nowrap text-[17px] font-semibold">{p.name}</span>
+                      <span class="text-[var(--text-sm)] uppercase tracking-[0.06em] text-[var(--text-secondary)]">
                         Project
                       </span>
                     </div>
                   </div>
-                  <span style={`font-size:var(--text-sm);padding:2px 8px;border-radius:9999px;border:1px solid var(--border);background:${p.isActive ? 'var(--green-dim)' : 'var(--bg-elevated)'};color:${p.isActive ? 'var(--green)' : 'var(--text-secondary)'};font-weight:600;flex-shrink:0;`}>
+                  <span class="shrink-0 rounded-full border border-[var(--border)] px-2 py-[2px] text-[var(--text-sm)] font-semibold" style={{ background: p.isActive ? 'var(--green-dim)' : 'var(--bg-elevated)', color: p.isActive ? 'var(--green)' : 'var(--text-secondary)' }}>
                     {projectStatusLabel(p)}
                   </span>
                 </div>
 
-                <div style="display:flex;gap:14px;">
-                  <div style="font-size:var(--text-sm);color:var(--text-secondary);">{p.sessions.length} sessions</div>
-                  <div style="font-size:var(--text-sm);color:var(--text-secondary);">{p.agentCount} agents</div>
-                  <div style="font-size:var(--text-sm);color:var(--text-secondary);">{p.eventCount} events</div>
+                <div class="flex gap-3.5">
+                  <div class="text-[var(--text-sm)] text-[var(--text-secondary)]">{p.sessions.length} sessions</div>
+                  <div class="text-[var(--text-sm)] text-[var(--text-secondary)]">{p.agentCount} agents</div>
+                  <div class="text-[var(--text-sm)] text-[var(--text-secondary)]">{p.eventCount} events</div>
                 </div>
 
-                <div style="font-size:var(--text-base);color:var(--text-primary);line-height:1.5;min-height:36px;">
+                <div class="min-h-9 text-[var(--text-base)] leading-[1.5] text-[var(--text-primary)]">
                   {projectCardHeadline(p)}
                 </div>
 
-                <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:auto;">
-                  <div style="font-size:var(--text-sm);color:var(--text-secondary);line-height:1.4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                <div class="mt-auto flex items-center justify-between gap-2.5">
+                  <div class="overflow-hidden text-ellipsis whitespace-nowrap text-[var(--text-sm)] leading-[1.4] text-[var(--text-secondary)]">
                     {projectCardSubline(p)}
                   </div>
                   <Show when={uniqueAgentBadges(p).length > 0}>
-                    <div style="display:flex;align-items:center;margin-right:4px;">
+                    <div class="mr-1 flex items-center">
                       <For each={uniqueAgentBadges(p).slice(0, 4)}>
                         {(badge, index) => (
                           <div
                             title={badge.name}
-                            style={[
-                              'width:20px;height:20px;border-radius:9999px;border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:var(--text-sm);font-weight:700;color:var(--text-primary);',
-                              'background:var(--bg-elevated);',
-                              `margin-left:${index() === 0 ? 0 : -6}px;`,
-                              'overflow:hidden;',
-                            ].join('')}
+                            class="flex h-5 w-5 items-center justify-center overflow-hidden rounded-full border border-[var(--border)] bg-[var(--bg-elevated)] text-[var(--text-sm)] font-bold text-[var(--text-primary)]"
+                            style={{ 'margin-left': `${index() === 0 ? 0 : -6}px` }}
                           >
                             <img
                               src={agentAvatarDataUri(badge.name)}
                               alt=""
-                              style="width:100%;height:100%;object-fit:cover;"
+                              class="h-full w-full object-cover"
                               onError={(e) => {
                                 e.currentTarget.src = agentAvatarDataUri('Unknown');
                                 e.currentTarget.onerror = null;
@@ -258,6 +248,7 @@ export default function ProjectsHome() {
             )}
           </For>
         </div>
+      </div>
       </div>
     </div>
   );

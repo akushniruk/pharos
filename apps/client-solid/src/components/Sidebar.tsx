@@ -234,13 +234,11 @@ export default function Sidebar(props: SidebarProps) {
       when={!props.collapsed}
       fallback={
         /* Collapsed: 40px bar with project icons + toggle */
-        <div
-          style="width:40px;flex-shrink:0;background:var(--bg-primary);border-right:1px solid var(--border);display:flex;flex-direction:column;align-items:center;padding-top:8px;gap:6px;"
-        >
+        <div class="phx-shell flex w-10 shrink-0 flex-col items-center gap-1.5 border-r border-[var(--border)] pt-2">
           <button
             onClick={props.onToggle}
             title="Expand sidebar"
-            style="background:none;border:none;cursor:pointer;color:var(--text-dim);padding:4px;line-height:1;display:flex;align-items:center;justify-content:center;"
+            class="flex items-center justify-center p-1 text-[var(--text-dim)]"
           >
             <Icon path={chevronRight} style="width:12px;height:12px;" />
           </button>
@@ -283,11 +281,9 @@ export default function Sidebar(props: SidebarProps) {
       }
     >
       {/* Expanded sidebar */}
-      <div
-        style="width:320px;flex-shrink:0;background:var(--bg-primary);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;"
-      >
+      <div class="phx-shell flex w-80 shrink-0 flex-col overflow-hidden border-r border-[var(--border)]">
         {/* Toggle + Projects header */}
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 8px 8px 12px;border-bottom:1px solid var(--border);gap:8px;">
+        <div class="flex h-10 items-center justify-between gap-2 border-b border-[var(--border)] p-3">
           <div class="pill-tabs">
             <button
               class="pill-tab"
@@ -307,14 +303,14 @@ export default function Sidebar(props: SidebarProps) {
           <button
             onClick={props.onToggle}
             title="Collapse sidebar"
-            style="background:none;border:none;cursor:pointer;color:var(--text-dim);padding:4px;line-height:1;display:flex;align-items:center;justify-content:center;"
+            class="flex items-center justify-center p-1 text-[var(--text-dim)]"
           >
             <Icon path={chevronLeft} style="width:12px;height:12px;" />
           </button>
         </div>
 
         {/* Project list */}
-        <div style="overflow-y:auto;flex:1;">
+        <div class="flex-1 overflow-y-auto">
           <For each={visibleProjects()}>
             {(p) => {
               const isSelected = () => selectedProject() === p.name;
@@ -385,12 +381,12 @@ export default function Sidebar(props: SidebarProps) {
                       </Show>
                     </div>
                     <div style={[
-                      'display:flex;align-items:center;gap:4px;font-size:var(--text-sm);padding:1px 5px;border-radius:9999px;font-weight:500;flex-shrink:0;',
+                      'display:flex;align-items:center;gap:3px;font-size:var(--text-sm);padding:1px 6px;border-radius:9999px;font-weight:600;flex-shrink:0;max-width:min(140px,38%);',
                       `background:${projectPalette().background};`,
                       `color:${projectPalette().text};`,
                     ].join('')}>
-                      <Icon path={statusToneIcon(projectTone())} style="width:10px;height:10px;" />
-                      <span>
+                      <Icon path={statusToneIcon(projectTone())} style="width:9px;height:9px;flex-shrink:0;" />
+                      <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
                         {projectTone() === 'active'
                           ? 'Active'
                           : projectTone() === 'blocked'
@@ -537,15 +533,21 @@ export default function Sidebar(props: SidebarProps) {
                                   const agTone = () => sidebarAgentRowTone(agent);
                                   const agPalette = () => statusPalette(agTone());
                                   const agIcon = () => statusToneIcon(agTone());
-                                  const agAccent = () => {
+                                  const [hovered, setHovered] = createSignal(false);
+                                  const agBorderLeft = () => {
                                     const t = agTone();
-                                    if (t === 'attention') return 'border-left:2px solid var(--red);';
-                                    if (t === 'blocked') return 'border-left:2px solid var(--yellow);';
-                                    return 'border-left:2px solid transparent;';
+                                    if (t === 'attention') return '2px solid var(--red)';
+                                    if (t === 'blocked') return '2px solid var(--yellow)';
+                                    return '2px solid transparent';
                                   };
                                   const agBg = () => {
                                     if (isAgentSelected()) return 'var(--bg-elevated)';
                                     const t = agTone();
+                                    if (hovered()) {
+                                      if (t === 'attention') return 'rgba(239, 68, 68, 0.1)';
+                                      if (t === 'blocked') return 'rgba(245, 158, 11, 0.1)';
+                                      return 'var(--bg-card)';
+                                    }
                                     if (t === 'attention') return 'rgba(239, 68, 68, 0.06)';
                                     if (t === 'blocked') return 'rgba(245, 158, 11, 0.06)';
                                     return 'transparent';
@@ -559,24 +561,21 @@ export default function Sidebar(props: SidebarProps) {
                                         selectSession(sid);
                                         selectAgent(agentKey());
                                       }}
-                                      style={[
-                                        'display:flex;align-items:center;gap:6px;padding:4px 8px;border-radius:6px;cursor:pointer;',
-                                        agAccent(),
-                                        `background:${agBg()};`,
-                                        isAgentSelected() ? 'box-shadow:inset 0 0 0 1px var(--accent);' : '',
-                                      ].join('')}
-                                      onMouseEnter={(e) => {
-                                        if (isAgentSelected()) return;
-                                        const el = e.currentTarget as HTMLDivElement;
-                                        const t = agTone();
-                                        if (t === 'attention') el.style.background = 'rgba(239, 68, 68, 0.1)';
-                                        else if (t === 'blocked') el.style.background = 'rgba(245, 158, 11, 0.1)';
-                                        else el.style.background = 'var(--bg-card)';
+                                      style={{
+                                        display: 'flex',
+                                        'align-items': 'center',
+                                        gap: '6px',
+                                        padding: '4px 8px',
+                                        'border-radius': '6px',
+                                        cursor: 'pointer',
+                                        border: 'none',
+                                        'border-left': agBorderLeft(),
+                                        background: agBg(),
+                                        outline: 'none',
+                                        'box-shadow': isAgentSelected() ? 'inset 0 0 0 1px var(--accent)' : 'none',
                                       }}
-                                      onMouseLeave={(e) => {
-                                        if (isAgentSelected()) return;
-                                        (e.currentTarget as HTMLDivElement).style.background = agBg();
-                                      }}
+                                      onMouseEnter={() => setHovered(true)}
+                                      onMouseLeave={() => setHovered(false)}
                                       aria-label={`${primary()}, ${sidebarAgentStatusLabel(agent)}. ${secondary()}`}
                                     >
                                       <div

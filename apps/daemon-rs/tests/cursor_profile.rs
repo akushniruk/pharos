@@ -167,6 +167,7 @@ fn cursor_jsonl_parser_maps_prompt_tool_and_subagent_events() {
                 display_name: "Cursor Helper".to_string(),
                 description: Some("inspect scanner dedupe behavior".to_string()),
                 parent_agent_id: None,
+                subagent_type: None,
             },
             CursorSessionEvent::ToolUse {
                 tool_name: "Agent".to_string(),
@@ -206,6 +207,7 @@ fn cursor_jsonl_parser_detects_subagent_aliases_and_parent_id() {
             display_name: "Code-reviewer".to_string(),
             description: Some("analyze ui graph".to_string()),
             parent_agent_id: Some("main".to_string()),
+            subagent_type: Some("code-reviewer".to_string()),
         }
     );
 }

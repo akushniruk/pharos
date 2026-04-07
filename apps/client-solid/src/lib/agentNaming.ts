@@ -8,19 +8,30 @@ const AGENT_TYPE_LABELS: Record<string, string> = {
   'full-stack-orchestrator': 'Full Stack Orchestrator',
   orchestrator: 'Orchestrator',
   'general-purpose': 'General Purpose',
-  'cursor_subagent': 'Cursor Helper',
+  generalpurpose: 'General Purpose',
+  'cursor-subagent': 'Helper',
+  cursor_subagent: 'Helper',
   explorer: 'Explorer',
   explore: 'Explorer',
   planner: 'Planner',
+  shell: 'Shell',
+  'browser-use': 'Browser',
+  'best-of-n-runner': 'Runner',
+  'ai-architect': 'AI Architect',
+  'deployment-expert': 'Deploy Expert',
+  'performance-optimizer': 'Perf Optimizer',
+  'ci-watcher': 'CI Watcher',
+  'agents-memory-updater': 'Memory Updater',
+  'svelte-file-editor': 'Svelte Editor',
   main: 'Session',
   ceo: 'CEO',
   cto: 'CTO',
   cmo: 'CMO',
   cfo: 'CFO',
   engineer: 'Engineer',
-  'ux-designer': 'UXDesigner',
-  uxdesigner: 'UXDesigner',
-  ux_designer: 'UXDesigner',
+  'ux-designer': 'UX Designer',
+  uxdesigner: 'UX Designer',
+  ux_designer: 'UX Designer',
 };
 
 function collapseWhitespace(value: string): string {
@@ -143,36 +154,51 @@ function sanitizeListSecondaryLine(value?: string | null): string | undefined {
   return t.length > 72 ? `${t.slice(0, 71)}…` : t;
 }
 
+function withRuntime(runtime: string | undefined, role: string): string {
+  if (!runtime) return role;
+  const rt = runtime.replace(/\s+/g, ' ').trim();
+  if (!rt || rt.toLowerCase() === role.toLowerCase()) return role;
+  return `${rt} (${role})`;
+}
+
+function truncateLabel(value: string, max = 32): string {
+  if (value.length <= max) return value;
+  return `${value.slice(0, max - 1)}…`;
+}
+
 /** Primary line for agent rows (sidebar + list): readable operator-facing title. */
 export function resolveAgentListPrimaryName(agent: AgentInfo): string {
   const raw = agent.displayName?.replace(/\s+/g, ' ').trim() || '';
   const isMain = !agent.agentId;
+  const rt = agent.runtimeLabel?.replace(/\s+/g, ' ').trim() || '';
 
   if (isMain) {
-    if (raw && isMeaningfulListTitle(raw) && !isNoisyRoleLabel(raw)) return raw;
     if (agent.agentType && agent.agentType !== 'main') {
       const mapped = mapAgentTypeLabel(agent.agentType);
-      if (mapped && mapped !== 'Session') return mapped;
+      if (mapped && mapped !== 'Session') return withRuntime(rt, mapped);
     }
-    const rt = agent.runtimeLabel?.replace(/\s+/g, ' ').trim() || '';
-    if (rt && !isNoisyRoleLabel(rt)) return rt;
+    if (raw && isMeaningfulListTitle(raw) && !isNoisyRoleLabel(raw)) return raw;
+    if (rt) return rt;
     const model = agent.modelName ? shortTailModel(agent.modelName) : '';
     if (model) return model;
     if (raw) return raw;
     return 'Main';
   }
 
-  if (raw && isMeaningfulListTitle(raw) && !isNoisyRoleLabel(raw)) return raw;
+  const mapped = agent.agentType && agent.agentType !== 'main'
+    ? mapAgentTypeLabel(agent.agentType) : undefined;
+  const hasUsefulType = mapped && mapped !== 'Session' && mapped !== 'Helper';
 
-  if (agent.agentType && agent.agentType !== 'main') {
-    const mapped = mapAgentTypeLabel(agent.agentType);
-    if (mapped && mapped !== 'Session') {
-      const fp = shortAgentFingerprint(agent.agentId);
-      return fp ? `${mapped} · ${fp}` : mapped;
-    }
+  if (hasUsefulType) return withRuntime(rt, mapped);
+
+  if (raw && isMeaningfulListTitle(raw) && !isNoisyRoleLabel(raw)) {
+    return truncateLabel(raw);
   }
 
+  if (mapped && mapped !== 'Session') return withRuntime(rt, mapped);
+
   const fp = shortAgentFingerprint(agent.agentId);
+  if (rt) return fp ? `${rt} (${fp})` : rt;
   return fp ? `Agent · ${fp}` : 'Agent';
 }
 
@@ -181,20 +207,12 @@ export function resolveAgentListSecondaryLine(agent: AgentInfo): string {
   const action = sanitizeListSecondaryLine(
     agent.assignment || agent.currentAction || agent.currentProgress,
   );
-  const typeLabel =
-    agent.agentType && agent.agentType !== 'main' ? mapAgentTypeLabel(agent.agentType) : undefined;
   const modelRaw = agent.modelName ? shortTailModel(agent.modelName).replace(/^claude-/i, '') : '';
   const model = modelRaw.length > 48 ? `${modelRaw.slice(0, 45)}…` : modelRaw;
 
-  const bits: string[] = [];
-  if (typeLabel && typeLabel !== 'Session') bits.push(typeLabel);
-  if (model) bits.push(model);
-  const meta = bits.join(' · ');
-  if (action && meta && !action.toLowerCase().includes(meta.toLowerCase().slice(0, 12))) {
-    return `${meta} — ${action}`;
-  }
+  if (action && model) return `${model} — ${action}`;
   if (action) return action;
-  if (meta) return meta;
+  if (model) return model;
   return `${agent.eventCount} event${agent.eventCount === 1 ? '' : 's'}`;
 }
 

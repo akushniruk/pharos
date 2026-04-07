@@ -367,18 +367,22 @@ pub fn cursor_event_to_envelope(
             display_name,
             description,
             parent_agent_id,
-        } => (
-            EventKind::SubagentStarted,
-            format!("subagent started: {display_name}"),
-            json!({
-                "agent_type": "cursor_subagent",
-                "agent_name": display_name,
-                "display_name": resolve_subagent_display_name(display_name, "cursor_subagent", description.as_deref()),
-                "description": description,
-                "responsibility": description,
-                "parent_agent_id": parent_agent_id.clone().unwrap_or_else(|| "main".to_string()),
-            }),
-        ),
+            subagent_type,
+        } => {
+            let effective_type = subagent_type.as_deref().unwrap_or("cursor_subagent");
+            (
+                EventKind::SubagentStarted,
+                format!("subagent started: {display_name}"),
+                json!({
+                    "agent_type": effective_type,
+                    "agent_name": display_name,
+                    "display_name": resolve_subagent_display_name(display_name, effective_type, description.as_deref()),
+                    "description": description,
+                    "responsibility": description,
+                    "parent_agent_id": parent_agent_id.clone().unwrap_or_else(|| "main".to_string()),
+                }),
+            )
+        },
     };
 
     EventEnvelope {

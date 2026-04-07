@@ -103,10 +103,12 @@ pub(crate) fn cursor_signature(event: &crate::profiles::cursor::CursorSessionEve
             display_name,
             description,
             parent_agent_id,
+            subagent_type,
         } => format!(
-            "subagent:{agent_id}:{display_name}:{}:{}",
+            "subagent:{agent_id}:{display_name}:{}:{}:{}",
             description.clone().unwrap_or_default(),
-            parent_agent_id.clone().unwrap_or_default()
+            parent_agent_id.clone().unwrap_or_default(),
+            subagent_type.clone().unwrap_or_default()
         ),
     }
 }

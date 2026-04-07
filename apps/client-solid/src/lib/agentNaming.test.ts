@@ -81,7 +81,7 @@ describe('agentNaming', () => {
     expect(agentListInitials('Main')).toBe('M');
   });
 
-  it('builds secondary line with type and activity', () => {
+  it('builds secondary line with model and activity', () => {
     const agent: AgentInfo = {
       agentId: 'x',
       displayName: 'Worker',
@@ -93,7 +93,57 @@ describe('agentNaming', () => {
       isActive: true,
     };
     const line = resolveAgentListSecondaryLine(agent);
-    expect(line).toContain('General Purpose');
     expect(line.toLowerCase()).toContain('websocket');
+    expect(line.toLowerCase()).toContain('opus');
+  });
+
+  it('formats primary name with runtime and role', () => {
+    const base: Omit<AgentInfo, 'agentId' | 'displayName' | 'agentType'> = {
+      avatarUrl: undefined,
+      runtimeLabel: 'Cursor',
+      assignment: undefined,
+      assignmentDetail: undefined,
+      statusLabel: undefined,
+      statusTone: undefined,
+      statusDetail: undefined,
+      currentProgress: undefined,
+      currentProgressDetail: undefined,
+      currentAction: undefined,
+      currentActionDetail: undefined,
+      nextAction: undefined,
+      nextActionDetail: undefined,
+      modelName: undefined,
+      eventCount: 3,
+      lastEventAt: 0,
+      isActive: true,
+      parentId: undefined,
+    };
+
+    expect(
+      resolveAgentListPrimaryName({
+        ...base,
+        agentId: 'sub-1',
+        displayName: 'Explorer',
+        agentType: 'explore',
+      }),
+    ).toBe('Cursor (Explorer)');
+
+    expect(
+      resolveAgentListPrimaryName({
+        ...base,
+        agentId: 'sub-2',
+        displayName: 'Helper',
+        agentType: 'code-reviewer',
+      }),
+    ).toBe('Cursor (Code Reviewer)');
+
+    expect(
+      resolveAgentListPrimaryName({
+        ...base,
+        agentId: null,
+        displayName: 'Session',
+        agentType: 'ceo',
+      }),
+    ).toBe('Cursor (CEO)');
   });
 });
