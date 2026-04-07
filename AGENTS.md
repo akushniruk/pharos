@@ -21,7 +21,6 @@ For architecture terms and data flow, see **`CLAUDE.md`**.
 ## Learned Workspace Facts
 
 - GitHub repo: `https://github.com/akushniruk/pharos`
-- Current version: 0.01 (pre-launch, open-source MIT).
+- Current version: 0.1.0 (pre-1.0 release, open-source MIT).
 - Distribution: desktop app (Tauri wrapping SolidJS dashboard) is primary; daemon + web UI also for VPS.
-- Dalaran (`~/home_projects/dalaran`) is a separate Obsidian vault used for docs.
-- Product-marketing context lives at `.agents/product-marketing-context.md`.
+- Product-marketing context (positioning, ICP, voice) is **not** tracked in this public repository; keep it in a private notes vault or local-only files if you use marketing skills outside the repo.

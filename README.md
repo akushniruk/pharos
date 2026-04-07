@@ -10,7 +10,7 @@ Pharos is a **local observability layer** for AI coding agents: a Rust daemon ta
 
 **In one line:** your agent’s chat is the *conversation*; Pharos is the **flight recorder** for what it actually did in your repos and environments.
 
-Strategic hierarchy and external-facing promise (security-led, velocity secondary): [docs/gtm/launch-narrative-v1.md](docs/gtm/launch-narrative-v1.md).
+Strategic hierarchy and external-facing promise (security-led, velocity secondary): [docs/positioning.md](docs/positioning.md).
 
 ## Who it’s for
 
@@ -24,8 +24,6 @@ Strategic hierarchy and external-facing promise (security-led, velocity secondar
 - **A path to governance-friendly workflows** — pair visibility with how your org already reviews and ships (handoffs, checklists, release discipline).
 - **Two ways to run it** — lightweight **daemon + web UI** for iteration; **Tauri desktop** when you want a packaged app and in-app docs.
 - **Docs and releases as the canonical story** — README + `docs/` + GitHub Releases stay the source of truth for the product. An optional **static marketing** shell lives under [`apps/landing-svelte/`](apps/landing-svelte/) for deploy experiments; it does not replace those surfaces.
-
-**Brand and naming (internal decision support):** compare options and paste-ready README heroes in [docs/gtm/brand-naming-candidates-v1.md](docs/gtm/brand-naming-candidates-v1.md), [docs/gtm/readme-hero-variants-pha36.md](docs/gtm/readme-hero-variants-pha36.md), and [docs/gtm/board-vote-cheat-sheet-pha36.md](docs/gtm/board-vote-cheat-sheet-pha36.md). **Canonical public surfaces:** this repository and **GitHub Releases** — positioning narrative in [docs/gtm/launch-narrative-v1.md](docs/gtm/launch-narrative-v1.md).
 
 ## The problem
 
@@ -173,16 +171,23 @@ npm run icons
 
 | Topic | Doc |
 | --- | --- |
+| Docs overview (audiences, supported runtimes) | [docs/README.md](docs/README.md) |
+| Documentation vs installed version | [docs/documentation-versioning.md](docs/documentation-versioning.md) |
+| Getting started: Desktop | [docs/getting-started-desktop.md](docs/getting-started-desktop.md) |
+| Getting started: Web dashboard | [docs/getting-started-daemon-web.md](docs/getting-started-daemon-web.md) |
+| Getting started: Daemon on a VPS | [docs/getting-started-remote-daemon.md](docs/getting-started-remote-daemon.md) |
+| Desktop vs web dashboard | [docs/desktop-vs-daemon-web.md](docs/desktop-vs-daemon-web.md) |
+| Architecture at a glance (diagrams) | [docs/architecture-how-it-works.md](docs/architecture-how-it-works.md) |
+| Security and data boundaries | [docs/security-for-reviewers.md](docs/security-for-reviewers.md) |
 | Contributing (expectations, dev, PRs) | [CONTRIBUTING.md](CONTRIBUTING.md) |
+| Positioning (security-led narrative) | [docs/positioning.md](docs/positioning.md) |
 | Releases: tags, drafts, smoke, QA checklist | [docs/releases.md](docs/releases.md) |
-| GitHub Release body template (desktop) | [docs/gtm/github-release-desktop-template.md](docs/gtm/github-release-desktop-template.md) |
+| GitHub Release body template (desktop) | [docs/github-release-desktop-template.md](docs/github-release-desktop-template.md) |
 | MVP observability slice + API verification | [docs/mvp-observability-slice.md](docs/mvp-observability-slice.md) |
-| CTO / engineering runbook | [docs/cto-runbook.md](docs/cto-runbook.md) |
 | Changelog | [CHANGELOG.md](CHANGELOG.md) |
-| Brand / naming (candidates + vote materials) | [docs/gtm/brand-naming-candidates-v1.md](docs/gtm/brand-naming-candidates-v1.md) · [docs/gtm/board-vote-cheat-sheet-pha36.md](docs/gtm/board-vote-cheat-sheet-pha36.md) |
 | Graph UI spec | [docs/design/graph-view-pro-ui-spec.md](docs/design/graph-view-pro-ui-spec.md) |
 | In-app `/docs` UX spec (shell / desktop) | [docs/design/docs-page-ux-spec.md](docs/design/docs-page-ux-spec.md) |
-| Public `/docs` IA & page outlines (handoff for site build) | [docs/site/docs-ia-content-outline-v1.md](docs/site/docs-ia-content-outline-v1.md) |
+| E2E testing | [docs/e2e-testing.md](docs/e2e-testing.md) |
 
 ## FAQ
 
@@ -200,6 +205,5 @@ This project is licensed under the **MIT License** — see [LICENSE](LICENSE).
 
 ## In this repository
 
-- **Hero copy reference (paste deck):** [site/onboarding-homepage.html](site/onboarding-homepage.html) — aligned with onboarding strings in `docs/gtm/`.
-- **Brand naming (Pharos vs alternatives):** [docs/gtm/brand-naming-candidates-v1.md](docs/gtm/brand-naming-candidates-v1.md), [docs/gtm/readme-hero-variants-pha36.md](docs/gtm/readme-hero-variants-pha36.md), [docs/gtm/board-vote-cheat-sheet-pha36.md](docs/gtm/board-vote-cheat-sheet-pha36.md).
-- **Maintenance** — This README is curated alongside engineering and GTM docs under `docs/`; default-branch changes land via normal review and release flow in [docs/releases.md](docs/releases.md).
+- **Static onboarding copy (reference HTML):** [site/onboarding-homepage.html](site/onboarding-homepage.html) — optional companion to in-app docs under [`apps/desktop/src/docs/content/`](apps/desktop/src/docs/content/).
+- **Maintenance** — This README is curated alongside engineering docs under `docs/`; releases follow [docs/releases.md](docs/releases.md).

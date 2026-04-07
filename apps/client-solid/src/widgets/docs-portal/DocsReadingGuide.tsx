@@ -2,18 +2,36 @@ import { For, Show, createEffect, createMemo, createSignal, onCleanup } from 'so
 
 import { extractHeadings, MarkdownDocument } from './DocsBook';
 
-export default function DocsReadingGuide(props: { selectedDocContent?: string }) {
+export default function DocsReadingGuide(props: {
+  selectedDocPath: string;
+  selectedDocContent?: string;
+  onSelectDocPath?: (path: string, fragment?: string) => void;
+}) {
   const docHeadings = createMemo(() => extractHeadings(props.selectedDocContent ?? ''));
   const [activeHeadingId, setActiveHeadingId] = createSignal<string | null>(null);
-  let markdownContainerRef: HTMLDivElement | undefined;
+  let docsScrollEl: HTMLElement | undefined;
 
   createEffect(() => {
     const headings = docHeadings();
     setActiveHeadingId(headings[0]?.id ?? null);
   });
 
+  let lastScrollResetPath: string | undefined;
   createEffect(() => {
-    const container = markdownContainerRef;
+    const path = props.selectedDocPath;
+    props.selectedDocContent;
+    queueMicrotask(() => {
+      const el = docsScrollEl;
+      if (!el) return;
+      if (path !== lastScrollResetPath) {
+        el.scrollTop = 0;
+        lastScrollResetPath = path;
+      }
+    });
+  });
+
+  createEffect(() => {
+    const container = docsScrollEl;
     if (!container) return;
     const onScroll = () => {
       const headings = docHeadings();
@@ -46,7 +64,12 @@ export default function DocsReadingGuide(props: { selectedDocContent?: string })
   return (
     <div class="reading-guide-shell docs-layout">
       <div class="docs-book-content-shell">
-        <section class="docs-book-content">
+        <section
+          class="docs-book-content"
+          ref={(el) => {
+            docsScrollEl = el;
+          }}
+        >
           <Show
             when={props.selectedDocContent}
             fallback={
@@ -55,8 +78,12 @@ export default function DocsReadingGuide(props: { selectedDocContent?: string })
               </p>
             }
           >
-            <div class="docs-book-article-wrap" ref={markdownContainerRef}>
-              <MarkdownDocument markdown={props.selectedDocContent || ''} />
+            <div class="docs-book-article-wrap">
+              <MarkdownDocument
+                markdown={props.selectedDocContent || ''}
+                sourcePath={props.selectedDocPath}
+                onSelectDocPath={props.onSelectDocPath}
+              />
             </div>
           </Show>
         </section>

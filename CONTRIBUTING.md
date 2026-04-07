@@ -31,6 +31,19 @@ make down    # stop background services
 - Link issue trackers only when your team uses them for traceability.
 - Match style and patterns in surrounding code; avoid drive-by refactors.
 
+## Frontend / backend contract
+
+Graph and event UI depend on normalized daemon events. When changing payloads:
+
+- **Daemon:** prefer **additive** changes for keys the dashboard reads (for example `parent_agent_id`, `agent_id`, `hook_event_type`, and fields under `payload` the client uses).
+- **Dashboard:** tolerate missing optional fields and degrade gracefully.
+
+Canonical terms and envelope shape: [`CLAUDE.md`](CLAUDE.md) and `apps/daemon-rs/src/model.rs`.
+
 ## License
 
 By contributing, you agree your contributions are licensed under the same terms as this repository ([LICENSE](LICENSE)).
+
+## Private / local-only material
+
+Marketing context, audience briefs, and similar notes are **not** committed to this public repository. Keep them in private notes or gitignored paths (for example under `.agents/`, which is listed in `.gitignore`).

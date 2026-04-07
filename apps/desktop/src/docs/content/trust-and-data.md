@@ -1,6 +1,6 @@
 # Trust, data, and local execution
 
-**Tone:** Security-led, auditability first — aligned with launch narrative and devrel positioning in the repository (`docs/gtm/`).
+**Tone:** Security-led, auditability first — aligned with [public positioning](https://github.com/akushniruk/pharos/blob/main/docs/positioning.md) in the repository.
 
 ## Local-first execution
 

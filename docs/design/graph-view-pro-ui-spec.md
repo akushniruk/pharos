@@ -71,7 +71,7 @@ Avoid a bare graph canvas with no message — always **center the empty block** 
 
 ## 6. Engineering follow-up
 
-If any token names above are not in the design system, map to the **closest existing** token and note the alias in code comments. Open a **child issue** under [PHA-13](/PHA/issues/PHA-13) for implementation if CTO approves this spec.
+If any token names above are not in the design system, map to the **closest existing** token and note the alias in code comments. Track implementation in the normal issue or PR workflow your team uses.
 
 ---
 

@@ -19,6 +19,7 @@ import {
 import { connectWs } from '../lib/ws';
 import { initTheme } from '../lib/theme';
 import { DOCS_PORTAL_SECTIONS, docsPortalEntryTitle } from '../lib/docsPortal';
+import { documentationBundleVersionLabel } from '../lib/docsVersion';
 import { APP_BROWSER_TITLE } from '../lib/appBranding';
 import { docContentForPath } from '../lib/docsPortalContent';
 import {
@@ -52,7 +53,6 @@ export default function AppShell() {
   const [route, setRoute] = createSignal<AppRoute>('main');
   const [docsQuery, setDocsQuery] = createSignal('');
   const [selectedDocPath, setSelectedDocPath] = createSignal(firstDocsPath());
-  const [copiedValue, setCopiedValue] = createSignal<string | null>(null);
 
   const docsPortalSections = createMemo(() => {
     const query = docsQuery().trim().toLowerCase();
@@ -122,11 +122,22 @@ export default function AppShell() {
     setRoute('docs');
   };
 
-  const selectDocsDocument = (path: string) => {
+  const selectDocsDocument = (path: string, fragment?: string) => {
     setSelectedDocPath(path);
     const slug = docsSlugForPath(path);
-    navigateToPath(`/docs/${encodeURIComponent(slug)}`);
+    const targetPath = `/docs/${encodeURIComponent(slug)}`;
+    if (typeof window !== 'undefined') {
+      const next = fragment ? `${targetPath}#${fragment}` : targetPath;
+      if (`${window.location.pathname}${window.location.hash}` !== next) {
+        window.history.pushState({}, '', next);
+      }
+    }
     setRoute('docs');
+    if (fragment) {
+      requestAnimationFrame(() => {
+        document.getElementById(fragment)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    }
   };
 
   onMount(() => {
@@ -159,7 +170,8 @@ export default function AppShell() {
     const app = APP_BROWSER_TITLE;
     if (route() === 'docs') {
       const docName = docsPortalEntryTitle(selectedDocPath()) ?? 'Documentation';
-      document.title = formatBrowserTitle([docName, 'Docs', app]);
+      const docsLabel = `Docs ${documentationBundleVersionLabel()}`;
+      document.title = formatBrowserTitle([docName, docsLabel, app]);
       return;
     }
     const project = selectedProjectSnapshot();
@@ -202,17 +214,6 @@ export default function AppShell() {
     }
   });
 
-  const copyToClipboard = async (value: string) => {
-    if (typeof navigator === 'undefined' || !navigator.clipboard) return;
-    try {
-      await navigator.clipboard.writeText(value);
-      setCopiedValue(value);
-      window.setTimeout(() => setCopiedValue(null), 1500);
-    } catch {
-      // No-op if clipboard write fails in current environment.
-    }
-  };
-
   /** Avoid nested `<Show fallback>` for main panel — that pattern can miss `selectedProject()` updates. */
   const mainPanel = createMemo((): 'docs' | 'home' | 'workspace' => {
     if (route() === 'docs') return 'docs';
@@ -243,7 +244,11 @@ export default function AppShell() {
     if (mainPanel() === 'docs') {
       return (
         <div class="docs-route-main">
-          <DocsReadingGuide selectedDocContent={selectedDocContent()} />
+          <DocsReadingGuide
+            selectedDocPath={selectedDocPath()}
+            selectedDocContent={selectedDocContent()}
+            onSelectDocPath={selectDocsDocument}
+          />
         </div>
       );
     }
@@ -290,8 +295,6 @@ export default function AppShell() {
             docsSections={docsPortalSections()}
             selectedDocPath={selectedDocPath()}
             onSelectDoc={selectDocsDocument}
-            copiedValue={copiedValue()}
-            onCopy={(value) => void copyToClipboard(value)}
             onToggle={() => setSidebarCollapsed((c) => !c)}
           />
         </Show>

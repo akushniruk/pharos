@@ -32,7 +32,8 @@ Use these files to complete the task:
 - `apps/client-solid/src/pages/ProjectDetail.tsx` — delete (split into AgentCards + EventStream)
 
 **Spec:**
-- `docs/superpowers/specs/2026-04-03-solidjs-full-ui-design.md` — full design spec with layout, colors, typography, component architecture
+- [docs/design/graph-view-pro-ui-spec.md](../docs/design/graph-view-pro-ui-spec.md) — graph visualization (metro-line style, tokens, layout rhythm)
+- [docs/design/docs-page-ux-spec.md](../docs/design/docs-page-ux-spec.md) — in-app `/docs` shell typography, sidebar, and accessibility
 
 ### New Files
 - `apps/client-solid/src/components/Header.tsx` — brand + live metrics strip + controls

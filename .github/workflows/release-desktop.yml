@@ -102,8 +102,8 @@ jobs:
               body = "\n".join(chunk).strip() + "\n\n"
           footer = (
               "---\n"
-              f"**Draft** — smoke-test installers, then request board QA per [docs/releases.md]({server}/{repo}/blob/main/docs/releases.md). "
-              f"Release copy template: [github-release-desktop-template.md]({server}/{repo}/blob/main/docs/gtm/github-release-desktop-template.md).\n"
+              f"**Draft** — smoke-test installers, then complete maintainer QA per [docs/releases.md]({server}/{repo}/blob/main/docs/releases.md). "
+              f"Release copy template: [github-release-desktop-template.md]({server}/{repo}/blob/main/docs/github-release-desktop-template.md).\n"
           )
           body = body + footer
           out = os.environ["GITHUB_OUTPUT"]

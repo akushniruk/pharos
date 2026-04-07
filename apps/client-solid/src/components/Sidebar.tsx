@@ -25,7 +25,8 @@ import {
 } from '../widgets/sidebar/sidebarPresentation';
 import { getAgentColor } from '../lib/colors';
 import { timeAgo } from '../lib/time';
-import { DOCS_PORTAL_RUN_COMMANDS, DOCS_PORTAL_SECTIONS, type DocsPortalSection } from '../lib/docsPortal';
+import { DOCS_PORTAL_SECTIONS, type DocsPortalSection } from '../lib/docsPortal';
+import { documentationBundleVersionLabel } from '../lib/docsVersion';
 import {
   agentListInitials,
   mapAgentTypeLabel,
@@ -45,9 +46,7 @@ interface SidebarProps {
   docsEntryCount?: number;
   docsSections?: DocsPortalSection[];
   selectedDocPath?: string;
-  onSelectDoc?: (path: string) => void;
-  copiedValue?: string | null;
-  onCopy?: (value: string) => void;
+  onSelectDoc?: (path: string, fragment?: string) => void;
 }
 
 function projectInitial(name: string): string {
@@ -91,6 +90,7 @@ function sidebarAgentStatusLabel(agent: AgentInfo): string {
 export default function Sidebar(props: SidebarProps) {
   const [activityFilter, setActivityFilter] = createSignal<'all' | 'active'>('all');
   const [expandedDocSections, setExpandedDocSections] = createSignal<Record<string, boolean>>({});
+  const [expandedSessionProjects, setExpandedSessionProjects] = createSignal<Set<string>>(new Set());
 
   const selectedProjectAgentTypes = createMemo(() => {
     const proj = selectedProject();
@@ -143,7 +143,12 @@ export default function Sidebar(props: SidebarProps) {
         <div class="docs-sidebar-root">
           <div class="docs-sidebar-head">
             <div class="docs-sidebar-headcopy">
-              <span class="docs-sidebar-kicker">Documentation</span>
+              <div class="docs-sidebar-kicker-row">
+                <span class="docs-sidebar-kicker">Documentation</span>
+                <span class="docs-sidebar-version" title="Bundled documentation matches this app version">
+                  {documentationBundleVersionLabel()}
+                </span>
+              </div>
               <div class="docs-sidebar-title-row">
                 <span class="docs-sidebar-title">Pharos Docs</span>
                 <span class="docs-sidebar-count">{docsEntryCount()} entries</span>
@@ -177,10 +182,15 @@ export default function Sidebar(props: SidebarProps) {
                     class="docs-sidebar-section-head"
                     onClick={() => toggleDocSection(section.title)}
                   >
-                    <span class="docs-sidebar-section-title">{section.title}</span>
+                    <span class="docs-sidebar-section-head-text">
+                      <span class="docs-sidebar-section-title">{section.title}</span>
+                      <Show when={section.subtitle}>
+                        <span class="docs-sidebar-section-subtitle">{section.subtitle}</span>
+                      </Show>
+                    </span>
                     <Icon
                       path={chevronRight}
-                      style={`width:11px;height:11px;transition:transform 0.18s;transform:${isDocSectionExpanded(section.title) ? 'rotate(90deg)' : 'rotate(0deg)'};`}
+                      style={`width:11px;height:11px;flex-shrink:0;transition:transform 0.18s;transform:${isDocSectionExpanded(section.title) ? 'rotate(90deg)' : 'rotate(0deg)'};`}
                     />
                   </button>
                   <div class="docs-sidebar-section-items" style={{ display: isDocSectionExpanded(section.title) ? 'flex' : 'none' }}>
@@ -193,7 +203,9 @@ export default function Sidebar(props: SidebarProps) {
                           classList={{ 'is-active': props.selectedDocPath === entry.path }}
                         >
                           <div class="docs-sidebar-entry-title">{entry.title}</div>
-                          <div class="docs-sidebar-entry-path">{entry.path}</div>
+                          <Show when={entry.showFilePath}>
+                            <div class="docs-sidebar-entry-path">{entry.path}</div>
+                          </Show>
                         </button>
                       )}
                     </For>
@@ -201,28 +213,6 @@ export default function Sidebar(props: SidebarProps) {
                 </div>
               )}
             </For>
-
-            <div class="docs-sidebar-section docs-sidebar-commands">
-              <div class="docs-sidebar-section-title">
-                Run The Platform
-              </div>
-              <div class="docs-sidebar-command-list">
-                <For each={DOCS_PORTAL_RUN_COMMANDS}>
-                  {(command) => (
-                    <div class="docs-sidebar-command-item">
-                      <code class="docs-sidebar-command-code">{command}</code>
-                      <button
-                        type="button"
-                        onClick={() => props.onCopy?.(command)}
-                        class="docs-sidebar-command-copy"
-                      >
-                        {props.copiedValue === command ? 'Copied' : 'Copy'}
-                      </button>
-                    </div>
-                  )}
-                </For>
-              </div>
-            </div>
           </div>
         </div>
       </Show>
@@ -418,8 +408,38 @@ export default function Sidebar(props: SidebarProps) {
 
                   {/* Sessions under project row */}
                   <Show when={isSelected()}>
+                    {(() => {
+                      const MAX_COLLAPSED = 4;
+                      const isSessionsExpanded = () => expandedSessionProjects().has(p.name);
+                      const toggleSessionsExpanded = () => {
+                        setExpandedSessionProjects((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(p.name)) next.delete(p.name);
+                          else next.add(p.name);
+                          return next;
+                        });
+                      };
+                      const allSessions = () => projectSessions();
+                      const visibleSessions = () => {
+                        const all = allSessions();
+                        if (isSessionsExpanded() || all.length <= MAX_COLLAPSED) return all;
+                        const prioritized: typeof all = [];
+                        const rest: typeof all = [];
+                        for (const s of all) {
+                          const tone = sessionToneById().get(s.sessionId) ?? sidebarSessionActivityTone(p.name, s);
+                          if (tone === 'active' || tone === 'attention' || tone === 'blocked') {
+                            prioritized.push(s);
+                          } else {
+                            rest.push(s);
+                          }
+                        }
+                        const slots = Math.max(0, MAX_COLLAPSED - prioritized.length);
+                        return [...prioritized, ...rest.slice(0, slots)];
+                      };
+                      const hiddenCount = () => allSessions().length - visibleSessions().length;
+                      return (
                     <div style="display:flex;flex-direction:column;padding:0 8px 6px 22px;gap:2px;">
-                      <For each={projectSessions()}>
+                      <For each={visibleSessions()}>
                         {(s, sessionIndex) => {
                           const sessionId = () => (s.sessionId && s.sessionId.trim() ? s.sessionId : null);
                           const isSessionSelected = () => selectedSession() === sessionId();
@@ -471,7 +491,7 @@ export default function Sidebar(props: SidebarProps) {
                                 selectSession(id);
                               }}
                               style={[
-                                'display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:7px;cursor:pointer;',
+                                'display:flex;align-items:center;gap:6px;padding:3px 8px;border-radius:6px;cursor:pointer;',
                                 sessionRowAccent(),
                                 `background:${sessionRowBackground()};`,
                               ].join('')}
@@ -497,29 +517,20 @@ export default function Sidebar(props: SidebarProps) {
                                 path={statusIcon()}
                                 style={`width:10px;height:10px;color:${statusPaletteForSession().text};flex-shrink:0;`}
                               />
-                              <div style="display:flex;flex-direction:column;min-width:0;flex:1;gap:2px;">
-                                <span style="font-size:var(--text-base);color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-                                  {sessionTitleForSidebar(s.label, sessionIndex())}
-                                </span>
-                                <span
-                                  style={[
-                                    'font-size:var(--text-sm);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;',
-                                    statusTone() === 'attention' || statusTone() === 'blocked'
-                                      ? `color:${statusPaletteForSession().text};font-weight:600;`
-                                      : 'color:var(--text-dim);',
-                                  ].join('')}
-                                  title={sessionSummary()}
-                                >
-                                  {sessionSummary()}
-                                </span>
-                              </div>
-                              <div style={[
-                                'display:flex;align-items:center;gap:3px;font-size:var(--text-sm);padding:2px 7px;border-radius:9999px;font-weight:600;flex-shrink:0;max-width:min(140px,38%);',
-                                `background:${statusPaletteForSession().background};`,
-                                `color:${statusPaletteForSession().text};`,
-                              ].join('')}>
-                                <Icon path={statusIcon()} style="width:9px;height:9px;flex-shrink:0;" />
-                                <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{statusLabel()}</span>
+                              <span
+                                style="font-size:var(--text-sm);color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1;"
+                                title={sessionSummary()}
+                              >
+                                {sessionTitleForSidebar(s.label, sessionIndex())}
+                              </span>
+                              <div
+                                title={statusLabel()}
+                                style={[
+                                  'display:flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:9999px;flex-shrink:0;',
+                                  `background:${statusPaletteForSession().background};`,
+                                ].join('')}
+                              >
+                                <Icon path={statusIcon()} style={`width:9px;height:9px;color:${statusPaletteForSession().text};`} />
                               </div>
                             </div>
 
@@ -527,9 +538,9 @@ export default function Sidebar(props: SidebarProps) {
                               <For each={sortAgentsForSidebar(s.agents)}>
                                 {(agent) => {
                                   const agentKey = () => agent.agentId || '__main__';
-                                  const isAgentSelected = () => selectedAgent() === agentKey();
+                                  const isAgentSelected = () => isSessionSelected() && selectedAgent() === agentKey();
                                   const primary = () => resolveAgentListPrimaryName(agent);
-                                  const secondary = () => resolveAgentListSecondaryLine(agent);
+                                  const secondary = () => resolveAgentListSecondaryLine(agent); // tooltip only
                                   const agTone = () => sidebarAgentRowTone(agent);
                                   const agPalette = () => statusPalette(agTone());
                                   const agIcon = () => statusToneIcon(agTone());
@@ -565,7 +576,7 @@ export default function Sidebar(props: SidebarProps) {
                                         display: 'flex',
                                         'align-items': 'center',
                                         gap: '6px',
-                                        padding: '4px 8px',
+                                        padding: '3px 8px',
                                         'border-radius': '6px',
                                         cursor: 'pointer',
                                         border: 'none',
@@ -580,45 +591,28 @@ export default function Sidebar(props: SidebarProps) {
                                     >
                                       <div
                                         style={[
-                                          'width:22px;height:22px;border-radius:9999px;flex-shrink:0;display:flex;',
-                                          'align-items:center;justify-content:center;font-size:9px;font-weight:700;',
+                                          'width:20px;height:20px;border-radius:9999px;flex-shrink:0;display:flex;',
+                                          'align-items:center;justify-content:center;font-size:8px;font-weight:700;',
                                           `background:${getAgentColor(colorKey)}22;color:${getAgentColor(colorKey)};`,
-                                          'border:1px solid var(--border);',
                                         ].join('')}
                                         aria-hidden
                                       >
                                         {agentListInitials(primary())}
                                       </div>
-                                      <Icon
-                                        path={agIcon()}
-                                        style={`width:9px;height:9px;color:${agPalette().text};flex-shrink:0;`}
-                                      />
-                                      <div style="display:flex;flex-direction:column;min-width:0;flex:1;gap:1px;">
-                                        <span style="font-size:var(--text-sm);font-weight:500;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-                                          {primary()}
-                                        </span>
-                                        <span
-                                          style={[
-                                            'font-size:var(--text-sm);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;',
-                                            agTone() === 'attention' || agTone() === 'blocked'
-                                              ? `color:${agPalette().text};font-weight:600;`
-                                              : 'color:var(--text-dim);',
-                                          ].join('')}
-                                          title={secondary()}
-                                        >
-                                          {secondary()}
-                                        </span>
-                                      </div>
-                                      <div style={[
-                                        'display:flex;align-items:center;gap:2px;font-size:var(--text-sm);padding:1px 6px;',
-                                        'border-radius:9999px;font-weight:600;flex-shrink:0;max-width:min(120px,36%);',
-                                        `background:${agPalette().background};`,
-                                        `color:${agPalette().text};`,
-                                      ].join('')}>
-                                        <Icon path={agIcon()} style="width:8px;height:8px;flex-shrink:0;" />
-                                        <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-                                          {sidebarAgentStatusLabel(agent)}
-                                        </span>
+                                      <span
+                                        style="font-size:var(--text-sm);font-weight:500;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1;"
+                                        title={secondary()}
+                                      >
+                                        {primary()}
+                                      </span>
+                                      <div
+                                        title={sidebarAgentStatusLabel(agent)}
+                                        style={[
+                                          'display:flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:9999px;flex-shrink:0;',
+                                          `background:${agPalette().background};`,
+                                        ].join('')}
+                                      >
+                                        <Icon path={agIcon()} style={`width:8px;height:8px;color:${agPalette().text};`} />
                                       </div>
                                     </div>
                                   );
@@ -629,7 +623,18 @@ export default function Sidebar(props: SidebarProps) {
                           );
                         }}
                       </For>
+                      <Show when={hiddenCount() > 0}>
+                        <button
+                          type="button"
+                          onClick={toggleSessionsExpanded}
+                          style="background:none;border:none;cursor:pointer;font-size:var(--text-sm);color:var(--text-secondary);padding:4px 8px;text-align:left;"
+                        >
+                          {isSessionsExpanded() ? 'Show less' : `Show ${hiddenCount()} more`}
+                        </button>
+                      </Show>
                     </div>
+                      );
+                    })()}
                   </Show>
                 </div>
               );

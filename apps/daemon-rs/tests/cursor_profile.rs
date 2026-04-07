@@ -78,7 +78,7 @@ fn cursor_profile_prefers_project_hint_when_prompt_mentions_other_paths() {
     std::fs::create_dir_all(&transcript_dir).expect("transcript dir");
     std::fs::write(
         transcript_dir.join("sess-mixed.jsonl"),
-        r#"{"role":"user","message":{"content":[{"type":"text","text":"check /Users/tester/home_projects/dalaran docs and then continue in /Users/tester/home_projects/pharos"}]}}"#,
+        r#"{"role":"user","message":{"content":[{"type":"text","text":"check /Users/tester/home_projects/notes-vault docs and then continue in /Users/tester/home_projects/pharos"}]}}"#,
     )
     .expect("write transcript");
 

@@ -1,0 +1,6 @@
+Agent logos in this folder are from the Simple Icons project (https://simpleicons.org),
+redistributed under CC0 1.0 (https://creativecommons.org/publicdomain/zero/1.0/).
+Files were obtained from https://cdn.simpleicons.org and https://cdn.jsdelivr.net/npm/simple-icons@15/icons/
+(Anthropic, Google, Cursor, OpenAI glyphs).
+
+Trademarks are owned by their respective companies; use does not imply endorsement.

@@ -28,4 +28,4 @@ Not another chat client: an **observability layer** for real agent workflows —
 
 ---
 
-*Canonical strings and IA: repository `docs/site/docs-home-narrative-and-writer-brief-v1.md` and `docs/site/docs-ia-content-outline-v1.md`.*
+*Positioning and narrative hierarchy for maintainers: repository [`docs/positioning.md`](https://github.com/akushniruk/pharos/blob/main/docs/positioning.md).*

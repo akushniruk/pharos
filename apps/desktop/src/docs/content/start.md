@@ -1,6 +1,6 @@
 # Start with Pharos
 
-You’ll install the desktop app and complete one run you can inspect. This hub follows the **curated path** in `docs/site/docs-ia-content-outline-v1.md`, with hero-level copy locked in `docs/site/docs-home-narrative-and-writer-brief-v1.md`. **Canonical public surfaces** are this repository (root README, `docs/`), **GitHub Releases**, and this in-app `/docs` shell — not a separate marketing site.
+You’ll install the desktop app and complete one run you can inspect. **Canonical public surfaces** are this repository (root README, `docs/`), **GitHub Releases**, and this in-app `/docs` shell — not a separate marketing site.
 
 ## Prerequisites
 

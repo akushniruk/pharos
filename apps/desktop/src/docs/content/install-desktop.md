@@ -12,7 +12,7 @@ npm ci
 npm run tauri dev
 ```
 
-Vite serves the UI at `http://localhost:1420` in dev; Tauri loads that URL while developing.
+The Solid dev server runs at `http://localhost:5173` by default; Tauri’s `devUrl` points there while developing (same port as `make client` in the repo root).
 
 ## Production-style build
 

@@ -26,7 +26,7 @@ pnpm run test:e2e
 
 Workflow: [`.github/workflows/ci-e2e.yml`](../.github/workflows/ci-e2e.yml) — job **`playwright`** under **E2E (client-solid)** runs `pnpm exec playwright test` after `vite build` (includes `e2e/docs-hash-router.spec.ts`); on failure, artifacts **`playwright-report`** (HTML) and **`playwright-test-results`** (traces/screenshots/video) are uploaded. Path-filtered to `apps/client-solid/**` and related docs parity scripts.
 
-## Handoff (QA / PHA-64)
+## Handoff (QA)
 
 1. Expand `e2e/` with **priority flows** once product stabilizes (project drill-down, graph tab, connection states — may need **mock WebSocket** or test-only daemon).
 2. Keep default suite **fast and hermetic**; mark network-dependent tests with `test.slow()` or a separate project.

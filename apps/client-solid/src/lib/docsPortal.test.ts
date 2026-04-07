@@ -3,8 +3,8 @@ import { docsPortalEntryTitle } from './docsPortal';
 
 describe('docsPortalEntryTitle', () => {
   it('returns title for known paths', () => {
-    expect(docsPortalEntryTitle('docs/README.md')).toBe('Docs Portal Index');
-    expect(docsPortalEntryTitle('README.md')).toBe('Repository Overview');
+    expect(docsPortalEntryTitle('docs/README.md')).toBe('Docs overview');
+    expect(docsPortalEntryTitle('README.md')).toBe('Repository overview (README)');
   });
 
   it('returns undefined for unknown paths', () => {

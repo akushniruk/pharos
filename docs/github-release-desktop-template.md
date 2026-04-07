@@ -1,20 +1,20 @@
 # Pharos desktop — GitHub Release notes template
 
-**Purpose:** Reusable structure and voice for **desktop** (and repo-native) ships. **Canonical story surface is GitHub** — README, `docs/`, and Releases ([PHA-35](/PHA/issues/PHA-35), [PHA-37](/PHA/issues/PHA-37)).
+**Purpose:** Reusable structure and voice for **desktop** (and repo-native) ships. **Canonical story surface is GitHub** — README, `docs/`, and Releases.
 
-**Copy sources (do not paraphrase away from these without CEO/board revision):**
+**Copy sources:**
 
-- Approved hero strings: [site/onboarding-homepage.html](../../site/onboarding-homepage.html) (same as [PHA-15](/PHA/issues/PHA-15#comment-90c579de-c094-43e1-bad5-15c64bae0de2))
-- Narrative hierarchy (security-led, velocity secondary): [launch-narrative-v1.md](launch-narrative-v1.md)
+- Onboarding hero strings (static reference): [site/onboarding-homepage.html](../site/onboarding-homepage.html)
+- Narrative hierarchy (security-led, velocity secondary): [docs/positioning.md](positioning.md)
 
 ---
 
 ## Voice checklist (before you publish)
 
 - Lead with **trust, control, observability** — what users can **see**, **govern**, and **prove**; treat speed as **confident velocity** only after that.
-- Prefer concrete outcomes: what changed in the app, what is visible in runs/traces/UI, what admins or reviewers gain.
+- Prefer concrete outcomes: what changed in the app, what is visible in runs or the UI, what admins or reviewers gain.
 - Avoid hype adjectives; write for security- and platform-minded engineers skimming on GitHub.
-- **One primary CTA** per release (e.g. star/watch, docs path, early access) — match README anchors so X threads can deep-link.
+- **One primary CTA** per release (for example star, watch, docs path, or early access) — match README anchors so threads can deep-link.
 
 ---
 
@@ -52,9 +52,9 @@ Replace `vX.Y.Z`, links, and bullets. Keep section headings stable so diffs acro
 
 ---
 
-## Optional: X (Twitter) thread — bullets that deep-link to the Release
+## Optional: social thread — bullets that deep-link to the Release
 
-Post **after** the GitHub Release is public. Every bullet should point at the **Release URL** or a **default-branch** anchor (README / `docs/`), not a marketing microsite.
+Post **after** the GitHub Release is public. Every bullet should point at the **Release URL** or a **default-branch** anchor (README or `docs/`), not a separate marketing microsite.
 
 **Thread scaffold (copy and trim):**
 
@@ -64,8 +64,4 @@ Post **after** the GitHub Release is public. Every bullet should point at the **
 4. Upgrade: <!-- link Release “Upgrade & migration” or docs -->
 5. Security: <!-- link Release “Security & integrity” + checksum reminder -->
 
-**Guardrails:** Same approved strings deck as README/releases ([PHA-15](/PHA/issues/PHA-15)); distribution only — full narrative stays on GitHub ([PHA-37](/PHA/issues/PHA-37)).
-
----
-
-*v1 — [PHA-45](/PHA/issues/PHA-45); parent [PHA-44](/PHA/issues/PHA-44).*
+**Guardrails:** Use the same approved strings as README and releases; keep the full narrative on GitHub.

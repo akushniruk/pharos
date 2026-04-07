@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 /**
- * Hermetic preview (no daemon). Covers observability shell UX for the risks called out in PHA-86:
+ * Hermetic preview (no daemon). Covers observability shell UX:
  * empty workspace when no stream, status surface, and navigation back from docs.
  * Session rows / live event ingestion need a mock daemon or fixture WebSocket (future).
  */

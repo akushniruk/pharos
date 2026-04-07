@@ -20,6 +20,9 @@ apps/landing-svelte/dist/
 .cursor/hooks/state/
 .cursor/mcp.json
 
+# Local agent / marketing context (not for public repo)
+.agents/
+
 # Secrets / local env (keep examples tracked explicitly if you add them)
 .env
 .env.local

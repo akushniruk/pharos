@@ -306,7 +306,7 @@ function renderDocsShell(root, activePath) {
   ];
 
   const navParts = [
-    `<div class="ph-nav-section" data-section="home"><h2>Home</h2><ul><li data-title="documentation home docs"><a href="/docs">Documentation home</a></li></ul></div>`,
+    `<div class="ph-nav-section" data-section="home"><h2>Home</h2><ul><li data-title="docs overview home"><a href="/docs">Docs overview</a></li></ul></div>`,
   ];
   for (const name of sectionOrder) {
     const routes = sections.get(name);

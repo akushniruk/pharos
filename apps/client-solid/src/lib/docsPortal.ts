@@ -2,122 +2,158 @@ export interface DocsPortalEntry {
   title: string;
   path: string;
   summary: string;
+  /** When true, show the repo file path under the title (maintainer / contributor pages). Default false. */
+  showFilePath?: boolean;
 }
 
 export interface DocsPortalSection {
   title: string;
+  /** One-line hint: who this section is for */
+  subtitle?: string;
   entries: DocsPortalEntry[];
 }
 
+/**
+ * Audience-first navigation (Diátaxis): tutorials and explanations before reference and maintainer material.
+ * Paths must match bundled markdown (see docsPortalContent.ts).
+ */
 export const DOCS_PORTAL_SECTIONS: DocsPortalSection[] = [
   {
-    title: 'Start Here',
+    title: 'Welcome',
+    subtitle: 'Pick where to start',
     entries: [
       {
-        title: 'Docs Portal Index',
+        title: 'Docs overview',
         path: 'docs/README.md',
-        summary: 'Primary entry point for project documentation.',
+        summary:
+          'Supported agent runtimes (first-class), audiences, and how guides are organized.',
       },
       {
-        title: 'Event Stream UX Guide',
+        title: 'Documentation and versions',
+        path: 'docs/documentation-versioning.md',
+        summary: 'How bundled docs map to app releases, tags, and your installed build.',
+      },
+    ],
+  },
+  {
+    title: 'Getting started',
+    subtitle: 'Tutorials — first working setup',
+    entries: [
+      {
+        title: 'Desktop app',
+        path: 'docs/getting-started-desktop.md',
+        summary: 'Install the packaged app and view sessions with a local daemon.',
+      },
+      {
+        title: 'Web dashboard on your machine',
+        path: 'docs/getting-started-daemon-web.md',
+        summary: 'Run the Rust daemon and Solid UI from source (typical developer setup).',
+      },
+      {
+        title: 'Daemon on a server (VPS)',
+        path: 'docs/getting-started-remote-daemon.md',
+        summary: 'Run the daemon remotely and point the dashboard at it.',
+      },
+    ],
+  },
+  {
+    title: 'Understand Pharos',
+    subtitle: 'Context for evaluators, security, and builders',
+    entries: [
+      {
+        title: 'Desktop vs web dashboard',
+        path: 'docs/desktop-vs-daemon-web.md',
+        summary: 'What each shape is, when to choose it, ports, and data location.',
+      },
+      {
+        title: 'Why Pharos exists',
+        path: 'docs/positioning.md',
+        summary: 'Security-led positioning, audiences, and proof themes.',
+      },
+      {
+        title: 'Sessions, events, and the graph',
+        path: 'docs/understanding-sessions-and-events.md',
+        summary: 'What you see in the UI and how it maps to agent transcripts.',
+      },
+      {
+        title: 'Security and data boundaries',
+        path: 'docs/security-for-reviewers.md',
+        summary: 'Local-first execution, auditability, and what is not in scope.',
+      },
+    ],
+  },
+  {
+    title: 'How it works',
+    subtitle: 'Architecture diagrams and data flow',
+    entries: [
+      {
+        title: 'Architecture at a glance',
+        path: 'docs/architecture-how-it-works.md',
+        summary: 'Figures for transcripts, daemon, dashboard, desktop, and remote setups.',
+      },
+    ],
+  },
+  {
+    title: 'Using the dashboard',
+    subtitle: 'Day-to-day product behavior',
+    entries: [
+      {
+        title: 'Reading the event stream',
         path: 'docs/event-stream-ux-guide.md',
-        summary: 'Simple/Detailed behavior, payload modes, and style rules.',
+        summary: 'Simple vs detailed mode, search, filters, expansion, and attention banners.',
       },
+    ],
+  },
+  {
+    title: 'Reference',
+    subtitle: 'Integrators and automation',
+    entries: [
       {
-        title: 'Frontend API Reference',
+        title: 'HTTP and WebSocket API',
         path: 'docs/frontend-api-reference.md',
-        summary: 'HTTP + WebSocket contracts used by the Solid frontend.',
-      },
-      {
-        title: 'Multi-Agent Team Setup',
-        path: 'docs/multi-agent-team-setup.md',
-        summary: 'PM/FE/BE/Docs/Reviewer ownership and delivery gates.',
+        summary: 'Endpoints and stream contract consumed by the dashboard.',
+        showFilePath: true,
       },
     ],
   },
   {
-    title: 'UI And Design',
+    title: 'Contributing',
+    subtitle: 'People working in this repository',
     entries: [
       {
-        title: 'Full Solid UI Design Spec',
-        path: 'docs/superpowers/specs/2026-04-03-solidjs-full-ui-design.md',
-        summary: 'Primary UI contract for layout, interaction, and accessibility.',
+        title: 'How to contribute',
+        path: 'CONTRIBUTING.md',
+        summary: 'PRs, tests, and expectations for contributors.',
+        showFilePath: true,
       },
       {
-        title: 'Pharos V1 Roadmap',
-        path: 'docs/superpowers/specs/2026-04-02-v1-roadmap.md',
-        summary: 'Product roadmap and phased direction for V1.',
-      },
-    ],
-  },
-  {
-    title: 'Architecture And Observation',
-    entries: [
-      {
-        title: 'Process-Based Observation Design',
-        path: 'docs/superpowers/specs/2026-04-02-process-based-observation-design.md',
-        summary: 'Core design for runtime detection and transcript observation.',
-      },
-      {
-        title: 'Claude No-Hook Observation Design',
-        path: 'docs/superpowers/specs/2026-04-02-claude-no-hook-observation-design.md',
-        summary: 'Earlier design baseline for hook-free Claude visibility.',
-      },
-    ],
-  },
-  {
-    title: 'Implementation Plans',
-    entries: [
-      {
-        title: 'Rust Core Foundation Plan',
-        path: 'docs/superpowers/plans/2026-04-02-pharos-rust-core-foundation.md',
-        summary: 'Bootstrap plan for daemon core model, storage, and API.',
-      },
-      {
-        title: 'Process-Based Observation Plan',
-        path: 'docs/superpowers/plans/2026-04-02-process-based-observation.md',
-        summary: 'Execution steps for process-driven runtime observation.',
-      },
-      {
-        title: 'Gemini Live Event Tailing Plan',
-        path: 'docs/superpowers/plans/2026-04-03-gemini-live-event-tailing.md',
-        summary: 'Gemini runtime event parsing and scanner integration plan.',
-      },
-    ],
-  },
-  {
-    title: 'Operations And Release',
-    entries: [
-      {
-        title: 'macOS Desktop Release',
-        path: 'docs/macos-desktop-release.md',
-        summary: 'Release flow and runbook for shipping the desktop app.',
-      },
-    ],
-  },
-  {
-    title: 'Project References',
-    entries: [
-      {
-        title: 'Repository Overview',
+        title: 'Repository overview (README)',
         path: 'README.md',
-        summary: 'Top-level product overview, quick start, and commands.',
+        summary: 'Clone, Makefile targets, and layout of the monorepo.',
+        showFilePath: true,
       },
       {
-        title: 'Architecture Cheat Sheet',
+        title: 'Architecture cheat sheet',
         path: 'CLAUDE.md',
-        summary: 'Canonical architecture terms and daemon/frontend pointers.',
+        summary: 'Daemon, events, and session terms for agent-assisted development.',
+        showFilePath: true,
       },
       {
-        title: 'Rust and Agent Conventions',
+        title: 'Workspace notes (AGENTS.md)',
         path: 'AGENTS.md',
-        summary: 'Rust edition/linting and coding guidance for contributors.',
+        summary:
+          'Tooling, commands, and style for humans and coding assistants working in this repository.',
+        showFilePath: true,
+      },
+      {
+        title: 'Releases',
+        path: 'docs/releases.md',
+        summary: 'Tag workflow, drafts, and publishing desktop builds.',
+        showFilePath: true,
       },
     ],
   },
 ];
-
-export const DOCS_PORTAL_RUN_COMMANDS = ['make daemon', 'make client', 'make test'];
 
 /** Sidebar / browser title for a bundled docs path (e.g. `docs/README.md`). */
 export function docsPortalEntryTitle(path: string): string | undefined {

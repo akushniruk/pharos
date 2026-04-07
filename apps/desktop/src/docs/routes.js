@@ -1,5 +1,5 @@
 /**
- * In-app docs routes aligned with docs/site/docs-ia-content-outline-v1.md (CMO handoff).
+ * In-app docs routes for the desktop shell.
  * `load` returns the markdown source string (Vite ?raw default export).
  */
 

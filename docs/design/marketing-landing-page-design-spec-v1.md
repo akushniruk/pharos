@@ -1,10 +1,10 @@
 # Pharos marketing landing page — design spec (v1)
 
-**Status:** UX handoff for implementation in the new **Svelte** marketing app. **Strategic lock:** security-led primary, velocity secondary — same hierarchy as [launch-narrative-v1.md](../gtm/launch-narrative-v1.md).
+**Status:** UX handoff for implementation in the new **Svelte** marketing app. **Strategic lock:** security-led primary, velocity secondary — same hierarchy as [docs/positioning.md](../positioning.md).
 
-**Consumes:** [onboarding-homepage.html](../../site/onboarding-homepage.html) (copy reference deck — do not pixel-match; this spec supersedes layout for a real URL), [docs-home-narrative-and-writer-brief-v1.md](../site/docs-home-narrative-and-writer-brief-v1.md) (tone: calm, precise; no hype).
+**Consumes:** [onboarding-homepage.html](../../site/onboarding-homepage.html) (copy reference deck — do not pixel-match; this spec supersedes layout for a real URL), [`apps/desktop/src/docs/content/home.md`](../../apps/desktop/src/docs/content/home.md) (tone: calm, precise; no hype).
 
-**Hands off to:** [CTO](/PHA/agents/cto) for Svelte build and responsive behavior; [CMO](/PHA/agents/cmo) for final headline/subhead strings if marketing wants variants (keep security-first order).
+**Hands off to:** engineering for Svelte build and responsive behavior; product or marketing for final headline and subhead strings if variants are needed (keep security-first order).
 
 ---
 
@@ -26,7 +26,7 @@ Stack sections **vertically** on mobile; **max content width** 1120px for text-h
 1. **Global nav (sticky)** — logo wordmark + links: Product (anchor), Docs (external `/docs` when live), GitHub, **Primary CTA** (duplicate of hero CTA, compact).
 2. **Hero** — full-bleed subtle gradient or mesh (§6); headline, subhead, primary + secondary actions, optional **product still** or abstract “signal/trace” illustration (no fake UI chrome).
 3. **Social proof strip** (optional v1.1) — logos or “Built for teams who ship under review” one-liner; omit if no approved assets.
-4. **Problem → shift** — two short paragraphs: invisible agent risk → observability as the answer (arc from [launch-narrative-v1.md](../gtm/launch-narrative-v1.md) §Story arc items 1–3).
+4. **Problem → shift** — two short paragraphs: invisible agent risk → observability as the answer (arc from [docs/positioning.md](../positioning.md) — problem and differentiation sections).
 5. **Three pillars** — cards in a single row (stack on narrow): **Auditability** · **Observable by default** · **Local-first clarity** (reuse proof-point language from launch narrative §Proof points).
 6. **How it works** — 3 steps with icons or numbers: *Connect / See runs / Govern & prove* (wording adjustable by CMO; keep verbs concrete).
 7. **Audience paths** — two tiles: “I’m evaluating for my org” → security-led bullets + link to docs/security when available; “I’m a builder” → GitHub README / quickstart.
@@ -53,7 +53,7 @@ Stack sections **vertically** on mobile; **max content width** 1120px for text-h
 | Subhead | Two sentences: (1) what Pharos does locally, (2) **confident speed after visibility** as secondary clause |
 | Supporting line (optional, max 1 line) | Clarify “not chat — observability layer” if space allows |
 
-**Primary CTA:** Label aligned with [launch-narrative-v1.md](../gtm/launch-narrative-v1.md) §CTA — e.g. “Get early access” / “Join waitlist” / “View on GitHub” (whatever is live). **One** primary.
+**Primary CTA:** Label aligned with [docs/positioning.md](../positioning.md) (canonical surfaces: README and Releases) — e.g. “Get early access” / “Join waitlist” / “View on GitHub” (whatever is live). **One** primary.
 
 **Secondary CTA:** Ghost/outline — e.g. “Read the docs” or “See security story”.
 
@@ -65,7 +65,7 @@ Stack sections **vertically** on mobile; **max content width** 1120px for text-h
 
 | Role | Spec |
 | --- | --- |
-| **Font family** | `Inter`, `system-ui`, sans-serif (match [Solid dashboard spec](../superpowers/specs/2026-04-03-solidjs-full-ui-design.md) for brand continuity) |
+| **Font family** | `Inter`, `system-ui`, sans-serif (match [graph view UI spec](graph-view-pro-ui-spec.md) typography rhythm for brand continuity) |
 | **H1** | `clamp(2rem, 4vw, 2.75rem)`, weight 700, line-height 1.12, letter-spacing -0.02em |
 | **H2** (section titles) | `1.375rem`–`1.5rem`, weight 700, letter-spacing -0.01em |
 | **Body** | `1.0625rem` (17px), line-height 1.6 |
@@ -137,7 +137,7 @@ Suggested component breakdown (names indicative):
 
 ## 9. Open decisions for CTO / CMO
 
-1. **Canonical primary CTA URL** — waitlist vs GitHub vs both with priority (see [PHA-37](/PHA/issues/PHA-37) narrative).
+1. **Canonical primary CTA URL** — waitlist vs GitHub vs both with priority (see [docs/positioning.md](../positioning.md) for GitHub-first narrative).
 2. **Exact hero strings** — CMO signs off; UX structure above is fixed.
 3. **i18n** — out of scope v1; structure strings for future extraction if expected.
 
@@ -152,4 +152,4 @@ Suggested component breakdown (names indicative):
 
 ---
 
-*v1 — UXDesigner for [PHA-125](/PHA/issues/PHA-125), parent [PHA-124](/PHA/issues/PHA-124).*
+*v1 — marketing landing UX handoff for `apps/landing-svelte`.*

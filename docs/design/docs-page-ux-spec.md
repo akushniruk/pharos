@@ -2,9 +2,7 @@
 
 **Audience:** Engineering implementation of a first-class documentation surface inside Pharos (route `/docs`), consuming markdown or equivalent content.  
 **Intent:** Clarity and **trust** for long-form reading: predictable hierarchy, comfortable measure, obvious navigation, and accessibility on par with the rest of the shell.  
-**Partners:** Content structure and ordering with [CMO](/PHA/agents/cmo); tokens and feasibility with [CTO](/PHA/agents/cto). For **public** `/docs` page outlines and IA, see [docs/site/docs-ia-content-outline-v1.md](../site/docs-ia-content-outline-v1.md) ([PHA-55](/PHA/issues/PHA-55)). **Docs home copy (eyebrow, H1, lead, bullets, CTAs, search):** [docs/site/docs-home-narrative-and-writer-brief-v1.md](../site/docs-home-narrative-and-writer-brief-v1.md) ([PHA-59](/PHA/issues/PHA-59)) — implement strings literally unless CMO/CEO approves a change. Align rhythm with [docs/design/graph-view-pro-ui-spec.md](graph-view-pro-ui-spec.md) where both exist in the app.
-
-**Related:** Epic [PHA-54](/PHA/issues/PHA-54); UX task [PHA-57](/PHA/issues/PHA-57).
+**Content sources:** Visitor-facing copy for the docs hub ships in [`apps/desktop/src/docs/content/home.md`](../../apps/desktop/src/docs/content/home.md). Narrative hierarchy for positioning lives in [docs/positioning.md](../positioning.md). Coordinate copy changes with maintainers before diverging from those sources. Align rhythm with [docs/design/graph-view-pro-ui-spec.md](graph-view-pro-ui-spec.md) where both exist in the app.
 
 ---
 
@@ -74,7 +72,7 @@ Tone: **neutral, precise** — docs chrome should feel calmer than marketing sur
 
 ## 4b. `/docs` home — landing layout (hero + entry points)
 
-The route `/docs` when used as a **hub** (not a single long article) stacks **orientation → action → discovery**. Copy slots and labels are defined in [docs/site/docs-home-narrative-and-writer-brief-v1.md](../site/docs-home-narrative-and-writer-brief-v1.md) §§1–2; this section is **layout, hierarchy, and accessibility** only.
+The route `/docs` when used as a **hub** (not a single long article) stacks **orientation → action → discovery**. Copy slots and labels follow [`apps/desktop/src/docs/content/home.md`](../../apps/desktop/src/docs/content/home.md); this section is **layout, hierarchy, and accessibility** only.
 
 | Band | Spec |
 |------|------|
@@ -128,7 +126,7 @@ The route `/docs` when used as a **hub** (not a single long article) stacks **or
 ## 8. Engineering follow-up
 
 - Map tokens to the **closest existing** design-system names; alias in code comments where new tokens are needed (same as graph spec §6).
-- If routing or content source (bundled markdown vs remote) affects layout, document the constraint in the implementation PR and loop [CMO](/PHA/agents/cmo) for IA changes only when structure breaks scanning.
+- If routing or content source (bundled markdown vs remote) affects layout, document the constraint in the implementation PR and coordinate with maintainers if information architecture changes break scanning.
 
 ---
 
@@ -136,6 +134,6 @@ The route `/docs` when used as a **hub** (not a single long article) stacks **or
 
 - Desktop: article **max-width** enforced; sidebar TOC **active section** matches scroll position.
 - Mobile: drawer **keyboard** and **screen reader** usable; **skip link** reaches main content.
-- **`/docs` home:** Copy matches [docs-home-narrative-and-writer-brief-v1.md](../site/docs-home-narrative-and-writer-brief-v1.md) §§1–2; **heading order** follows §4b; primary/secondary CTA prominence matches priority table; chips and search field are keyboard-usable.
+- **`/docs` home:** Copy matches [`apps/desktop/src/docs/content/home.md`](../../apps/desktop/src/docs/content/home.md); **heading order** follows §4b; primary/secondary CTA prominence matches priority table; chips and search field are keyboard-usable.
 - Zoom 200%: no horizontal clipping of body text (code blocks may scroll).
 - Reduced motion: no jarring animations.

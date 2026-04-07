@@ -1,5 +1,7 @@
 # Pharos — AI Agent Observability
 
+Visual overview (figures): [`docs/architecture-how-it-works.md`](docs/architecture-how-it-works.md) in the in-app docs portal.
+
 ## Architecture
 
 Rust daemon (`apps/daemon-rs`) scans `~/.claude/sessions/` for active AI agent sessions, tails their JSONL transcripts, and streams events via WebSocket to a SolidJS dashboard (`apps/client-solid`).
