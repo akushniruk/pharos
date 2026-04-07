@@ -23,6 +23,16 @@ const AGENT_TYPE_LABELS: Record<string, string> = {
   'ci-watcher': 'CI Watcher',
   'agents-memory-updater': 'Memory Updater',
   'svelte-file-editor': 'Svelte Editor',
+  developer: 'Developer',
+  writer: 'Code Writer',
+  runner: 'Runner',
+  browser: 'Browser',
+  designer: 'Designer',
+  analyst: 'Analyst',
+  integrator: 'Integrator',
+  deployer: 'Deployer',
+  debugger: 'Debugger',
+  tester: 'Tester',
   main: 'Session',
   ceo: 'CEO',
   cto: 'CTO',
@@ -45,7 +55,10 @@ export function sanitizeResponsibility(value?: string | null): string | undefine
       .replace(/<[^>]+>/g, ' ')
       .replace(/^Task:\s*/i, '')
       .replace(/^Objective:\s*/i, '')
-      .replace(/^Goal:\s*/i, ''),
+      .replace(/^Goal:\s*/i, '')
+      .replace(/^You are an? agent\b[^.]*\.\s*/i, '')
+      .replace(/^You are an? \w+\b[^.]*\.\s*/i, '')
+      .replace(/^As an? agent\b[^.]*\.\s*/i, ''),
   );
   return cleaned || undefined;
 }
@@ -151,7 +164,7 @@ function sanitizeListSecondaryLine(value?: string | null): string | undefined {
   if (typeof value !== 'string') return undefined;
   const t = value.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
   if (!t) return undefined;
-  return t.length > 72 ? `${t.slice(0, 71)}…` : t;
+  return t.length > 48 ? `${t.slice(0, 47)}…` : t;
 }
 
 function withRuntime(runtime: string | undefined, role: string): string {

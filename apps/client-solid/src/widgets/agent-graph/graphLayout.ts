@@ -1,16 +1,16 @@
 import type { AgentInfo } from '../../lib/types';
-import { mapAgentTypeLabel } from '../../lib/agentNaming';
+import { mapAgentTypeLabel, resolveAgentListPrimaryName } from '../../lib/agentNaming';
 
 /**
- * Graph layout constants — [PHA-20](/PHA/issues/PHA-20) ux-spec §1 (8px grid, node 200–280px wide).
+ * Graph layout constants — see docs/design/graph-view-pro-ui-spec.md §1 (8px grid, node 200–280px wide).
  * `PAD` aliases spec `space.page-inline` (24px canvas inset); no separate token in theme yet.
  */
-export const NODE_W = 240;
-export const NODE_H = 104;
+export const NODE_W = 220;
+export const NODE_H = 96;
 export const H_GAP = 24;
-export const V_GAP = 80;
+export const V_GAP = 56;
 export const MAX_PER_ROW = 5;
-export const PAD = 24;
+export const PAD = 32;
 export const CLUSTER_GAP = 32;
 export const METRO_COLORS = [
   '#22c55e',
@@ -29,8 +29,10 @@ export type GraphNode = AgentInfo & {
 
 export function statusDot(agent: AgentInfo): StatusColor {
   if (agent.statusTone === 'active' || agent.isActive) return 'var(--green)';
-  if (agent.statusTone === 'blocked' || agent.statusTone === 'attention') return 'var(--yellow)';
+  if (agent.statusTone === 'attention') return 'var(--red)';
+  if (agent.statusTone === 'blocked') return 'var(--yellow)';
   if (agent.statusTone === 'idle') return 'var(--accent)';
+  if (agent.statusTone === 'done') return 'var(--text-dim)';
   return 'var(--text-dim)';
 }
 
@@ -97,33 +99,75 @@ export function agentLabel(agent: GraphNode): string {
   return 'Worker';
 }
 
-export function summarizeMeta(agent: AgentInfo): string {
-  const model = agent.modelName?.trim();
-  if (model) return `${agent.eventCount} events · ${model}`;
-  return `${agent.eventCount} events`;
+function truncGraph(value: string, max = 26): string {
+  return value.length > max ? `${value.slice(0, max - 1)}…` : value;
 }
 
-/** Secondary line: role / adapter — spec `text-body-sm` (truncate tail). */
-export function graphSecondaryLine(agent: GraphNode): string {
-  const runtime = agent.runtimeLabel?.replace(/\s+/g, ' ').trim();
-  if (runtime && !isNoisyRoleLabel(runtime)) {
-    return runtime.length > 44 ? `${runtime.slice(0, 41)}…` : runtime;
-  }
+/** Primary label for a graph node card. */
+export function graphPrimaryLabel(agent: GraphNode): string {
+  const isRoot = !agent.parentGraphId;
+  const rt = agent.runtimeLabel?.replace(/\s+/g, ' ').trim() || '';
+
   if (agent.agentType && agent.agentType !== 'main') {
     const mapped = mapAgentTypeLabel(agent.agentType);
-    if (mapped && mapped !== 'Session') return mapped;
+    if (mapped && mapped !== 'Session' && mapped !== 'Helper') {
+      return truncGraph(mapped);
+    }
   }
-  const model = shortModelName(agent.modelName || '');
-  return model.length > 44 ? `${model.slice(0, 41)}…` : model;
+
+  if (isRoot) {
+    if (rt) return truncGraph(rt);
+    const model = shortModelName(agent.modelName || '');
+    if (model) return truncGraph(model);
+    return 'Main';
+  }
+
+  const name = agent.displayName?.replace(/\s+/g, ' ').trim() || '';
+  if (name && !isGenericRootDisplayName(name) && !isNoisyRoleLabel(name)) {
+    return truncGraph(name);
+  }
+  if (rt) return truncGraph(rt);
+  return 'Agent';
 }
 
-/** Caption meta: telemetry + optional parent hint (`text-caption` / tertiary). */
-export function graphTelemetryMeta(agent: GraphNode, parentPrimaryLine?: string): string {
-  const base = summarizeMeta(agent);
-  if (!agent.parentGraphId || !parentPrimaryLine) return base;
-  const hint =
-    parentPrimaryLine.length > 20 ? `${parentPrimaryLine.slice(0, 17)}…` : parentPrimaryLine;
-  return `${base} · via ${hint}`;
+/** Subtitle: role description or assignment, never the same as the primary. */
+export function graphSubtitle(agent: GraphNode): string {
+  const primary = graphPrimaryLabel(agent);
+
+  if (agent.agentType && agent.agentType !== 'main') {
+    const mapped = mapAgentTypeLabel(agent.agentType);
+    if (mapped && mapped !== 'Session' && mapped !== primary) {
+      return truncGraph(mapped, 28);
+    }
+  }
+
+  const name = agent.displayName?.replace(/\s+/g, ' ').trim() || '';
+  if (name && name !== primary && !isGenericRootDisplayName(name) && !isNoisyRoleLabel(name)) {
+    return truncGraph(name, 28);
+  }
+
+  const model = shortModelName(agent.modelName || '');
+  if (model && model !== primary) return truncGraph(model, 28);
+
+  return '';
+}
+
+/** Runtime line for graph nodes — omitted if it duplicates the primary. */
+export function graphRuntimeLine(agent: GraphNode): string {
+  const rt = agent.runtimeLabel?.replace(/\s+/g, ' ').trim() || '';
+  if (!rt || rt === graphPrimaryLabel(agent)) return '';
+  return rt;
+}
+
+/** Tooltip summary for hover. */
+export function nodeTooltip(agent: GraphNode): string {
+  const parts = [graphPrimaryLabel(agent)];
+  const sub = graphSubtitle(agent);
+  if (sub) parts.push(sub);
+  const rt = agent.runtimeLabel?.trim();
+  if (rt) parts.push(rt);
+  parts.push(`${agent.eventCount} events`);
+  return parts.join(' · ');
 }
 
 export function stableTextHash(value: string): string {

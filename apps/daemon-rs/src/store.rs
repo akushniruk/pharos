@@ -8,7 +8,7 @@ use thiserror::Error;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
 
-use crate::agent_identity::{control_plane_agent_label, payload_parent_agent_id};
+use crate::agent_identity::{control_plane_agent_label, infer_agent_role, payload_parent_agent_id};
 use crate::model::{
     AcquisitionMode, AgentRegistryEntry, EventEnvelope, EventKind, FilterOptions, LegacyHookEvent,
     SessionSummary,
@@ -170,6 +170,7 @@ impl Store {
                         first_seen_at: event.occurred_at_ms,
                         last_seen_at: event.occurred_at_ms,
                         event_count: 0,
+                        tool_counts: HashMap::new(),
                     });
 
             accumulator.last_seen_at = accumulator.last_seen_at.max(event.occurred_at_ms);
@@ -193,6 +194,16 @@ impl Store {
             }
             if let Some(team_name) = payload_string(&event.payload, "team_name") {
                 accumulator.team_name = Some(team_name);
+            }
+
+            if event.event_kind == EventKind::ToolCallStarted {
+                if let Some(tool_name) = payload_string(&event.payload, "tool_name") {
+                    *accumulator.tool_counts.entry(tool_name).or_insert(0) += 1;
+                }
+            }
+
+            if accumulator.agent_type.is_none() && accumulator.parent_id.is_some() {
+                accumulator.agent_type = infer_agent_role(&accumulator.tool_counts);
             }
         }
 
@@ -301,8 +312,15 @@ fn build_registry_id(source_app: &str, session_id: &str, agent_id: Option<&str>)
 
 fn resolve_lifecycle_status(event_kind: &EventKind) -> &'static str {
     match event_kind {
-        EventKind::SessionEnded | EventKind::SubagentStopped => "inactive",
-        _ => "active",
+        EventKind::SessionEnded | EventKind::SubagentStopped => "stopped",
+        EventKind::ToolCallFailed => "error",
+        EventKind::AssistantResponse
+        | EventKind::ToolCallCompleted
+        | EventKind::SessionTitleChanged => "idle",
+        EventKind::ToolCallStarted
+        | EventKind::UserPromptSubmitted
+        | EventKind::SubagentStarted
+        | EventKind::SessionStarted => "active",
     }
 }
 
@@ -321,6 +339,7 @@ struct AgentRegistryAccumulator {
     first_seen_at: i64,
     last_seen_at: i64,
     event_count: usize,
+    tool_counts: HashMap<String, usize>,
 }
 
 impl AgentRegistryAccumulator {

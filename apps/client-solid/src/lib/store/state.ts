@@ -7,6 +7,7 @@ import type {
   AgentEntry,
   HookEvent,
   ViewedChangesSnapshot,
+  ActivityTone,
 } from '../types';
 import { agents, events, projectSnapshots } from '../ws';
 import { describeEvent, describeEventDetail, formatRuntimeLabel } from '../describe';
@@ -1110,8 +1111,23 @@ export const runtimeBridgeCandidates = createMemo((): RuntimeBridgeCandidate[] =
   return deriveRuntimeBridgeCandidates(graphAgents(), graphScopeEvents());
 });
 
+function registryStatusToTone(status: string): { label: string; tone: ActivityTone; isActive: boolean } {
+  switch (status) {
+    case 'active':
+      return { label: 'Active', tone: 'active', isActive: true };
+    case 'idle':
+      return { label: 'Idle', tone: 'idle', isActive: false };
+    case 'error':
+      return { label: 'Error', tone: 'attention', isActive: false };
+    case 'stopped':
+      return { label: 'Stopped', tone: 'done', isActive: false };
+    default:
+      return { label: 'Idle', tone: 'idle', isActive: false };
+  }
+}
+
 function registryEntryToGraphAgent(entry: AgentEntry): AgentInfo {
-  const isActive = entry.lifecycle_status === 'active';
+  const resolved = registryStatusToTone(entry.lifecycle_status);
   return {
     agentId: entry.agent_id || null,
     displayName: resolveHybridAgentName({
@@ -1119,14 +1135,14 @@ function registryEntryToGraphAgent(entry: AgentEntry): AgentInfo {
       agentType: entry.agent_type,
       fallback: entry.agent_id ? 'Agent' : 'Session',
     }),
-    statusLabel: isActive ? 'Active' : 'Idle',
-    statusTone: isActive ? 'active' : 'idle',
+    statusLabel: resolved.label,
+    statusTone: resolved.tone,
     statusDetail: undefined,
     agentType: entry.agent_type,
     modelName: entry.model_name,
     eventCount: entry.event_count || 0,
     lastEventAt: entry.last_seen_at || 0,
-    isActive,
+    isActive: resolved.isActive,
     parentId: entry.parent_id || undefined,
   };
 }

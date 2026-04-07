@@ -7,7 +7,7 @@ use crate::model::{
 use super::labels::{
     display_name_candidate_for_legacy_event, should_upgrade_project_label,
 };
-use crate::agent_identity::payload_parent_agent_id;
+use crate::agent_identity::{infer_agent_role, payload_parent_agent_id};
 
 use super::util::{build_registry_id, payload_string, resolve_lifecycle_status};
 
@@ -28,6 +28,7 @@ pub(crate) struct LiveStateData {
 pub(crate) struct RegistryState {
     pub(crate) entry: AgentRegistryEntry,
     pub(crate) display_name_score: u8,
+    pub(crate) tool_counts: HashMap<String, usize>,
 }
 
 #[derive(Clone)]
@@ -82,6 +83,7 @@ impl LiveStateData {
                     event_count: 0,
                 },
                 display_name_score: display_name.score,
+                tool_counts: HashMap::new(),
             });
 
         state.entry.last_seen_at = state.entry.last_seen_at.max(event.timestamp);
@@ -104,6 +106,16 @@ impl LiveStateData {
         }
         if let Some(team_name) = payload_string(&event.payload, "team_name") {
             state.entry.team_name = Some(team_name);
+        }
+
+        if event.hook_event_type == "PreToolUse" || event.hook_event_type == "ToolCallStarted" {
+            if let Some(tool_name) = payload_string(&event.payload, "tool_name") {
+                *state.tool_counts.entry(tool_name).or_insert(0) += 1;
+            }
+        }
+
+        if state.entry.agent_type.is_none() && state.entry.parent_id.is_some() {
+            state.entry.agent_type = infer_agent_role(&state.tool_counts);
         }
     }
 

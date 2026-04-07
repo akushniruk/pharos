@@ -143,7 +143,14 @@ pub(crate) fn resolve_lifecycle_status(hook_event_type: &str) -> &'static str {
         | "SubagentComplete"
         | "SubagentCompleted"
         | "AgentStop"
-        | "AgentStopped" => "inactive",
+        | "AgentStopped" => "stopped",
+        "PostToolUseFailure" => "error",
+        "AssistantResponse" | "PostToolUse" | "SessionTitleChanged" => "idle",
+        "PreToolUse"
+        | "ToolCallStarted"
+        | "UserPromptSubmit"
+        | "SubagentStart"
+        | "SessionStart" => "active",
         _ => "active",
     }
 }
