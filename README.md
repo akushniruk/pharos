@@ -24,6 +24,7 @@ Strategic hierarchy and external-facing promise (security-led, velocity secondar
 - **A path to governance-friendly workflows** — pair visibility with how your org already reviews and ships (handoffs, checklists, release discipline).
 - **Two ways to run it** — lightweight **daemon + web UI** for iteration; **Tauri desktop** when you want a packaged app and in-app docs.
 - **Docs and releases as the canonical story** — README + `docs/` + GitHub Releases stay the source of truth for the product. An optional **static marketing** shell lives under [`apps/landing-svelte/`](apps/landing-svelte/) for deploy experiments; it does not replace those surfaces.
+- **Browsing without cloning (example)** — [pharos-olive.vercel.app](https://pharos-olive.vercel.app/) hosts that marketing shell and a [`#/docs`](https://pharos-olive.vercel.app/#/docs) reader; **install and upgrades** still follow this README, `docs/`, and [Releases](https://github.com/akushniruk/pharos/releases).
 
 ## The problem
 
@@ -102,7 +103,7 @@ make daemon   # terminal 1 — http://127.0.0.1:4000
 make client   # terminal 2 — http://127.0.0.1:5173
 ```
 
-**CI:** [`.github/workflows/ci-e2e.yml`](.github/workflows/ci-e2e.yml) runs Playwright against `apps/client-solid` when that tree changes. [`.github/workflows/ci-desktop.yml`](.github/workflows/ci-desktop.yml) verifies desktop manifests and runs desktop Playwright tests when `apps/desktop` (or related release scripts) change. Rust daemon coverage is **`make test` locally** for now — there is no dedicated `apps/daemon-rs` workflow in `.github/workflows/` yet.
+**CI:** [`.github/workflows/ci-daemon-rs.yml`](.github/workflows/ci-daemon-rs.yml) runs `cargo test` and `cargo clippy` on `apps/daemon-rs` when that tree changes. [`.github/workflows/ci-e2e.yml`](.github/workflows/ci-e2e.yml) runs Playwright against `apps/client-solid` when that tree changes. [`.github/workflows/ci-desktop.yml`](.github/workflows/ci-desktop.yml) verifies desktop manifests and runs desktop Playwright tests when `apps/desktop` (or related release scripts) change. Local sanity: **`make test`** at repo root.
 
 <a id="desktop-development"></a>
 

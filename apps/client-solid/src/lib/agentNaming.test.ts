@@ -22,6 +22,18 @@ describe('agentNaming', () => {
 
   it('maps known agent type labels', () => {
     expect(mapAgentTypeLabel('team-reviewer')).toBe('Code Reviewer');
+    expect(mapAgentTypeLabel('code-reviewer')).toBe('Code Reviewer');
+    expect(mapAgentTypeLabel('reviewer')).toBe('Reviewer');
+    expect(mapAgentTypeLabel('architect')).toBe('Architect');
+    expect(mapAgentTypeLabel('coder')).toBe('Coder');
+    expect(mapAgentTypeLabel('security-architect')).toBe('Security Architect');
+    expect(mapAgentTypeLabel('researcher')).toBe('Researcher');
+    expect(mapAgentTypeLabel('optimizer')).toBe('Optimizer');
+    expect(mapAgentTypeLabel('documenter')).toBe('Documenter');
+    expect(mapAgentTypeLabel('queen-coordinator')).toBe('Queen Coordinator');
+    expect(mapAgentTypeLabel('memory-specialist')).toBe('Memory Specialist');
+    expect(mapAgentTypeLabel('perf_engineer')).toBe('Perf Engineer');
+    expect(mapAgentTypeLabel('tester')).toBe('Tester');
     expect(mapAgentTypeLabel('full-stack-orchestrator')).toBe('Full Stack Orchestrator');
     expect(mapAgentTypeLabel('general-purpose')).toBe('General Purpose');
   });

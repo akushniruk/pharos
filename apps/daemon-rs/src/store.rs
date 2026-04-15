@@ -482,7 +482,17 @@ fn mapped_agent_type_label(agent_type: &str) -> Option<String> {
         return None;
     }
     let mapped = match normalized.as_str() {
-        "team-reviewer" | "code-reviewer" | "reviewer" => Some("Code Reviewer"),
+        "team-reviewer" | "code-reviewer" => Some("Code Reviewer"),
+        "reviewer" => Some("Reviewer"),
+        "architect" => Some("Architect"),
+        "coder" => Some("Coder"),
+        "security-architect" => Some("Security Architect"),
+        "researcher" => Some("Researcher"),
+        "optimizer" => Some("Optimizer"),
+        "documenter" => Some("Documenter"),
+        "queen-coordinator" => Some("Queen Coordinator"),
+        "memory-specialist" => Some("Memory Specialist"),
+        "perf-engineer" => Some("Perf Engineer"),
         "pr-review-toolkit" => Some("PR Review Toolkit"),
         "full-stack-orchestrator" => Some("Full Stack Orchestrator"),
         "general-purpose" => Some("General Purpose"),

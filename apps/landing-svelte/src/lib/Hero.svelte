@@ -23,7 +23,7 @@
       <div class="hero__text">
         <div class="hero__badge" role="status">
           <span class="hero__badge-dot" aria-hidden="true"></span>
-          <span class="hero__badge-label">V0.1.0_ALPHA</span>
+          <span class="hero__badge-label">V0.0.2</span>
         </div>
 
         <h1 id="hero-title" class="hero__title">

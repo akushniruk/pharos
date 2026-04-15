@@ -1,0 +1,33 @@
+name: Daemon (Rust)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/daemon-rs/**"
+      - "rust-toolchain.toml"
+      - ".github/workflows/ci-daemon-rs.yml"
+  pull_request:
+    paths:
+      - "apps/daemon-rs/**"
+      - "rust-toolchain.toml"
+      - ".github/workflows/ci-daemon-rs.yml"
+
+jobs:
+  test-and-clippy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: apps/daemon-rs
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.88.0
+          components: clippy
+
+      - run: cargo test
+      - run: cargo clippy
