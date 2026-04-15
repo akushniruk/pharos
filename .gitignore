@@ -19,6 +19,7 @@ apps/landing-svelte/dist/
 # Cursor — machine-local hook state and MCP config
 .cursor/hooks/state/
 .cursor/mcp.json
+.cursor/settings.json
 
 # Local agent / marketing context (not for public repo)
 .agents/
