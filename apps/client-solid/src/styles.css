@@ -833,6 +833,36 @@ body {
   background: rgba(16, 185, 129, 0.2);
 }
 
+.event-stream-attention-repair {
+  flex-shrink: 0;
+  font-size: var(--text-sm);
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(251, 191, 36, 0.45);
+  background: rgba(245, 158, 11, 0.12);
+  color: rgba(253, 230, 138, 0.98);
+  cursor: pointer;
+  margin-left: auto;
+}
+
+.event-stream-attention-repair:hover:not(:disabled) {
+  border-color: rgba(251, 191, 36, 0.6);
+  background: rgba(245, 158, 11, 0.2);
+}
+
+.event-stream-attention-repair:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.event-stream-memory-panel-restore {
+  padding: 8px 12px 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
 .event-stream-attention-jump:hover,
 .event-stream-attention-secondary:hover {
   border-color: rgba(255, 255, 255, 0.22);

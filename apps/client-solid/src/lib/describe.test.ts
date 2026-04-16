@@ -146,6 +146,17 @@ describe('describeEvent', () => {
     expect(formatRuntimeLabel('cursor_agent')).toBe('Cursor');
   });
 
+  it('normalizes ollama runtime aliases to a single display label', () => {
+    expect(formatRuntimeLabel('ollama')).toBe('Ollama');
+    expect(formatRuntimeLabel('Ollama')).toBe('Ollama');
+    expect(formatRuntimeLabel('ollama-runtime')).toBe('Ollama');
+  });
+
+  it('normalizes gemma model strings to a Gemma runtime chip label', () => {
+    expect(formatRuntimeLabel('gemma3:4b')).toBe('Gemma');
+    expect(formatRuntimeLabel('Gemma 3')).toBe('Gemma');
+  });
+
   it('describes delegated work as a next action for non-technical readers', () => {
     const event: HookEvent = {
       source_app: 'demo',
@@ -178,5 +189,40 @@ describe('describeEvent', () => {
 
     expect(describeEvent(event)).toBe('Updating the plan');
     expect(describeEventDetail(event)).toBe('Cursor runtime');
+  });
+
+  it('describes CallMcpTool memory MCP when inner tool uses snake_case tool_name', () => {
+    const event: HookEvent = {
+      source_app: 'demo',
+      session_id: 'session-1',
+      hook_event_type: 'PreToolUse',
+      payload: {
+        tool_name: 'CallMcpTool',
+        tool_input: {
+          server: 'user-ai-memory-brain',
+          tool_name: 'memory_add',
+        },
+      },
+      timestamp: 1,
+    };
+
+    expect(describeEvent(event)).toBe('Memory brain: Store entry');
+  });
+
+  it('describes CallMcpTool Librarian MCP when server and tool are nested in arguments', () => {
+    const event: HookEvent = {
+      source_app: 'demo',
+      session_id: 'session-1',
+      hook_event_type: 'PreToolUse',
+      payload: {
+        tool_name: 'CallMcpTool',
+        tool_input: {
+          arguments: JSON.stringify({ server: 'user-librarian', toolName: 'memory_add' }),
+        },
+      },
+      timestamp: 1,
+    };
+
+    expect(describeEvent(event)).toBe('Librarian: Store entry');
   });
 });

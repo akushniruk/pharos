@@ -6,6 +6,7 @@ use serde::Deserialize;
 use thiserror::Error;
 
 use crate::api::AppOptions;
+use crate::memory_brain::MemoryBrainConfig;
 use crate::model::RuntimeSource;
 use crate::profiles::DiscoveryOptions;
 use crate::profiles::process::load_runtime_matchers;
@@ -19,6 +20,14 @@ const CODEX_HOME_ENV: &str = "PHAROS_CODEX_HOME";
 const GEMINI_HOME_ENV: &str = "PHAROS_GEMINI_HOME";
 const CURSOR_HOME_ENV: &str = "PHAROS_CURSOR_HOME";
 const RUNTIME_MATCHERS_PATH_ENV: &str = "PHAROS_RUNTIME_MATCHERS_PATH";
+const MEMORY_BRAIN_ENABLED_ENV: &str = "PHAROS_MEMORY_BRAIN_INTEGRATION";
+const MEMORY_BRAIN_URL_ENV: &str = "PHAROS_MEMORY_BRAIN_URL";
+const MEMORY_BRAIN_TIMEOUT_MS_ENV: &str = "PHAROS_MEMORY_BRAIN_TIMEOUT_MS";
+const MEMORY_BRAIN_POLL_MS_ENV: &str = "PHAROS_MEMORY_BRAIN_POLL_MS";
+const MEMORY_BRAIN_REPAIR_PATH_ENV: &str = "PHAROS_MEMORY_BRAIN_REPAIR_PATH";
+const MEMORY_BRAIN_OLLAMA_URL_ENV: &str = "PHAROS_MEMORY_BRAIN_OLLAMA_URL";
+const MEMORY_BRAIN_HELPER_MODEL_ENV: &str = "PHAROS_MEMORY_BRAIN_HELPER_MODEL";
+const OLLAMA_EVENT_WORKSPACE_ENV: &str = "PHAROS_OLLAMA_EVENT_WORKSPACE";
 const HOME_ENV: &str = "HOME";
 const APPDATA_ENV: &str = "APPDATA";
 const USERPROFILE_ENV: &str = "USERPROFILE";
@@ -43,6 +52,9 @@ pub struct Config {
     pub gemini_home: Option<PathBuf>,
     pub cursor_home: Option<PathBuf>,
     pub runtime_matchers_path: Option<PathBuf>,
+    pub memory_brain: MemoryBrainConfig,
+    /// Workspace id (`source_app`) for scanner-emitted Ollama `/api/ps` rows.
+    pub ollama_events_workspace: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
@@ -108,6 +120,22 @@ impl Config {
             .get(RUNTIME_MATCHERS_PATH_ENV)
             .map(PathBuf::from)
             .or_else(|| default_runtime_matchers_path(&env_map));
+        let memory_brain = MemoryBrainConfig {
+            enabled: env_truthy(env_map.get(MEMORY_BRAIN_ENABLED_ENV)),
+            base_url: env_map.get(MEMORY_BRAIN_URL_ENV).cloned(),
+            ollama_base_url: env_map.get(MEMORY_BRAIN_OLLAMA_URL_ENV).cloned(),
+            helper_model_hint: env_map.get(MEMORY_BRAIN_HELPER_MODEL_ENV).cloned(),
+            timeout_ms: env_u64(env_map.get(MEMORY_BRAIN_TIMEOUT_MS_ENV), 3_000),
+            poll_interval_ms: env_u64(env_map.get(MEMORY_BRAIN_POLL_MS_ENV), 15_000),
+            repair_path: env_map
+                .get(MEMORY_BRAIN_REPAIR_PATH_ENV)
+                .cloned()
+                .unwrap_or_else(|| "/ops/repair-graph".to_string()),
+        };
+        let ollama_events_workspace = env_map
+            .get(OLLAMA_EVENT_WORKSPACE_ENV)
+            .map(|raw| raw.trim().to_string())
+            .filter(|value| !value.is_empty());
 
         Ok(Self {
             host,
@@ -119,6 +147,8 @@ impl Config {
             gemini_home,
             cursor_home,
             runtime_matchers_path,
+            memory_brain,
+            ollama_events_workspace,
         })
     }
 
@@ -152,6 +182,39 @@ impl Config {
         if let Ok(runtime_matchers_path) = env::var(RUNTIME_MATCHERS_PATH_ENV) {
             env_map.insert(RUNTIME_MATCHERS_PATH_ENV.to_string(), runtime_matchers_path);
         }
+        if let Ok(memory_brain_enabled) = env::var(MEMORY_BRAIN_ENABLED_ENV) {
+            env_map.insert(MEMORY_BRAIN_ENABLED_ENV.to_string(), memory_brain_enabled);
+        }
+        if let Ok(memory_brain_url) = env::var(MEMORY_BRAIN_URL_ENV) {
+            env_map.insert(MEMORY_BRAIN_URL_ENV.to_string(), memory_brain_url);
+        }
+        if let Ok(memory_brain_timeout) = env::var(MEMORY_BRAIN_TIMEOUT_MS_ENV) {
+            env_map.insert(MEMORY_BRAIN_TIMEOUT_MS_ENV.to_string(), memory_brain_timeout);
+        }
+        if let Ok(memory_brain_poll) = env::var(MEMORY_BRAIN_POLL_MS_ENV) {
+            env_map.insert(MEMORY_BRAIN_POLL_MS_ENV.to_string(), memory_brain_poll);
+        }
+        if let Ok(memory_brain_repair) = env::var(MEMORY_BRAIN_REPAIR_PATH_ENV) {
+            env_map.insert(
+                MEMORY_BRAIN_REPAIR_PATH_ENV.to_string(),
+                memory_brain_repair,
+            );
+        }
+        if let Ok(memory_brain_ollama_url) = env::var(MEMORY_BRAIN_OLLAMA_URL_ENV) {
+            env_map.insert(
+                MEMORY_BRAIN_OLLAMA_URL_ENV.to_string(),
+                memory_brain_ollama_url,
+            );
+        }
+        if let Ok(memory_brain_helper_model) = env::var(MEMORY_BRAIN_HELPER_MODEL_ENV) {
+            env_map.insert(
+                MEMORY_BRAIN_HELPER_MODEL_ENV.to_string(),
+                memory_brain_helper_model,
+            );
+        }
+        if let Ok(ollama_event_ws) = env::var(OLLAMA_EVENT_WORKSPACE_ENV) {
+            env_map.insert(OLLAMA_EVENT_WORKSPACE_ENV.to_string(), ollama_event_ws);
+        }
         if let Ok(home) = env::var(HOME_ENV) {
             env_map.insert(HOME_ENV.to_string(), home);
         }
@@ -169,6 +232,9 @@ impl Config {
     pub fn app_options(&self) -> AppOptions {
         AppOptions {
             claude_sessions_dir: self.claude_sessions_dir.clone(),
+            memory_brain: Some(crate::memory_brain::MemoryBrainService::new(
+                self.memory_brain.clone(),
+            )),
         }
     }
 
@@ -180,8 +246,25 @@ impl Config {
             gemini_home: self.gemini_home.clone(),
             cursor_home: self.cursor_home.clone(),
             runtime_matchers: load_runtime_matchers(self.runtime_matchers_path.as_deref()),
+            ollama_base_url: self.memory_brain.ollama_base_url.clone(),
+            ollama_events_workspace: self.ollama_events_workspace.clone(),
         }
     }
+}
+
+fn env_truthy(value: Option<&String>) -> bool {
+    value.is_some_and(|raw| {
+        matches!(
+            raw.trim().to_lowercase().as_str(),
+            "1" | "true" | "yes" | "on"
+        )
+    })
+}
+
+fn env_u64(value: Option<&String>, default_value: u64) -> u64 {
+    value
+        .and_then(|raw| raw.trim().parse::<u64>().ok())
+        .unwrap_or(default_value)
 }
 
 fn default_claude_sessions_dir(env_map: &BTreeMap<String, String>) -> Option<PathBuf> {

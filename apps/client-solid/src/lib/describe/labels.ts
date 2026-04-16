@@ -48,6 +48,8 @@ export function formatRuntimeLabel(label?: string | null): string | undefined {
   if (normalized.includes('codex')) return 'Codex';
   if (normalized.includes('gemini')) return 'Gemini';
   if (normalized.includes('cursor')) return 'Cursor';
+  if (normalized.includes('gemma')) return 'Gemma';
+  if (normalized.includes('ollama')) return 'Ollama';
 
   return normalized
     .split(/\s+/)

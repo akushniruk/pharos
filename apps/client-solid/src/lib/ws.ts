@@ -1,5 +1,11 @@
 import { createSignal } from 'solid-js';
-import type { HookEvent, AgentEntry, Project } from './types';
+import type {
+  HookEvent,
+  AgentEntry,
+  Project,
+  MemoryBrainIntegrationStatus,
+  MemoryBrainActionEvent,
+} from './types';
 import { formatRuntimeLabel } from './describe';
 
 const SERVER_PORT = import.meta.env.VITE_API_PORT || '4000';
@@ -14,11 +20,38 @@ const WS_URL =
 export const [events, setEvents] = createSignal<HookEvent[]>([]);
 export const [agents, setAgents] = createSignal<AgentEntry[]>([]);
 export const [projectSnapshots, setProjectSnapshots] = createSignal<Project[]>([]);
+export const [memoryBrainStatus, setMemoryBrainStatus] =
+  createSignal<MemoryBrainIntegrationStatus | null>(null);
+export const [memoryBrainActionEvents, setMemoryBrainActionEvents] = createSignal<MemoryBrainActionEvent[]>([]);
 export const [connected, setConnected] = createSignal(false);
 export const [connectionState, setConnectionState] = createSignal<'connecting' | 'connected' | 'disconnected'>('connecting');
 export const [hasStreamData, setHasStreamData] = createSignal(false);
 
 const MAX_EVENTS = 2000;
+const MAX_MEMORY_ACTIONS = 40;
+
+function isSkippableRepairGraphFailure(payload: MemoryBrainActionEvent): boolean {
+  if (payload.action !== 'repair_graph' || payload.ok !== false) {
+    return false;
+  }
+  const err = String((payload as { error?: unknown }).error ?? '').toLowerCase();
+  return (
+    err.includes('integration disabled')
+    || err.includes('not configured')
+    || err.includes('base url not configured')
+  );
+}
+
+function pruneNoisyRepairFailures(actions: MemoryBrainActionEvent[]): MemoryBrainActionEvent[] {
+  return actions.filter((a) => !isSkippableRepairGraphFailure(a));
+}
+
+function applyMemoryBrainStatus(status: MemoryBrainIntegrationStatus | null) {
+  setMemoryBrainStatus(status);
+  if (status && (status.state === 'disabled' || status.state === 'not_configured')) {
+    setMemoryBrainActionEvents((prev) => pruneNoisyRepairFailures(prev));
+  }
+}
 
 let ws: WebSocket | null = null;
 
@@ -61,25 +94,40 @@ export function connectWs() {
     try {
       setHasStreamData(true);
       const msg = JSON.parse(e.data);
-      if (msg.type === 'initial') {
-        const initial = Array.isArray(msg.data) ? msg.data : [];
-        setEvents(initial.slice(-MAX_EVENTS));
-      } else if (msg.type === 'projects') {
-        setProjectSnapshots(normalizeProjects(msg.data));
-      } else if (msg.type === 'event') {
-        setEvents((prev) => {
-          const next = [...prev, msg.data];
-          return next.length > MAX_EVENTS ? next.slice(-MAX_EVENTS) : next;
-        });
-      } else if (msg.type === 'agent_registry') {
-        if (Array.isArray(msg.data)) {
-          setAgents(msg.data);
-        }
-      }
+      applyStreamMessage(msg);
     } catch (err) {
       console.error('[ws] Failed to parse message:', err);
     }
   };
+}
+
+export function applyStreamMessage(msg: any) {
+  if (msg.type === 'initial') {
+    const initial = Array.isArray(msg.data) ? msg.data : [];
+    setEvents(initial.slice(-MAX_EVENTS));
+  } else if (msg.type === 'projects') {
+    setProjectSnapshots(normalizeProjects(msg.data));
+  } else if (msg.type === 'event') {
+    setEvents((prev) => {
+      const next = [...prev, msg.data];
+      return next.length > MAX_EVENTS ? next.slice(-MAX_EVENTS) : next;
+    });
+  } else if (msg.type === 'agent_registry') {
+    if (Array.isArray(msg.data)) {
+      setAgents(msg.data);
+    }
+  } else if (msg.type === 'memory_brain_status') {
+    applyMemoryBrainStatus((msg.data ?? null) as MemoryBrainIntegrationStatus | null);
+  } else if (msg.type === 'memory_brain_action' && msg.data && typeof msg.data === 'object') {
+    const actionPayload = msg.data as MemoryBrainActionEvent;
+    if (isSkippableRepairGraphFailure(actionPayload)) {
+      return;
+    }
+    setMemoryBrainActionEvents((prev) => {
+      const next = [...prev, actionPayload];
+      return next.length > MAX_MEMORY_ACTIONS ? next.slice(-MAX_MEMORY_ACTIONS) : next;
+    });
+  }
 }
 
 export async function fetchAgents() {
@@ -111,6 +159,19 @@ export async function fetchProjects() {
     setProjectSnapshots(normalizeProjects(data));
   } catch (error) {
     console.error('[ws] Failed to fetch projects:', error);
+  }
+}
+
+export async function fetchMemoryBrainStatus() {
+  try {
+    const res = await fetch(`${API_BASE}/api/integrations/memory-brain`);
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data && typeof data === 'object') {
+      applyMemoryBrainStatus(data as MemoryBrainIntegrationStatus);
+    }
+  } catch (error) {
+    console.error('[ws] Failed to fetch memory-brain status:', error);
   }
 }
 

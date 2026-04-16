@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
+use reqwest::Client;
 use serde_json::json;
 use tokio::sync::broadcast;
 use tokio::time::interval;
@@ -21,8 +22,54 @@ use super::helpers::{
     gemini_log_offset_key, load_i64_offset, load_u64_offset, load_usize_offset, now_millis,
     observed_capabilities, transcript_offset_key, workspace_id_from_cwd,
 };
+use super::ollama::{OllamaScannerState, poll_ollama_running_models};
 use super::session::{TrackedSession, should_remove_after_missed_discovery};
 use super::tailing::{scan_subagents, tail_codex_activity, tail_cursor_activity, tail_gemini_activity, tail_transcript};
+
+/// When `PHAROS_OLLAMA_EVENT_WORKSPACE` is unset, attach Ollama `/api/ps` rows to the same
+/// `source_app` as the hottest live session (usually the Cursor project you are watching),
+/// so they appear under the current project filter instead of only under `integrations`.
+fn resolve_ollama_workspace_id(
+    discovery_options: &DiscoveryOptions,
+    live_state: &LiveState,
+    tracked: &HashMap<String, TrackedSession>,
+) -> String {
+    if let Some(raw) = discovery_options.ollama_events_workspace.as_deref() {
+        let trimmed = raw.trim();
+        if !trimmed.is_empty() {
+            return trimmed.to_string();
+        }
+    }
+    if let Ok(sessions) = live_state.list_sessions() {
+        for summary in &sessions {
+            let app = summary.source_app.trim();
+            if !app.is_empty() && app != "unknown" {
+                return app.to_string();
+            }
+        }
+    }
+
+    let mut from_cursor: Vec<String> = tracked
+        .values()
+        .filter(|ts| ts.session.runtime_source == RuntimeSource::CursorAgent)
+        .map(|ts| workspace_id_from_cwd(&ts.session.cwd))
+        .filter(|ws| ws.as_str() != "unknown")
+        .collect();
+    from_cursor.sort();
+    from_cursor.dedup();
+    if let Some(ws) = from_cursor.first() {
+        return ws.clone();
+    }
+
+    for ts in tracked.values() {
+        let ws = workspace_id_from_cwd(&ts.session.cwd);
+        if ws != "unknown" {
+            return ws;
+        }
+    }
+
+    "integrations".to_string()
+}
 
 pub async fn run_scanner(
     store: Store,
@@ -44,6 +91,8 @@ pub async fn run_scanner(
     let mut tracked: HashMap<String, TrackedSession> = HashMap::new();
     let mut tick = interval(Duration::from_secs(1));
     let mut ticks_since_discovery = usize::MAX;
+    let http = Client::new();
+    let mut ollama_state = OllamaScannerState::default();
 
     loop {
         tick.tick().await;
@@ -240,6 +289,21 @@ pub async fn run_scanner(
                     _ => {}
                 }
             }
+        }
+
+        if let Some(base) = discovery_options.ollama_base_url.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+            let ollama_workspace =
+                resolve_ollama_workspace_id(&discovery_options, &live_state, &tracked);
+            poll_ollama_running_models(
+                &http,
+                base,
+                &ollama_workspace,
+                &store,
+                &live_state,
+                &sender,
+                &mut ollama_state,
+            )
+            .await;
         }
     }
 }

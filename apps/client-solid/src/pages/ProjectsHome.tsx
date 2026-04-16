@@ -4,6 +4,7 @@ import type { Project } from '../lib/types';
 import { projects, selectProject } from '../lib/store';
 import { connectionState, hasStreamData } from '../lib/ws';
 import { timeAgo } from '../lib/time';
+import { friendlyProjectName } from '../lib/projectDisplayName';
 import {
   agentAvatarDataUri,
   projectFallbackIconDataUri,
@@ -86,6 +87,7 @@ export default function ProjectsHome() {
     return orderedProjects().filter((project) => {
       const fields = [
         project.name,
+        friendlyProjectName(project.name),
         project.summary || '',
         project.runtimeLabels.join(' '),
       ].join(' ').toLowerCase();
@@ -189,13 +191,18 @@ export default function ProjectsHome() {
                         alt=""
                         class="h-8 w-8 object-cover"
                         onError={(e) => {
-                          e.currentTarget.src = projectFallbackIconDataUri(p.name);
+                          e.currentTarget.src = projectFallbackIconDataUri(friendlyProjectName(p.name));
                           e.currentTarget.onerror = null;
                         }}
                       />
                     </div>
                     <div class="flex min-w-0 flex-col gap-0.5">
-                      <span class="overflow-hidden text-ellipsis whitespace-nowrap text-[17px] font-semibold">{p.name}</span>
+                      <span
+                        title={p.name !== friendlyProjectName(p.name) ? p.name : undefined}
+                        class="overflow-hidden text-ellipsis whitespace-nowrap text-[17px] font-semibold"
+                      >
+                        {friendlyProjectName(p.name)}
+                      </span>
                       <span class="text-[var(--text-sm)] uppercase tracking-[0.06em] text-[var(--text-secondary)]">
                         Project
                       </span>

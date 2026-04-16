@@ -80,3 +80,101 @@ pub struct AgentSnapshot {
     pub is_active: bool,
     pub parent_id: Option<String>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum IntegrationState {
+    Disabled,
+    NotConfigured,
+    Healthy,
+    Degraded,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ConnectivityState {
+    Online,
+    Offline,
+    Degraded,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum SinkHealth {
+    Ok,
+    Warn,
+    Fail,
+    Unknown,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct MemoryBrainHelperStatus {
+    pub enabled: bool,
+    pub model: Option<String>,
+    pub last_ok_at: Option<i64>,
+    pub last_error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct MemoryBrainSinkStatus {
+    pub jsonl: SinkHealth,
+    pub vault: SinkHealth,
+    pub postgres: SinkHealth,
+    pub neo4j: SinkHealth,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct MemoryBrainActivityStatus {
+    pub recent_writes_count: usize,
+    pub last_write_at: Option<i64>,
+    pub last_graph_write_at: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct MemoryBrainIntegrationStatus {
+    pub state: IntegrationState,
+    pub connectivity: ConnectivityState,
+    pub status_source: String,
+    pub helper: MemoryBrainHelperStatus,
+    pub sinks: MemoryBrainSinkStatus,
+    pub activity: MemoryBrainActivityStatus,
+    pub observed_mcp_activity: bool,
+    pub updated_at: i64,
+}
+
+impl MemoryBrainIntegrationStatus {
+    #[must_use]
+    pub fn disabled(updated_at: i64) -> Self {
+        Self {
+            state: IntegrationState::Disabled,
+            connectivity: ConnectivityState::Offline,
+            status_source: "config".to_string(),
+            helper: MemoryBrainHelperStatus {
+                enabled: false,
+                model: None,
+                last_ok_at: None,
+                last_error: None,
+            },
+            sinks: MemoryBrainSinkStatus {
+                jsonl: SinkHealth::Unknown,
+                vault: SinkHealth::Unknown,
+                postgres: SinkHealth::Unknown,
+                neo4j: SinkHealth::Unknown,
+            },
+            activity: MemoryBrainActivityStatus {
+                recent_writes_count: 0,
+                last_write_at: None,
+                last_graph_write_at: None,
+            },
+            observed_mcp_activity: false,
+            updated_at,
+        }
+    }
+
+    #[must_use]
+    pub fn not_configured(updated_at: i64) -> Self {
+        let mut value = Self::disabled(updated_at);
+        value.state = IntegrationState::NotConfigured;
+        value
+    }
+}

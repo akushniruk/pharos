@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-04-16
+
+### Added
+
+- **Ollama** runtime observation: process classification, `/api/ps` polling, session signals, and UI/runtime chips aligned with Codex-style discovery.
+- **Memory brain** integration: daemon-side status, optional Ollama helper probe, client panel with operator actions, noise filtering for disabled integrations, and docs (`docs/memory-brain-integration.md`).
+- **Cursor CallMcpTool** normalization (`cursor_callmcp`): supports `tool_name` vs `toolName`, nested `arguments`, **Librarian** MCP server labeling, and reliable **Memory brain** detection for `memory_brain` observe paths.
+
+### Changed
+
+- Friendlier **workspace display names** in the dashboard (sidebar, titles, breadcrumbs) via `friendlyProjectName` instead of raw folder slugs.
+- **Attention / “needs attention”** heuristics ignore benign editor `PreToolUse` tools (for example ApplyPatch / StrReplace) so routine edits are not treated as stalled work.
+- **Agent naming** avoids redundant runtime prefixes when the role already includes the runtime name.
+
+### Fixed
+
+- MCP memory tool calls no longer disappear behind generic **Team** / **Cursor** row identity when Cursor sends alternate JSON shapes for `CallMcpTool`.
+
+[0.2.0]: https://github.com/akushniruk/pharos/releases/tag/v0.2.0
+
 ## [0.1.0] - 2026-04-07
 
 First public release of Pharos — AI agent observability for your terminal.

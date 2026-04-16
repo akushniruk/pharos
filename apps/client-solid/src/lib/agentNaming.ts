@@ -180,6 +180,10 @@ function withRuntime(runtime: string | undefined, role: string): string {
   if (!runtime) return role;
   const rt = runtime.replace(/\s+/g, ' ').trim();
   if (!rt || rt.toLowerCase() === role.toLowerCase()) return role;
+  const r = role.trim();
+  const rtl = rt.toLowerCase();
+  const rl = r.toLowerCase();
+  if (rl === rtl || rl.startsWith(`${rtl} `)) return r;
   return `${rt} (${role})`;
 }
 

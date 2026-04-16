@@ -6,11 +6,13 @@ import type {
   AgentInfo,
   AgentEntry,
   HookEvent,
+  MemoryRuntimeStatus,
   ViewedChangesSnapshot,
   ActivityTone,
 } from '../types';
 import { agents, events, projectSnapshots } from '../ws';
 import { describeEvent, describeEventDetail, formatRuntimeLabel } from '../describe';
+import { friendlyProjectName } from '../projectDisplayName';
 import {
   mapAgentTypeLabel,
   resolveEventAgentName,
@@ -24,6 +26,7 @@ import {
   buildRecentChangesSnapshot,
   buildViewedChangesSnapshot,
   deriveRuntimeBridgeCandidates,
+  buildMemoryRuntimeStatus,
   getScopeKey,
   getScopedEvents,
   latestEventOfType,
@@ -45,6 +48,7 @@ export {
   buildProjectFocusSnapshot,
   buildRecentChangesSnapshot,
   buildViewedChangesSnapshot,
+  buildMemoryRuntimeStatus,
   resolveActivityState,
   resolveConservativeStatusDetail,
   deriveRuntimeBridgeCandidates,
@@ -99,12 +103,10 @@ function saveAttentionBannerDismissed(keys: Set<string>) {
   }
 }
 
-/** Fingerprints include live fields from the daemon so dismiss resets when status or events change. */
+/** Stable key so "Solved" stays dismissed for same session+tone. */
 export function attentionBannerFingerprint(projectName: string, session: SessionInfo): string {
   const tone = session.statusTone ?? '';
-  const detail =
-    session.statusDetail?.trim() || session.summary?.trim() || '';
-  return `${projectName}\u001f${session.sessionId}\u001f${tone}\u001f${detail}\u001f${session.lastEventAt}`;
+  return `${projectName}\u001f${session.sessionId}\u001f${tone}`;
 }
 
 export const [dismissedAttentionBanners, setDismissedAttentionBanners] = createSignal<
@@ -763,7 +765,7 @@ function resolveSessionLabel(evts: HookEvent[], workspaceName: string): string {
   );
   if (!isGenericName(mainName)) return mainName;
 
-  return workspaceName;
+  return friendlyProjectName(workspaceName);
 }
 
 function resolveNextAction(evts: HookEvent[]): string | undefined {
@@ -1168,6 +1170,12 @@ export const selectedViewedChangesSnapshot = createMemo((): ViewedChangesSnapsho
   const viewedAt = viewedScopes()[scopeKey] ?? null;
 
   return buildViewedChangesSnapshot(project, session, events(), viewedAt);
+});
+
+export const selectedMemoryRuntimeStatus = createMemo((): MemoryRuntimeStatus | null => {
+  const project = selectedProjectSnapshot();
+  if (!project) return null;
+  return buildMemoryRuntimeStatus(project, selectedSessionSnapshot(), events());
 });
 
 /** Get events filtered by selection signals */

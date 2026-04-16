@@ -32,6 +32,11 @@ pub struct DiscoveryOptions {
     pub gemini_home: Option<PathBuf>,
     pub cursor_home: Option<PathBuf>,
     pub runtime_matchers: Vec<RuntimeMatcherConfig>,
+    /// When set, scanner polls Ollama `GET /api/ps` and emits `RuntimeSource::Ollama` events.
+    pub ollama_base_url: Option<String>,
+    /// Override `source_app` / workspace for Ollama `/api/ps` rows. When unset, the scanner
+    /// follows the hottest live session's `source_app`, then tracked Cursor cwd, else `integrations`.
+    pub ollama_events_workspace: Option<String>,
 }
 
 pub fn discover_all_sessions(options: &DiscoveryOptions) -> Vec<DetectedSession> {

@@ -14,6 +14,7 @@ import {
 } from '../lib/describe';
 import { getEventTypeLabel, getEventTypeBgColor, getEventTypeTextColor } from '../lib/colors';
 import { resolveEventAgentName } from '../lib/agentNaming';
+import { describeMemoryOperation, extractMcpToolCall } from '../lib/describe/text';
 
 interface Props {
   event: HookEvent;
@@ -23,20 +24,37 @@ interface Props {
 }
 
 function resolveAgentName(e: HookEvent): string {
+  if (e.payload?.producer === 'pharos_ollama_scanner') {
+    const models = e.payload?.running_models;
+    if (Array.isArray(models)) {
+      for (const m of models) {
+        if (typeof m === 'string' && m.toLowerCase().includes('gemma')) {
+          const compact = m.replace(/:/g, ' ');
+          return compact.length > 24 ? `${compact.slice(0, 23)}…` : `Gemma · ${compact}`;
+        }
+      }
+    }
+    return 'Ollama';
+  }
+  if (e.payload?.producer === 'pharos_ollama_probe') {
+    const raw = typeof e.payload?.model === 'string' ? e.payload.model.trim() : '';
+    if (raw && raw.toLowerCase().includes('gemma')) {
+      const compact = raw.replace(/:/g, ' ');
+      return compact.length > 24 ? `${compact.slice(0, 23)}…` : `Gemma · ${compact}`;
+    }
+    return 'Ollama';
+  }
   const isMainSessionEvent = !e.agent_id;
   const looksLikeOrchestrationEvent =
     e.hook_event_type === 'SubagentStart'
     || (e.hook_event_type === 'PreToolUse' && e.payload?.tool_name === 'Agent');
   const fallback = isMainSessionEvent
-    ? (looksLikeOrchestrationEvent ? 'Orchestrator' : 'Session')
+    ? (looksLikeOrchestrationEvent ? 'Orchestrator' : 'Team')
     : 'Agent';
   const resolved = resolveEventAgentName(e, fallback).trim();
-  const sourceApp = (e.source_app || '').trim().toLowerCase();
-  const normalized = resolved.toLowerCase();
 
   // Keep row identity stable and avoid leaking project names or long task text.
   if (!resolved) return fallback;
-  if (sourceApp && normalized === sourceApp) return fallback;
   if (resolved.length > 28 || resolved.split(/\s+/).length > 3 || resolved.includes(':')) {
     return fallback;
   }
@@ -78,6 +96,23 @@ function resolveSummaryKind(e: HookEvent): string | undefined {
   return undefined;
 }
 
+function resolveMemorySignalTag(e: HookEvent): string | undefined {
+  if (e.hook_event_type !== 'PreToolUse') return undefined;
+  const toolName = typeof e.payload?.tool_name === 'string' ? e.payload.tool_name : '';
+  if (toolName !== 'CallMcpTool') return undefined;
+  const toolInput = e.payload?.tool_input;
+  if (!toolInput || typeof toolInput !== 'object' || Array.isArray(toolInput)) return undefined;
+  const { server, toolName: mcpToolName } = extractMcpToolCall(toolInput as Record<string, unknown>);
+  const serverLc = (server || '').toLowerCase();
+  const memoryServer =
+    serverLc === 'ai-memory-brain'
+    || serverLc === 'user-ai-memory-brain'
+    || serverLc.endsWith('ai-memory-brain')
+    || serverLc.includes('librarian');
+  if (!memoryServer && !(mcpToolName || '').startsWith('memory_')) return undefined;
+  return describeMemoryOperation(mcpToolName) || 'Memory operation';
+}
+
 export default function EventRow(props: Props) {
   const [expanded, setExpanded] = createSignal(false);
   const [payloadView, setPayloadView] = createSignal<'parsed' | 'raw'>('parsed');
@@ -97,6 +132,7 @@ export default function EventRow(props: Props) {
   const simpleSummary = () => mergeSimpleRowSummary(e());
   const payloadJson = () => JSON.stringify(e().payload, null, 2);
   const payloadEntries = () => sortedPayloadEntries((e().payload as Record<string, unknown>) ?? {});
+  const memorySignalTag = () => resolveMemorySignalTag(e());
 
   const copyJson = (ev: MouseEvent) => {
     ev.stopPropagation();
@@ -165,6 +201,11 @@ export default function EventRow(props: Props) {
           <Show when={props.detailed && isTool()}>
             <span class="event-row-tool" title={e().payload?.tool_name}>
               {e().payload?.tool_name}
+            </span>
+          </Show>
+          <Show when={props.detailed && memorySignalTag()}>
+            <span class="event-row-tool" title={memorySignalTag()}>
+              {memorySignalTag()}
             </span>
           </Show>
         </div>

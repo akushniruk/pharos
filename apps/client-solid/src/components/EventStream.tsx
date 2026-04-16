@@ -24,12 +24,17 @@ import {
   selectSession,
   type LogsAttentionAlert,
 } from '../lib/store';
-import { extractToolNameFromAttentionDetail } from '../lib/attentionHints';
+import { extractAttentionTargetFromDetail } from '../lib/attentionHints';
 import { getEventTypeLabel } from '../lib/colors';
 import SearchBar, { searchQuery } from './SearchBar';
 import EventRow from './EventRow';
 import ViewModeTabs from './ViewModeTabs';
-import { connectionState, hasStreamData } from '../lib/ws';
+import {
+  connectionState,
+  hasStreamData,
+  memoryBrainActionEvents,
+  memoryBrainStatus,
+} from '../lib/ws';
 import type { HookEvent } from '../lib/types';
 import { formatRuntimeLabel } from '../lib/describe';
 import { API_BASE } from '../lib/ws';
@@ -41,6 +46,29 @@ import {
   searchableDisplayLine,
 } from '../widgets/event-stream/streamHelpers';
 
+const MEMORY_RUNTIME_PANEL_DISMISS_KEY = 'pharos.dismissMemoryRuntimePanel';
+
+const FALLBACK_MEMORY_STATUS = {
+  state: 'disabled',
+  connectivity: 'offline',
+  status_source: 'config',
+  helper: {
+    enabled: false,
+    model: 'n/a',
+  },
+  sinks: {
+    jsonl: 'unknown',
+    vault: 'unknown',
+    postgres: 'unknown',
+    neo4j: 'unknown',
+  },
+  activity: {
+    recent_writes_count: 0,
+  },
+  observed_mcp_activity: false,
+  updated_at: 0,
+} as const;
+
 interface EventStreamProps {
   viewMode: Accessor<'logs' | 'graph'>;
   onViewModeChange: (mode: 'logs' | 'graph') => void;
@@ -51,6 +79,7 @@ export default function EventStream(props: EventStreamProps) {
   const [detailed, setDetailed] = createSignal(false);
   const [stick, setStick] = createSignal(true);
   const [showFilters, setShowFilters] = createSignal(false);
+  const [memoryRuntimePanelDismissed, setMemoryRuntimePanelDismissed] = createSignal(false);
   const [hiddenTypes, setHiddenTypes] = createSignal<Set<string>>(new Set(SIMPLE_HIDDEN));
   const [hiddenRuntimes, setHiddenRuntimes] = createSignal<Set<string>>(new Set());
   const [backendMatches, setBackendMatches] = createSignal<HookEvent[] | null>(null);
@@ -60,6 +89,56 @@ export default function EventStream(props: EventStreamProps) {
   let attentionCopyResetTimer: number | undefined;
   const focus = createMemo(() => selectedProjectFocusSnapshot());
   const project = createMemo(() => selectedProjectSnapshot());
+  const runtimeStatus = createMemo(() => memoryBrainStatus() ?? FALLBACK_MEMORY_STATUS);
+  const latestMemoryAction = createMemo(() => {
+    const actions = memoryBrainActionEvents();
+    return actions.length > 0 ? actions[actions.length - 1] : null;
+  });
+  const repairGraphBlocked = createMemo(() => {
+    const state = memoryBrainStatus()?.state ?? FALLBACK_MEMORY_STATUS.state;
+    return state === 'disabled' || state === 'not_configured';
+  });
+  onMount(() => {
+    try {
+      if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem(MEMORY_RUNTIME_PANEL_DISMISS_KEY) === '1') {
+        setMemoryRuntimePanelDismissed(true);
+      }
+    } catch {
+      /* private mode or no storage */
+    }
+  });
+  const dismissMemoryRuntimePanel = () => {
+    try {
+      sessionStorage.setItem(MEMORY_RUNTIME_PANEL_DISMISS_KEY, '1');
+    } catch {
+      /* ignore */
+    }
+    setMemoryRuntimePanelDismissed(true);
+  };
+  const showMemoryRuntimePanel = () => {
+    try {
+      sessionStorage.removeItem(MEMORY_RUNTIME_PANEL_DISMISS_KEY);
+    } catch {
+      /* ignore */
+    }
+    setMemoryRuntimePanelDismissed(false);
+  };
+  const invokeMemoryAction = async (
+    action: 'refresh' | 'sink-recheck' | 'repair-graph',
+    confirmation?: string,
+  ) => {
+    if (action === 'repair-graph' && repairGraphBlocked()) {
+      return;
+    }
+    if (confirmation && !window.confirm(confirmation)) return;
+    try {
+      await fetch(`${API_BASE}/api/integrations/memory-brain/actions/${action}`, {
+        method: 'POST',
+      });
+    } catch (error) {
+      console.error('[memory-brain] action failed', action, error);
+    }
+  };
 
   const copyAttentionSummary = async (alert: LogsAttentionAlert) => {
     const proj = project()?.name ?? '';
@@ -168,7 +247,8 @@ export default function EventStream(props: EventStreamProps) {
     const map = new Map<string, 'attention' | 'blocked'>();
     const events = displayEvents();
     for (const alert of logsAttentionAlerts()) {
-      const toolHint = extractToolNameFromAttentionDetail(alert.detail);
+      const targetHint = extractAttentionTargetFromDetail(alert.detail);
+      const toolHint = targetHint.toolName;
       let row: HookEvent | undefined;
 
       if (toolHint) {
@@ -179,7 +259,21 @@ export default function EventStream(props: EventStreamProps) {
           const name = ev.payload?.tool_name;
           if (typeof name !== 'string') return false;
           const n = name.toLowerCase();
-          return n === hintLower || n.includes(hintLower) || hintLower.includes(n);
+          const toolMatches = n === hintLower || n.includes(hintLower) || hintLower.includes(n);
+          if (!toolMatches) return false;
+          if (hintLower !== 'callmcptool') return true;
+          if (!targetHint.mcpServer && !targetHint.mcpTool) return true;
+          const server = String(ev.payload?.tool_input?.server || '').toLowerCase();
+          const mcpTool = String(
+            ev.payload?.tool_input?.toolName || ev.payload?.tool_input?.tool_name || '',
+          ).toLowerCase();
+          const serverMatches = targetHint.mcpServer
+            ? server === targetHint.mcpServer.toLowerCase()
+            : true;
+          const toolNameMatches = targetHint.mcpTool
+            ? mcpTool === targetHint.mcpTool.toLowerCase()
+            : true;
+          return serverMatches && toolNameMatches;
         });
       }
 
@@ -448,6 +542,114 @@ export default function EventStream(props: EventStreamProps) {
               </div>
             )}
           </For>
+        </div>
+      </Show>
+
+      <Show when={props.viewMode() === 'logs' && memoryRuntimePanelDismissed()}>
+        <div class="event-stream-memory-panel-restore">
+          <button
+            type="button"
+            class="event-stream-attention-secondary"
+            onClick={() => showMemoryRuntimePanel()}
+          >
+            Show memory runtime panel
+          </button>
+        </div>
+      </Show>
+
+      <Show when={props.viewMode() === 'logs' && !memoryRuntimePanelDismissed()}>
+        <div class="event-stream-attention-wrap" role="status" aria-label="Memory runtime status">
+          <div class="event-stream-attention-banner is-attention">
+            <div class="event-stream-attention-head">
+              <Icon path={exclamationTriangle} class="event-stream-attention-icon" />
+              <div class="event-stream-attention-copy">
+                <div class="event-stream-attention-title">
+                  <span class="event-stream-attention-headline">Memory runtime signal</span>
+                  <span class="event-stream-attention-session">ai-memory-brain</span>
+                  <span class="event-stream-attention-project">{project()?.name}</span>
+                </div>
+                <p class="event-stream-attention-detail">
+                  state: {runtimeStatus().state} · connectivity: {runtimeStatus().connectivity}
+                </p>
+              </div>
+            </div>
+            <ul class="event-stream-attention-suggestions">
+              <li class="event-stream-attention-suggestion">
+                source: {runtimeStatus().status_source}
+              </li>
+              <li class="event-stream-attention-suggestion">
+                helper: {runtimeStatus().helper.enabled ? 'enabled' : 'disabled'} · model: {runtimeStatus().helper.model || 'n/a'}
+              </li>
+              <li class="event-stream-attention-suggestion">
+                sinks — jsonl: {runtimeStatus().sinks.jsonl}, vault: {runtimeStatus().sinks.vault}, postgres: {runtimeStatus().sinks.postgres}, neo4j: {runtimeStatus().sinks.neo4j}
+              </li>
+              <li class="event-stream-attention-suggestion">
+                mcp observed: {runtimeStatus().observed_mcp_activity ? 'yes' : 'no'} · recent writes: {runtimeStatus().activity.recent_writes_count}
+              </li>
+              <Show when={latestMemoryAction()}>
+                <li class="event-stream-attention-suggestion">
+                  last action: {latestMemoryAction()!.action} · {latestMemoryAction()!.ok ? 'ok' : 'failed'}
+                  <Show when={latestMemoryAction()!.error}>
+                    {` (${latestMemoryAction()!.error})`}
+                  </Show>
+                </li>
+              </Show>
+            </ul>
+            <div class="event-stream-attention-cta-row">
+              <button
+                type="button"
+                class="event-stream-attention-jump"
+                onClick={() => void invokeMemoryAction('refresh')}
+              >
+                Refresh health
+              </button>
+              <button
+                type="button"
+                class="event-stream-attention-secondary"
+                onClick={() => void invokeMemoryAction('sink-recheck')}
+              >
+                Sink recheck
+              </button>
+              <button
+                type="button"
+                class="event-stream-attention-secondary"
+                title="Hide this panel until you choose to show it again"
+                aria-label="Dismiss memory runtime panel"
+                onClick={() => dismissMemoryRuntimePanel()}
+              >
+                Dismiss panel
+              </button>
+              <button
+                type="button"
+                class="event-stream-attention-repair"
+                disabled={repairGraphBlocked()}
+                title={repairGraphBlocked()
+                  ? 'Enable PHAROS_MEMORY_BRAIN_INTEGRATION and set PHAROS_MEMORY_BRAIN_URL to run repair.'
+                  : 'Run graph repair (may trigger maintenance on memory brain)'}
+                onClick={() =>
+                  void invokeMemoryAction(
+                    'repair-graph',
+                    'Run graph repair now? This can trigger maintenance work on memory brain.',
+                  )}
+              >
+                Repair graph
+              </button>
+            </div>
+            <Show when={memoryBrainActionEvents().length > 1}>
+              <ul class="event-stream-attention-suggestions">
+                <For each={memoryBrainActionEvents().slice(-4).reverse()}>
+                  {(action) => (
+                    <li class="event-stream-attention-suggestion">
+                      {action.action} · {action.ok ? 'ok' : 'failed'}
+                      <Show when={action.action === 'refresh' && action.ok}>
+                        {` · helper: ${(action as any).helper_model || ((action as any).helper_enabled ? 'enabled' : 'n/a')}`}
+                      </Show>
+                    </li>
+                  )}
+                </For>
+              </ul>
+            </Show>
+          </div>
         </div>
       </Show>
 

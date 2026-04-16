@@ -11,6 +11,7 @@ import {
   selectAgent,
   sidebarSessionActivityTone,
 } from '../lib/store';
+import { friendlyProjectName } from '../lib/projectDisplayName';
 import {
   displayedProjectSessions,
   friendlyProjectSummary,
@@ -58,7 +59,7 @@ function projectInitial(name: string): string {
 
 function projectCollapsedTitle(project: ReturnType<typeof projects>[number]): string {
   const state = project.isActive ? 'Active' : 'Idle';
-  return `${project.name} · ${state} · ${project.sessions.length} sessions`;
+  return `${friendlyProjectName(project.name)} · ${state} · ${project.sessions.length} sessions`;
 }
 
 function sortAgentsForSidebar(agents: AgentInfo[]): AgentInfo[] {
@@ -240,7 +241,7 @@ export default function Sidebar(props: SidebarProps) {
               return (
                 <button
                   title={projectCollapsedTitle(p)}
-                  aria-label={`Open project ${p.name}`}
+                  aria-label={`Open project ${friendlyProjectName(p.name)}`}
                   style={[
                     'background:none;cursor:pointer;padding:0;line-height:1;display:flex;align-items:center;justify-content:center;position:relative;',
                     'width:24px;height:24px;border-radius:7px;border:1px solid var(--border);font-size:var(--text-sm);font-weight:700;',
@@ -256,7 +257,7 @@ export default function Sidebar(props: SidebarProps) {
                     selectProject(p.name);
                   }}
                 >
-                  <span>{projectInitial(p.name)}</span>
+                  <span>{projectInitial(friendlyProjectName(p.name))}</span>
                   <span
                     style={[
                       'position:absolute;width:5px;height:5px;border-radius:9999px;transform:translate(8px,8px);',
@@ -355,8 +356,11 @@ export default function Sidebar(props: SidebarProps) {
                     >
                     {/* Name */}
                     <div style="display:flex;flex-direction:column;min-width:0;flex:1;gap:2px;">
-                      <span style="font-size:var(--text-base);font-weight:500;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-                        {p.name}
+                      <span
+                        title={p.name !== friendlyProjectName(p.name) ? p.name : undefined}
+                        style="font-size:var(--text-base);font-weight:500;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
+                      >
+                        {friendlyProjectName(p.name)}
                       </span>
                       <span
                         title={primarySummary()}

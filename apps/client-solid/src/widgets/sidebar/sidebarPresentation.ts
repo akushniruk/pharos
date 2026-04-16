@@ -6,6 +6,7 @@ import {
 } from 'solid-heroicons/solid';
 
 import type { Project } from '../../lib/types';
+import { friendlyProjectName } from '../../lib/projectDisplayName';
 import { sidebarSessionActivityTone } from '../../lib/store';
 
 export type SidebarActivityTone = 'active' | 'blocked' | 'attention' | 'idle' | 'done';
@@ -200,5 +201,5 @@ export function resolveProjectLogo(project: Project): string {
   const custom = typeof localStorage === 'undefined'
     ? undefined
     : normalizeLogoUrl(localStorage.getItem(DEFAULT_PROJECT_LOGO_STORAGE_KEY));
-  return custom || projectFallbackIconDataUri(project.name);
+  return custom || projectFallbackIconDataUri(friendlyProjectName(project.name));
 }

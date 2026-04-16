@@ -1,7 +1,7 @@
 use clap::Parser;
 use pharos_daemon::api::{AppOptions, build_router_with_options};
 use pharos_daemon::config::Config;
-use pharos_daemon::profiles::DiscoveryOptions;
+use pharos_daemon::memory_brain::MemoryBrainService;
 use pharos_daemon::replay::{Cli, Command, replay_file};
 use pharos_daemon::scanner;
 use pharos_daemon::store::Store;
@@ -15,21 +15,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Command::Serve => {
             let config = Config::from_env()?;
             let store = Store::open(&config.db_path)?;
-            let discovery_options = DiscoveryOptions {
-                claude_home: config.claude_home.clone(),
-                codex_home: config.codex_home.clone(),
-                gemini_home: config.gemini_home.clone(),
-                cursor_home: config.cursor_home.clone(),
-                runtime_matchers: pharos_daemon::profiles::process::load_runtime_matchers(
-                    config.runtime_matchers_path.as_deref(),
-                ),
-            };
+            let discovery_options = config.discovery_options();
+            let memory_brain_service = MemoryBrainService::new(config.memory_brain.clone());
             let (app, state) = build_router_with_options(
                 store,
                 AppOptions {
                     claude_sessions_dir: config.claude_sessions_dir,
+                    memory_brain: Some(memory_brain_service.clone()),
                 },
             );
+            let poll_state = state.clone();
+            memory_brain_service.spawn_poller(state.sender.clone(), move |events| {
+                pharos_daemon::api::persist_poller_envelopes(&poll_state, events);
+            });
 
             // Spawn scanner when any runtime observation source is configured.
             if discovery_options.claude_home.is_some()
@@ -37,6 +35,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 || discovery_options.gemini_home.is_some()
                 || discovery_options.cursor_home.is_some()
                 || !discovery_options.runtime_matchers.is_empty()
+                || discovery_options
+                    .ollama_base_url
+                    .as_deref()
+                    .map(str::trim)
+                    .is_some_and(|s| !s.is_empty())
             {
                 let scanner_store = state.store.clone();
                 let scanner_sender = state.sender.clone();

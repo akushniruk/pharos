@@ -1,9 +1,55 @@
 /** Parse daemon detail like "No progress … after Using ApplyPatch" for log row targeting. */
 export function extractToolNameFromAttentionDetail(detail: string): string | null {
+  const target = extractAttentionTargetFromDetail(detail);
+  return target.toolName;
+}
+
+export interface AttentionTargetHint {
+  toolName: string | null;
+  mcpServer: string | null;
+  mcpTool: string | null;
+}
+
+/** Parse daemon detail for tool, MCP server, and MCP tool hints. */
+export function extractAttentionTargetFromDetail(detail: string): AttentionTargetHint {
+  const mcp = detail.match(/\bMCP\s+([A-Za-z0-9._-]+)\/([A-Za-z0-9._-]+)/i);
+  if (mcp) {
+    return {
+      toolName: 'CallMcpTool',
+      mcpServer: mcp[1],
+      mcpTool: mcp[2],
+    };
+  }
+
+  const memory = detail.match(/\bMemory brain:\s+([A-Za-z0-9 _-]+)/i);
+  if (memory) {
+    return {
+      toolName: 'CallMcpTool',
+      mcpServer: 'ai-memory-brain',
+      mcpTool: `memory_${memory[1].trim().replace(/\s+/g, '_').toLowerCase()}`,
+    };
+  }
+
   const using = detail.match(/\busing\s+([A-Za-z][\w-]*)\b/i);
-  if (using) return using[1];
-  if (/\bapplypatch\b/i.test(detail)) return 'ApplyPatch';
-  return null;
+  if (using) {
+    return {
+      toolName: using[1],
+      mcpServer: null,
+      mcpTool: null,
+    };
+  }
+  if (/\bapplypatch\b/i.test(detail)) {
+    return {
+      toolName: 'ApplyPatch',
+      mcpServer: null,
+      mcpTool: null,
+    };
+  }
+  return {
+    toolName: null,
+    mcpServer: null,
+    mcpTool: null,
+  };
 }
 
 /** Action hints for attention/blocked banners — driven by daemon status text, not hidden client state. */
@@ -40,6 +86,12 @@ export function buildAttentionSuggestions(
   if (d.includes('failure') || d.includes('error') || d.includes('failed')) {
     lines.push(
       'Scroll to the latest tool or assistant rows below, read the error payload, fix the cause, then retry.',
+    );
+  }
+
+  if (d.includes('mcp') || d.includes('memory brain') || d.includes('callmcptool')) {
+    lines.push(
+      'Open the highlighted MCP tool row and verify server, tool name, and arguments match your intended memory operation.',
     );
   }
 

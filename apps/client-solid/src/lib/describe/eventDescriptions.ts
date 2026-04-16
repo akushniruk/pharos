@@ -9,9 +9,11 @@ import { formatRuntimeLabel } from './labels';
 import {
   basename,
   composeRuntimeDetail,
+  describeMemoryOperation,
   extractCommand,
   extractContentPreview,
   extractFileTarget,
+  extractMcpToolCall,
   extractPatchedFile,
   friendlyToolName,
   truncate,
@@ -99,6 +101,53 @@ export function describeEventDescription(event: HookEvent): EventDescription {
           secondary: composeRuntimeDetail(runtime),
         };
       }
+      if (toolName === 'CallMcpTool') {
+        const { server, toolName: mcpToolName } = extractMcpToolCall(toolInput);
+        const serverLc = (server || '').toLowerCase();
+        const isMemoryServer =
+          serverLc === 'ai-memory-brain' ||
+          serverLc === 'user-ai-memory-brain' ||
+          serverLc.endsWith('ai-memory-brain');
+        const isLibrarian = serverLc.includes('librarian');
+        if (isLibrarian) {
+          const memoryOperation =
+            describeMemoryOperation(mcpToolName) ||
+            (mcpToolName ? mcpToolName.replace(/_/g, ' ') : null) ||
+            'Memory operation';
+          return {
+            primary: `Librarian: ${memoryOperation}`,
+            secondary: composeRuntimeDetail(runtime, mcpToolName || server),
+          };
+        }
+        if (isMemoryServer || (mcpToolName || '').startsWith('memory_')) {
+          const memoryOperation = describeMemoryOperation(mcpToolName) || 'Memory operation';
+          return {
+            primary: `Memory brain: ${memoryOperation}`,
+            secondary: composeRuntimeDetail(runtime, mcpToolName || server),
+          };
+        }
+        if (server || mcpToolName) {
+          return {
+            primary: 'Calling MCP tool',
+            secondary: composeRuntimeDetail(runtime, [server, mcpToolName].filter(Boolean).join('/')),
+          };
+        }
+      }
+      if (toolName === 'FetchMcpResource') {
+        const server = typeof toolInput.server === 'string' ? toolInput.server : undefined;
+        const uri = typeof toolInput.uri === 'string' ? toolInput.uri : undefined;
+        return {
+          primary: 'Fetching MCP resource',
+          secondary: composeRuntimeDetail(runtime, [server, uri].filter(Boolean).join(' · ')),
+        };
+      }
+      if (toolName === 'ListMcpResources') {
+        const server = typeof toolInput.server === 'string' ? toolInput.server : undefined;
+        return {
+          primary: 'Listing MCP resources',
+          secondary: composeRuntimeDetail(runtime, server),
+        };
+      }
       return {
         primary: toolName !== 'unknown' ? `Using ${friendlyToolName(toolName)}` : 'Working on your request',
         secondary: composeRuntimeDetail(runtime),
@@ -113,6 +162,12 @@ export function describeEventDescription(event: HookEvent): EventDescription {
         };
       }
       if (contentPreview) {
+        if (toolName === 'CallMcpTool') {
+          return {
+            primary: 'MCP call finished',
+            secondary: composeRuntimeDetail(runtime, truncate(contentPreview, 80)),
+          };
+        }
         return {
           primary: 'Finished using a tool',
           secondary: composeRuntimeDetail(runtime, truncate(contentPreview, 80)),

@@ -69,6 +69,7 @@ fn runtime_color(runtime: &str) -> &'static str {
         "codex" | "codex_cli" => "#2563EB",
         "gemini" | "gemini_cli" => "#0EA5A8",
         "cursor" | "cursor_agent" => "#16A34A",
+        "ollama" => "#CA8A04",
         "pi" | "pi_cli" => "#EA580C",
         "aider" => "#DB2777",
         "opencode" => "#0891B2",

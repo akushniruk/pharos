@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use crate::agent_identity::{control_plane_agent_label, infer_agent_role, payload_parent_agent_id};
 use crate::model::{
     AcquisitionMode, AgentRegistryEntry, EventEnvelope, EventKind, FilterOptions, LegacyHookEvent,
-    SessionSummary,
+    RuntimeSource, SessionSummary,
 };
 
 #[derive(Debug, Error)]
@@ -367,11 +367,180 @@ struct DisplayNameCandidate {
     score: u8,
 }
 
+fn integration_probe_row_label(event: &EventEnvelope) -> Option<String> {
+    let producer = payload_string(&event.payload, "producer")?;
+    if producer != "pharos_ollama_probe" {
+        return None;
+    }
+    if let Some(model) = payload_string(&event.payload, "model") {
+        let lower = model.to_ascii_lowercase();
+        if lower.contains("gemma") {
+            let compact = model.replace(':', " ").trim().to_string();
+            let short = if compact.len() > 22 {
+                format!("{}…", compact.chars().take(21).collect::<String>())
+            } else {
+                compact
+            };
+            return Some(format!("Gemma · {short}"));
+        }
+    }
+    Some("Ollama".to_string())
+}
+
+fn ollama_runtime_row_label(event: &EventEnvelope) -> Option<String> {
+    if event.runtime_source != RuntimeSource::Ollama {
+        return None;
+    }
+    // Memory-brain Ollama probe uses `pharos_ollama_probe` + `model`; keep that path in `integration_probe_row_label`.
+    if payload_string(&event.payload, "producer").as_deref() == Some("pharos_ollama_probe") {
+        return None;
+    }
+    if let Some(arr) = event.payload.get("running_models").and_then(|v| v.as_array()) {
+        for v in arr {
+            if let Some(s) = v.as_str() {
+                let lower = s.to_ascii_lowercase();
+                if lower.contains("gemma") {
+                    let compact = s.replace(':', " ").trim().to_string();
+                    let short = if compact.len() > 22 {
+                        format!("{}…", compact.chars().take(21).collect::<String>())
+                    } else {
+                        compact
+                    };
+                    return Some(format!("Gemma · {short}"));
+                }
+            }
+        }
+    }
+    Some("Ollama".to_string())
+}
+
+fn cursor_runtime_row_label(event: &EventEnvelope) -> Option<String> {
+    if event.runtime_source != RuntimeSource::CursorAgent {
+        return None;
+    }
+    match event.event_kind {
+        EventKind::AssistantResponse => Some("Team".to_string()),
+        EventKind::ToolCallStarted | EventKind::ToolCallCompleted | EventKind::ToolCallFailed => {
+            cursor_tool_identity_label(&event.payload)
+        }
+        _ => None,
+    }
+}
+
+fn cursor_tool_identity_label(payload: &serde_json::Value) -> Option<String> {
+    let tool_input = payload.get("tool_input").cloned().unwrap_or(serde_json::json!({}));
+    if let Some(agent_type) = tool_input
+        .get("subagent_type")
+        .and_then(serde_json::Value::as_str)
+        .or_else(|| tool_input.get("agent_type").and_then(serde_json::Value::as_str))
+    {
+        if let Some(mapped) = mapped_agent_type_label(agent_type) {
+            if mapped != "Session" {
+                return Some(mapped);
+            }
+        }
+    }
+
+    let tool = payload
+        .get("tool_name")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+
+    if tool == "callmcptool" {
+        let (server, mcp_tool) = crate::cursor_callmcp::extract_server_tool(&tool_input);
+        if server.contains("librarian") {
+            return Some("Librarian".to_string());
+        }
+        if server.contains("memory") || mcp_tool.starts_with("memory_") {
+            return Some("Memory brain".to_string());
+        }
+        if mcp_tool.contains("svelte")
+            || server.contains("svelte")
+            || tool_input.to_string().to_ascii_lowercase().contains("svelte")
+        {
+            return Some("Svelte Editor".to_string());
+        }
+        if mcp_tool.contains("explorer") || server.contains("explorer") {
+            return Some("Explorer".to_string());
+        }
+        if !mcp_tool.is_empty() {
+            return Some(format!("MCP · {mcp_tool}"));
+        }
+    }
+
+    let args_blob = tool_input
+        .get("arguments")
+        .map(|v| v.to_string())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    if args_blob.contains("svelte") || args_blob.contains("landing-svelte") {
+        return Some("Svelte Editor".to_string());
+    }
+
+    match tool.as_str() {
+        "codebase_search"
+        | "semantic_search"
+        | "folder_search"
+        | "list_dir"
+        | "glob_file_search"
+        | "file_search"
+        | "web_search"
+        | "glob" => Some("Explorer".to_string()),
+        "read_file" | "readfile" | "open_file" | "read" => Some("File read".to_string()),
+        "grep" | "ripgrep" | "rg" => Some("Search".to_string()),
+        "run_terminal_cmd" | "run_command" | "terminal" => Some("Shell".to_string()),
+        "search_replace"
+        | "write"
+        | "edit"
+        | "apply_patch"
+        | "str_replace"
+        | "strreplace"
+        | "multiedit"
+        | "single_edit" => Some("Editor".to_string()),
+        "todowrite" | "todo_write" | "plan" => Some("Planner".to_string()),
+        _ => None,
+    }
+    .or_else(|| {
+        if tool.contains("replace") || tool.contains("write") || tool.contains("patch") {
+            return Some("Editor".to_string());
+        }
+        if tool.starts_with("read") {
+            return Some("File read".to_string());
+        }
+        if tool.contains("glob") {
+            return Some("Explorer".to_string());
+        }
+        None
+    })
+}
+
 fn display_name_candidate_for_event(event: &EventEnvelope) -> DisplayNameCandidate {
     if let Some(label) = control_plane_agent_label(&event.payload) {
         return DisplayNameCandidate {
             value: label,
             score: 15,
+        };
+    }
+
+    if let Some(label) = ollama_runtime_row_label(event) {
+        return DisplayNameCandidate {
+            value: label,
+            score: 14,
+        };
+    }
+
+    if let Some(label) = integration_probe_row_label(event) {
+        return DisplayNameCandidate {
+            value: label,
+            score: 13,
+        };
+    }
+
+    if let Some(label) = cursor_runtime_row_label(event) {
+        return DisplayNameCandidate {
+            value: label,
+            score: 12,
         };
     }
 
@@ -498,6 +667,7 @@ fn mapped_agent_type_label(agent_type: &str) -> Option<String> {
         "general-purpose" => Some("General Purpose"),
         "orchestrator" => Some("Orchestrator"),
         "explorer" | "explore" => Some("Explorer"),
+        "svelte-file-editor" | "svelte_file_editor" => Some("Svelte Editor"),
         "cursor_subagent" => Some("Cursor Helper"),
         "main" => Some("Session"),
         _ => None,
@@ -653,6 +823,7 @@ fn runtime_source_label(runtime_source: &crate::model::RuntimeSource) -> &'stati
         crate::model::RuntimeSource::CodexCli => "Codex",
         crate::model::RuntimeSource::GeminiCli => "Gemini",
         crate::model::RuntimeSource::CursorAgent => "Cursor",
+        crate::model::RuntimeSource::Ollama => "Ollama",
         crate::model::RuntimeSource::PiCli => "Pi",
         crate::model::RuntimeSource::OpenCode => "OpenCode",
         crate::model::RuntimeSource::Aider => "Aider",
@@ -673,5 +844,234 @@ fn hook_event_type_for_kind(event_kind: &EventKind) -> &'static str {
         EventKind::SubagentStopped => "SubagentStop",
         EventKind::SessionTitleChanged => "SessionTitleChanged",
         EventKind::AssistantResponse => "AssistantResponse",
+    }
+}
+
+#[cfg(test)]
+mod cursor_identity_tests {
+    use serde_json::json;
+
+    use crate::model::{
+        AcquisitionMode, CapabilitySet, EventEnvelope, EventKind, RuntimeSource, SessionRef,
+    };
+
+    use super::legacy_event_from_envelope;
+
+    fn observed_capabilities() -> CapabilitySet {
+        CapabilitySet {
+            can_observe: true,
+            can_start: false,
+            can_stop: false,
+            can_retry: false,
+            can_respond: false,
+        }
+    }
+
+    #[test]
+    fn cursor_assistant_uses_team_label_not_workspace() {
+        let event = EventEnvelope {
+            runtime_source: RuntimeSource::CursorAgent,
+            acquisition_mode: AcquisitionMode::Observed,
+            event_kind: EventKind::AssistantResponse,
+            session: SessionRef {
+                host_id: "local".to_string(),
+                workspace_id: "pharos".to_string(),
+                session_id: "s1".to_string(),
+            },
+            agent_id: None,
+            occurred_at_ms: 1,
+            capabilities: observed_capabilities(),
+            title: "assistant response".to_string(),
+            payload: json!({ "text": "hi", "model": "cursor-agent" }),
+        };
+        let legacy = legacy_event_from_envelope(&event).expect("legacy");
+        assert_eq!(legacy.display_name.as_deref(), Some("Team"));
+    }
+
+    #[test]
+    fn cursor_callmcptool_memory_uses_memory_brain_label() {
+        let event = EventEnvelope {
+            runtime_source: RuntimeSource::CursorAgent,
+            acquisition_mode: AcquisitionMode::Observed,
+            event_kind: EventKind::ToolCallStarted,
+            session: SessionRef {
+                host_id: "local".to_string(),
+                workspace_id: "pharos".to_string(),
+                session_id: "s1".to_string(),
+            },
+            agent_id: None,
+            occurred_at_ms: 2,
+            capabilities: observed_capabilities(),
+            title: "tool call started: CallMcpTool".to_string(),
+            payload: json!({
+                "tool_name": "CallMcpTool",
+                "tool_input": {
+                    "server": "user-ai-memory-brain",
+                    "toolName": "memory_add"
+                }
+            }),
+        };
+        let legacy = legacy_event_from_envelope(&event).expect("legacy");
+        assert_eq!(legacy.display_name.as_deref(), Some("Memory brain"));
+    }
+
+    #[test]
+    fn cursor_callmcptool_snake_case_tool_name_maps_memory_brain() {
+        let event = EventEnvelope {
+            runtime_source: RuntimeSource::CursorAgent,
+            acquisition_mode: AcquisitionMode::Observed,
+            event_kind: EventKind::ToolCallStarted,
+            session: SessionRef {
+                host_id: "local".to_string(),
+                workspace_id: "pharos".to_string(),
+                session_id: "s1".to_string(),
+            },
+            agent_id: None,
+            occurred_at_ms: 2,
+            capabilities: observed_capabilities(),
+            title: "tool call started: CallMcpTool".to_string(),
+            payload: json!({
+                "tool_name": "CallMcpTool",
+                "tool_input": {
+                    "server": "user-ai-memory-brain",
+                    "tool_name": "memory_add"
+                }
+            }),
+        };
+        let legacy = legacy_event_from_envelope(&event).expect("legacy");
+        assert_eq!(legacy.display_name.as_deref(), Some("Memory brain"));
+    }
+
+    #[test]
+    fn cursor_callmcptool_librarian_server_maps_librarian_label() {
+        let event = EventEnvelope {
+            runtime_source: RuntimeSource::CursorAgent,
+            acquisition_mode: AcquisitionMode::Observed,
+            event_kind: EventKind::ToolCallStarted,
+            session: SessionRef {
+                host_id: "local".to_string(),
+                workspace_id: "pharos".to_string(),
+                session_id: "s1".to_string(),
+            },
+            agent_id: None,
+            occurred_at_ms: 2,
+            capabilities: observed_capabilities(),
+            title: "tool call started: CallMcpTool".to_string(),
+            payload: json!({
+                "tool_name": "CallMcpTool",
+                "tool_input": {
+                    "server": "user-librarian",
+                    "toolName": "memory_add"
+                }
+            }),
+        };
+        let legacy = legacy_event_from_envelope(&event).expect("legacy");
+        assert_eq!(legacy.display_name.as_deref(), Some("Librarian"));
+    }
+
+    #[test]
+    fn cursor_codebase_search_uses_explorer_label() {
+        let event = EventEnvelope {
+            runtime_source: RuntimeSource::CursorAgent,
+            acquisition_mode: AcquisitionMode::Observed,
+            event_kind: EventKind::ToolCallStarted,
+            session: SessionRef {
+                host_id: "local".to_string(),
+                workspace_id: "pharos".to_string(),
+                session_id: "s1".to_string(),
+            },
+            agent_id: None,
+            occurred_at_ms: 3,
+            capabilities: observed_capabilities(),
+            title: "tool call started: codebase_search".to_string(),
+            payload: json!({
+                "tool_name": "codebase_search",
+                "tool_input": { "query": "auth" }
+            }),
+        };
+        let legacy = legacy_event_from_envelope(&event).expect("legacy");
+        assert_eq!(legacy.display_name.as_deref(), Some("Explorer"));
+    }
+
+    #[test]
+    fn cursor_strreplace_maps_to_editor() {
+        let event = EventEnvelope {
+            runtime_source: RuntimeSource::CursorAgent,
+            acquisition_mode: AcquisitionMode::Observed,
+            event_kind: EventKind::ToolCallStarted,
+            session: SessionRef {
+                host_id: "local".to_string(),
+                workspace_id: "pharos".to_string(),
+                session_id: "s1".to_string(),
+            },
+            agent_id: None,
+            occurred_at_ms: 4,
+            capabilities: observed_capabilities(),
+            title: "tool call started: StrReplace".to_string(),
+            payload: json!({
+                "tool_name": "StrReplace",
+                "tool_input": { "path": "x.md" }
+            }),
+        };
+        let legacy = legacy_event_from_envelope(&event).expect("legacy");
+        assert_eq!(legacy.display_name.as_deref(), Some("Editor"));
+    }
+
+    #[test]
+    fn ollama_scanner_running_models_labels_gemma_row() {
+        let event = EventEnvelope {
+            runtime_source: RuntimeSource::Ollama,
+            acquisition_mode: AcquisitionMode::Observed,
+            event_kind: EventKind::AssistantResponse,
+            session: SessionRef {
+                host_id: "local".to_string(),
+                workspace_id: "integrations".to_string(),
+                session_id: "ollama-ps".to_string(),
+            },
+            agent_id: None,
+            occurred_at_ms: 6,
+            capabilities: observed_capabilities(),
+            title: "ollama ps".to_string(),
+            payload: json!({
+                "producer": "pharos_ollama_scanner",
+                "running_models": ["gemma3:4b"],
+                "runtime_label": "Ollama",
+            }),
+        };
+        let legacy = legacy_event_from_envelope(&event).expect("legacy");
+        assert_eq!(
+            legacy.display_name.as_deref(),
+            Some("Gemma · gemma3 4b")
+        );
+    }
+
+    #[test]
+    fn ollama_probe_event_labels_gemma_row() {
+        let event = EventEnvelope {
+            runtime_source: RuntimeSource::Ollama,
+            acquisition_mode: AcquisitionMode::Managed,
+            event_kind: EventKind::AssistantResponse,
+            session: SessionRef {
+                host_id: "local".to_string(),
+                workspace_id: "pharos".to_string(),
+                session_id: "pharos-runtime-integrations".to_string(),
+            },
+            agent_id: None,
+            occurred_at_ms: 5,
+            capabilities: observed_capabilities(),
+            title: "Ollama / Gemma (runtime)".to_string(),
+            payload: json!({
+                "producer": "pharos_ollama_probe",
+                "display_name": "Gemma",
+                "runtime_label": "Ollama",
+                "text": "probe ok",
+                "model": "gemma4:e2b"
+            }),
+        };
+        let legacy = legacy_event_from_envelope(&event).expect("legacy");
+        assert_eq!(
+            legacy.display_name.as_deref(),
+            Some("Gemma · gemma4 e2b")
+        );
     }
 }

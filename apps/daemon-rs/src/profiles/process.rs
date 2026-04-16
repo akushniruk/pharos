@@ -196,6 +196,14 @@ fn classify_process_details(
                 fallback_cwd: fallback_cwd(snapshot),
             });
         }
+        "ollama" => {
+            return Some(ProcessClassification {
+                runtime_source: RuntimeSource::Ollama,
+                entrypoint: "ollama".to_string(),
+                display_title: Some(ollama_process_title(snapshot)),
+                fallback_cwd: fallback_cwd(snapshot),
+            });
+        }
         "goose" | "copilot-agent" => {
             return Some(ProcessClassification {
                 runtime_source: RuntimeSource::GenericAgentCli,
@@ -217,6 +225,25 @@ fn fallback_cwd(snapshot: &ProcessSnapshot) -> String {
         .and_then(|p| std::path::Path::new(p).parent())
         .map(|p| p.display().to_string())
         .unwrap_or_else(|| snapshot.name.clone())
+}
+
+fn ollama_process_title(snapshot: &ProcessSnapshot) -> String {
+    let arg = |i: usize| snapshot.cmd.get(i).map(|s| s.as_str()).unwrap_or("");
+    match (arg(1), arg(2)) {
+        ("serve", _) | ("start", _) => "Ollama server".to_string(),
+        ("run", model) if !model.is_empty() && !model.starts_with('-') => {
+            format!("ollama run · {model}")
+        }
+        ("pull", target) if !target.is_empty() => format!("ollama pull · {target}"),
+        ("push", _) => "ollama push".to_string(),
+        _ => {
+            if snapshot.cmd.len() <= 1 {
+                "Ollama REPL".to_string()
+            } else {
+                "Ollama CLI".to_string()
+            }
+        }
+    }
 }
 
 fn match_custom_runtime(

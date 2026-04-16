@@ -8,7 +8,35 @@ import {
   resolveActivityState,
   resolveConservativeStatusDetail,
 } from './store/snapshots';
+import { attentionBannerFingerprint } from './store';
 import type { AgentInfo, HookEvent, Project, SessionInfo } from './types';
+
+describe('attentionBannerFingerprint', () => {
+  it('stays stable across detail and timestamp changes for same session+tone', () => {
+    const base = {
+      sessionId: 'sess-90',
+      label: 'Session',
+      eventCount: 1,
+      agents: [],
+      activeAgentCount: 0,
+      isActive: false,
+      statusTone: 'attention',
+    } satisfies Partial<SessionInfo>;
+
+    const first = attentionBannerFingerprint('pharos', {
+      ...base,
+      lastEventAt: 100,
+      statusDetail: 'No progress for 8d',
+    } as SessionInfo);
+    const second = attentionBannerFingerprint('pharos', {
+      ...base,
+      lastEventAt: 200,
+      statusDetail: 'No progress for 9d',
+    } as SessionInfo);
+
+    expect(first).toBe(second);
+  });
+});
 
 describe('buildProjectFocusSnapshot', () => {
   it('builds a coherent digest for project, session, and agent focus', () => {
@@ -67,7 +95,7 @@ describe('buildProjectFocusSnapshot', () => {
       agentLabel: 'Operator',
       agentSummary: 'Verifying canary metrics',
       scopeLabel: 'Agent focus',
-      breadcrumb: 'pharos · Deploy review · Operator',
+      breadcrumb: 'Pharos · Deploy review · Operator',
       headline: 'Operator: Verifying canary metrics',
       subheadline: 'Next action: Own the release checklist',
       eventCount: 24,
@@ -105,8 +133,8 @@ describe('buildProjectFocusSnapshot', () => {
       agentLabel: null,
       agentSummary: null,
       scopeLabel: 'Project overview',
-      breadcrumb: 'pharos',
-      headline: 'pharos: Coordinating a handoff',
+      breadcrumb: 'Pharos',
+      headline: 'Pharos: Coordinating a handoff',
       subheadline: 'Runtime: Claude',
       eventCount: 2,
       sessionCount: 0,
@@ -378,6 +406,34 @@ describe('resolveActivityState', () => {
       detail: 'No progress for 15m after Running a task',
     });
   });
+
+  it('does not flag editor patch pre-tools as stalled in-flight work', () => {
+    const now = 1_200_000;
+
+    expect(
+      resolveActivityState(
+        [
+          {
+            source_app: 'pharos',
+            session_id: 'session-1',
+            hook_event_type: 'PreToolUse',
+            payload: {
+              tool_name: 'ApplyPatch',
+              tool_input: { path: 'README.md' },
+            },
+            timestamp: 300_000,
+            agent_id: undefined,
+          },
+        ],
+        { isActive: false, now },
+      ),
+    ).toEqual(
+      expect.objectContaining({
+        label: 'Done',
+        tone: 'done',
+      }),
+    );
+  });
 });
 
 describe('resolveConservativeStatusDetail', () => {
@@ -402,7 +458,7 @@ describe('resolveConservativeStatusDetail', () => {
       'Waiting on the last step to finish after Running a task',
     );
     expect(resolveConservativeStatusDetail('attention', undefined, events)).toBe(
-      'No new progress after Running a task',
+      'Stalled after Running a task with no follow-up progress',
     );
   });
 });

@@ -18,9 +18,10 @@ use crate::{
         discover_claude_sessions, discovered_session_events, discovered_session_summaries,
     },
     live_state::{LiveState, should_broadcast_registry},
+    memory_brain::MemoryBrainService,
     model::{
         AgentRegistryEntry, DiscoveredSession, EventEnvelope, FilterOptions, LegacyHookEvent,
-        ProjectSnapshot, SessionSummary,
+        MemoryBrainIntegrationStatus, ProjectSnapshot, SessionSummary,
     },
     store::{Store, StoreError},
 };
@@ -37,6 +38,7 @@ fn map_store_insert_err(err: StoreError) -> StatusCode {
 #[derive(Debug, Clone, Default)]
 pub struct AppOptions {
     pub claude_sessions_dir: Option<PathBuf>,
+    pub memory_brain: Option<MemoryBrainService>,
 }
 
 pub fn build_router(store: Store) -> Router {
@@ -51,6 +53,7 @@ pub fn build_router_with_options(store: Store, options: AppOptions) -> (Router, 
         store,
         sender,
         claude_sessions_dir: options.claude_sessions_dir,
+        memory_brain: options.memory_brain,
     };
 
     let router = Router::new()
@@ -70,6 +73,22 @@ pub fn build_router_with_options(store: Store, options: AppOptions) -> (Router, 
         .route("/api/projects", get(list_projects))
         .route("/api/projects/{name}", get(get_project))
         .route("/api/sessions/{id}/snapshot", get(get_session_snapshot))
+        .route(
+            "/api/integrations/memory-brain",
+            get(get_memory_brain_status),
+        )
+        .route(
+            "/api/integrations/memory-brain/actions/refresh",
+            post(refresh_memory_brain_status),
+        )
+        .route(
+            "/api/integrations/memory-brain/actions/sink-recheck",
+            post(refresh_memory_brain_status),
+        )
+        .route(
+            "/api/integrations/memory-brain/actions/repair-graph",
+            post(repair_memory_brain_graph),
+        )
         .route(
             "/api/events/legacy/claude",
             post(create_legacy_claude_event),
@@ -95,6 +114,7 @@ pub struct AppState {
     pub store: Store,
     pub sender: broadcast::Sender<OutboundWsMessage>,
     pub claude_sessions_dir: Option<PathBuf>,
+    pub memory_brain: Option<MemoryBrainService>,
 }
 
 #[derive(Clone)]
@@ -123,6 +143,7 @@ async fn create_event(
         .insert_event(&event)
         .map_err(map_store_insert_err)?;
     if inserted {
+        observe_memory_brain_event(&state, &event);
         broadcast_compat_updates(&state, &event).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     }
     Ok((StatusCode::CREATED, Json(event)))
@@ -217,6 +238,72 @@ async fn get_filter_options(
     Ok(Json(options))
 }
 
+async fn get_memory_brain_status(
+    State(state): State<AppState>,
+) -> Result<Json<MemoryBrainIntegrationStatus>, StatusCode> {
+    Ok(Json(memory_brain_snapshot(&state)))
+}
+
+async fn refresh_memory_brain_status(
+    State(state): State<AppState>,
+) -> Result<Json<MemoryBrainIntegrationStatus>, StatusCode> {
+    let Some(service) = &state.memory_brain else {
+        return Ok(Json(memory_brain_snapshot(&state)));
+    };
+    let status = service.refresh_now().await;
+    if let Ok(payload) = serde_json::to_value(&status) {
+        let _ = state.sender.send(OutboundWsMessage {
+            message_type: "memory_brain_status",
+            payload,
+        });
+    }
+    let _ = state.sender.send(OutboundWsMessage {
+        message_type: "memory_brain_action",
+        payload: json!({
+            "action": "refresh",
+            "ok": true,
+            "state": status.state,
+            "connectivity": status.connectivity,
+            "helper_enabled": status.helper.enabled,
+            "helper_model": status.helper.model,
+            "at": status.updated_at
+        }),
+    });
+    Ok(Json(status))
+}
+
+async fn repair_memory_brain_graph(
+    State(state): State<AppState>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let Some(service) = &state.memory_brain else {
+        return Err(StatusCode::SERVICE_UNAVAILABLE);
+    };
+    match service.trigger_repair_graph().await {
+        Ok(payload) => {
+            let _ = state.sender.send(OutboundWsMessage {
+                message_type: "memory_brain_action",
+                payload: json!({
+                    "action": "repair_graph",
+                    "ok": true,
+                    "payload": payload
+                }),
+            });
+            Ok(Json(json!({ "ok": true, "payload": payload })))
+        }
+        Err(error) => {
+            let _ = state.sender.send(OutboundWsMessage {
+                message_type: "memory_brain_action",
+                payload: json!({
+                    "action": "repair_graph",
+                    "ok": false,
+                    "error": error
+                }),
+            });
+            Ok(Json(json!({ "ok": false, "error": error })))
+        }
+    }
+}
+
 async fn list_sessions(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<SessionSummary>>, StatusCode> {
@@ -275,6 +362,7 @@ async fn create_legacy_claude_event(
         .insert_event(&event)
         .map_err(map_store_insert_err)?;
     if inserted {
+        observe_memory_brain_event(&state, &event);
         broadcast_compat_updates(&state, &event).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     }
     Ok((StatusCode::CREATED, Json(event)))
@@ -293,6 +381,7 @@ async fn create_legacy_hook_event(
         .insert_event(&envelope)
         .map_err(map_store_insert_err)?;
     if inserted {
+        observe_memory_brain_event(&state, &envelope);
         broadcast_compat_updates(&state, &envelope)
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     }
@@ -313,6 +402,7 @@ async fn create_connector_event(
         .insert_event(&event)
         .map_err(map_store_insert_err)?;
     if inserted {
+        observe_memory_brain_event(&state, &event);
         broadcast_compat_updates(&state, &event).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     }
     Ok((StatusCode::CREATED, Json(event)))
@@ -334,6 +424,7 @@ async fn stream_events(
         .live_state
         .list_projects()
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let initial_memory_brain = memory_brain_snapshot(&state);
     let receiver = state.sender.subscribe();
 
     Ok(ws.on_upgrade(move |socket| {
@@ -342,6 +433,7 @@ async fn stream_events(
             initial_events,
             initial_registry,
             initial_projects,
+            initial_memory_brain,
             receiver,
         )
     }))
@@ -352,6 +444,7 @@ async fn stream_socket(
     initial_events: Vec<LegacyHookEvent>,
     initial_registry: Vec<AgentRegistryEntry>,
     initial_projects: Vec<ProjectSnapshot>,
+    initial_memory_brain: MemoryBrainIntegrationStatus,
     mut receiver: broadcast::Receiver<OutboundWsMessage>,
 ) {
     if send_ws_message(&mut socket, "initial", &initial_events)
@@ -372,6 +465,12 @@ async fn stream_socket(
     {
         return;
     }
+    if send_ws_message(&mut socket, "memory_brain_status", &initial_memory_brain)
+        .await
+        .is_err()
+    {
+        return;
+    }
 
     loop {
         match receiver.recv().await {
@@ -387,6 +486,45 @@ async fn stream_socket(
             Err(broadcast::error::RecvError::Closed) => return,
         }
     }
+}
+
+fn memory_brain_snapshot(state: &AppState) -> MemoryBrainIntegrationStatus {
+    match &state.memory_brain {
+        Some(service) => service.snapshot(),
+        None => MemoryBrainIntegrationStatus::disabled(now_ms()),
+    }
+}
+
+fn observe_memory_brain_event(state: &AppState, event: &EventEnvelope) {
+    let Some(service) = &state.memory_brain else {
+        return;
+    };
+    service.observe_event(event);
+    if let Ok(payload) = serde_json::to_value(service.snapshot()) {
+        let _ = state.sender.send(OutboundWsMessage {
+            message_type: "memory_brain_status",
+            payload,
+        });
+    }
+}
+
+pub fn persist_poller_envelopes(state: &AppState, events: Vec<EventEnvelope>) {
+    for event in events {
+        match state.store.insert_event(&event) {
+            Ok(true) => {
+                observe_memory_brain_event(state, &event);
+                let _ = broadcast_compat_updates(state, &event);
+            }
+            Ok(false) | Err(_) => {}
+        }
+    }
+}
+
+fn now_ms() -> i64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |duration| duration.as_millis() as i64)
 }
 
 async fn send_ws_message<T: Serialize>(

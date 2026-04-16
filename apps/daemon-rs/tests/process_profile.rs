@@ -53,6 +53,26 @@ fn classifies_known_pi_process_only_on_exact_name() {
 }
 
 #[test]
+fn classifies_known_ollama_process() {
+    let run = snapshot("ollama", &["/usr/local/bin/ollama", "run", "llama3.2"]);
+    assert_eq!(classify_process(&run, &[]), Some(RuntimeSource::Ollama));
+    let session = detected_session_from_snapshot(&run, &[]).expect("session");
+    assert_eq!(session.runtime_source, RuntimeSource::Ollama);
+    assert_eq!(
+        session.display_title.as_deref(),
+        Some("ollama run · llama3.2")
+    );
+
+    let repl = snapshot("ollama", &["/opt/homebrew/bin/ollama"]);
+    assert_eq!(classify_process(&repl, &[]), Some(RuntimeSource::Ollama));
+    let repl_session = detected_session_from_snapshot(&repl, &[]).expect("repl session");
+    assert_eq!(
+        repl_session.display_title.as_deref(),
+        Some("Ollama REPL")
+    );
+}
+
+#[test]
 fn classifies_agent_like_unknown_process_as_generic() {
     let snapshot = snapshot("cursor-agent", &["cursor-agent", "--project", "."]);
 

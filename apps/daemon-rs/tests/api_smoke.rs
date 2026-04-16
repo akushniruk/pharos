@@ -1,10 +1,14 @@
 use std::collections::BTreeMap;
 
+use axum::Json;
+use axum::Router;
 use axum::body::Body;
 use axum::http::{Request, StatusCode, header};
+use axum::routing::get;
 use futures_util::StreamExt;
 use pharos_daemon::api::{AppOptions, build_router, build_router_with_options};
 use pharos_daemon::config::{Config, ConfigError};
+use pharos_daemon::memory_brain::{MemoryBrainConfig, MemoryBrainService};
 use pharos_daemon::model::EventEnvelope;
 use pharos_daemon::store::Store;
 use serde_json::json;
@@ -152,6 +156,7 @@ async fn lists_discovered_claude_sessions_from_configured_directory() {
         store,
         AppOptions {
             claude_sessions_dir: Some(temp_dir.path().to_path_buf()),
+            memory_brain: None,
         },
     );
 
@@ -194,6 +199,7 @@ async fn merges_discovered_sessions_into_session_history_and_replay() {
         store,
         AppOptions {
             claude_sessions_dir: Some(temp_dir.path().to_path_buf()),
+            memory_brain: None,
         },
     );
 
@@ -682,6 +688,16 @@ async fn websocket_stream_sends_initial_event_list() {
     assert_eq!(projects_data.len(), 1);
     assert_eq!(projects_data[0]["name"], "demo-project");
 
+    let memory_message = socket
+        .next()
+        .await
+        .expect("memory websocket frame")
+        .expect("websocket message");
+    let memory_payload: serde_json::Value =
+        serde_json::from_str(memory_message.to_text().expect("text frame")).expect("json payload");
+    assert_eq!(memory_payload["type"], "memory_brain_status");
+    assert_eq!(memory_payload["data"]["state"], "disabled");
+
     server.abort();
 }
 
@@ -713,6 +729,260 @@ async fn returns_filter_options_from_stored_events() {
         .expect("get response");
 
     assert_eq!(response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn memory_brain_status_endpoint_reports_disabled_by_default() {
+    let store = Store::open_in_memory().expect("in-memory sqlite");
+    let app = build_router(store);
+
+    let response = app
+        .oneshot(
+            Request::get("/api/integrations/memory-brain")
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("get response");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("response body");
+    let payload: serde_json::Value = serde_json::from_slice(&body).expect("json payload");
+    assert_eq!(payload["connectivity"], "offline");
+    assert_eq!(payload["state"], "disabled");
+}
+
+#[tokio::test]
+async fn memory_brain_status_reconciles_when_mcp_activity_seen() {
+    let store = Store::open_in_memory().expect("in-memory sqlite");
+    let memory_brain_service = MemoryBrainService::new(MemoryBrainConfig {
+        enabled: false,
+        ..MemoryBrainConfig::default()
+    });
+    let (app, _) = build_router_with_options(
+        store,
+        AppOptions {
+            claude_sessions_dir: None,
+            memory_brain: Some(memory_brain_service),
+        },
+    );
+
+    let memory_event = json!({
+        "runtime_source": "codex_cli",
+        "acquisition_mode": "observed",
+        "event_kind": "session_started",
+        "session": {
+            "host_id": "local",
+            "workspace_id": "pharos",
+            "session_id": "sess-memory"
+        },
+        "agent_id": null,
+        "occurred_at_ms": 1711234567999_i64,
+        "capabilities": {
+            "can_observe": true,
+            "can_start": false,
+            "can_stop": false,
+            "can_retry": false,
+            "can_respond": false
+        },
+        "title": "memory write",
+        "payload": {
+            "tool_name": "CallMcpTool",
+            "tool_input": {
+                "server": "user-ai-memory-brain",
+                "toolName": "memory_add"
+            }
+        }
+    });
+    let response = app
+        .clone()
+        .oneshot(
+            Request::post("/api/events")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(memory_event.to_string()))
+                .expect("request"),
+        )
+        .await
+        .expect("post response");
+    assert_eq!(response.status(), StatusCode::CREATED);
+
+    let response = app
+        .oneshot(
+            Request::get("/api/integrations/memory-brain")
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("get response");
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("response body");
+    let payload: serde_json::Value = serde_json::from_slice(&body).expect("json payload");
+    assert_eq!(payload["state"], "degraded");
+    assert_eq!(payload["connectivity"], "degraded");
+    assert_eq!(payload["status_source"], "mcp_observed_vs_health_mismatch");
+    assert_eq!(payload["observed_mcp_activity"], true);
+    assert_eq!(payload["activity"]["recent_writes_count"], 1);
+}
+
+#[tokio::test]
+async fn memory_brain_status_extracts_helper_model_from_observed_payload() {
+    let store = Store::open_in_memory().expect("in-memory sqlite");
+    let memory_brain_service = MemoryBrainService::new(MemoryBrainConfig {
+        enabled: false,
+        ..MemoryBrainConfig::default()
+    });
+    let (app, _) = build_router_with_options(
+        store,
+        AppOptions {
+            claude_sessions_dir: None,
+            memory_brain: Some(memory_brain_service),
+        },
+    );
+
+    let helper_event = json!({
+        "runtime_source": "codex_cli",
+        "acquisition_mode": "observed",
+        "event_kind": "session_started",
+        "session": {
+            "host_id": "local",
+            "workspace_id": "pharos",
+            "session_id": "sess-helper"
+        },
+        "agent_id": null,
+        "occurred_at_ms": 1711234568999_i64,
+        "capabilities": {
+            "can_observe": true,
+            "can_start": false,
+            "can_stop": false,
+            "can_retry": false,
+            "can_respond": false
+        },
+        "title": "helper health",
+        "payload": {
+            "tool_name": "CallMcpTool",
+            "tool_input": {
+                "server": "user-ai-memory-brain",
+                "toolName": "memory_brain_health"
+            },
+            "tool_result": {
+                "helper_enabled": true,
+                "helper_model": "gemma4:e2b"
+            }
+        }
+    });
+    let response = app
+        .clone()
+        .oneshot(
+            Request::post("/api/events")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(helper_event.to_string()))
+                .expect("request"),
+        )
+        .await
+        .expect("post response");
+    assert_eq!(response.status(), StatusCode::CREATED);
+
+    let response = app
+        .oneshot(
+            Request::get("/api/integrations/memory-brain")
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("get response");
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("response body");
+    let payload: serde_json::Value = serde_json::from_slice(&body).expect("json payload");
+    assert_eq!(payload["helper"]["enabled"], true);
+    assert_eq!(payload["helper"]["model"], "gemma4:e2b");
+}
+
+#[tokio::test]
+async fn memory_brain_status_probes_ollama_tags_for_gemma_helper() {
+    let memory_listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind memory listener");
+    let memory_addr = memory_listener.local_addr().expect("memory addr");
+    let memory_app = Router::new().route("/health", get(|| async { Json(json!({ "ok": true })) }));
+    let memory_server = tokio::spawn(async move {
+        axum::serve(memory_listener, memory_app)
+            .await
+            .expect("serve memory");
+    });
+
+    let ollama_listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind ollama listener");
+    let ollama_addr = ollama_listener.local_addr().expect("ollama addr");
+    let ollama_app = Router::new().route(
+        "/api/tags",
+        get(|| async {
+            Json(json!({
+                "models": [
+                    { "name": "gemma4:e2b" },
+                    { "name": "qwen2.5:latest" }
+                ]
+            }))
+        }),
+    );
+    let ollama_server = tokio::spawn(async move {
+        axum::serve(ollama_listener, ollama_app)
+            .await
+            .expect("serve ollama");
+    });
+
+    let store = Store::open_in_memory().expect("in-memory sqlite");
+    let memory_brain_service = MemoryBrainService::new(MemoryBrainConfig {
+        enabled: true,
+        base_url: Some(format!("http://{memory_addr}")),
+        ollama_base_url: Some(format!("http://{ollama_addr}")),
+        helper_model_hint: Some("gemma4:e2b".to_string()),
+        ..MemoryBrainConfig::default()
+    });
+    let (app, _) = build_router_with_options(
+        store,
+        AppOptions {
+            claude_sessions_dir: None,
+            memory_brain: Some(memory_brain_service),
+        },
+    );
+
+    let refresh = app
+        .clone()
+        .oneshot(
+            Request::post("/api/integrations/memory-brain/actions/refresh")
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("refresh response");
+    assert_eq!(refresh.status(), StatusCode::OK);
+
+    let response = app
+        .oneshot(
+            Request::get("/api/integrations/memory-brain")
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("get response");
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("response body");
+    let payload: serde_json::Value = serde_json::from_slice(&body).expect("json payload");
+    assert_eq!(payload["state"], "healthy");
+    assert_eq!(payload["helper"]["enabled"], true);
+    assert_eq!(payload["helper"]["model"], "gemma4:e2b");
+
+    memory_server.abort();
+    ollama_server.abort();
 }
 
 #[tokio::test]

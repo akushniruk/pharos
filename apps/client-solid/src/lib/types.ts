@@ -108,6 +108,54 @@ export interface ViewedChangesSnapshot {
   items: RecentChangeItem[];
 }
 
+/** Detect-only memory runtime status derived from observed events. */
+export interface MemoryRuntimeStatus {
+  scopeLabel: string;
+  memoryObserved: boolean;
+  aiMemoryBrainObserved: boolean;
+  ollamaObserved: boolean;
+  gemmaObserved: boolean;
+  statusLabel: string;
+  statusDetail: string;
+}
+
+export type IntegrationState = 'disabled' | 'not_configured' | 'healthy' | 'degraded';
+export type ConnectivityState = 'online' | 'offline' | 'degraded';
+export type SinkHealth = 'ok' | 'warn' | 'fail' | 'unknown';
+
+export interface MemoryBrainIntegrationStatus {
+  state: IntegrationState;
+  connectivity: ConnectivityState;
+  status_source: string;
+  helper: {
+    enabled: boolean;
+    model?: string;
+    last_ok_at?: number;
+    last_error?: string;
+  };
+  sinks: {
+    jsonl: SinkHealth;
+    vault: SinkHealth;
+    postgres: SinkHealth;
+    neo4j: SinkHealth;
+  };
+  activity: {
+    recent_writes_count: number;
+    last_write_at?: number;
+    last_graph_write_at?: number;
+  };
+  observed_mcp_activity: boolean;
+  updated_at: number;
+}
+
+export interface MemoryBrainActionEvent {
+  action: string;
+  ok: boolean;
+  at?: number;
+  error?: string;
+  payload?: unknown;
+}
+
 /** Navigation state */
 export type View =
   | { page: 'projects' }

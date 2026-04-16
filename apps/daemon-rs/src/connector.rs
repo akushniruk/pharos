@@ -47,8 +47,15 @@ impl Connector for ClaudeConnector {
     ) -> Result<EventEnvelope, ConnectorError> {
         let event_kind = match event.hook_event_type.as_str() {
             "SessionStart" => crate::model::EventKind::SessionStarted,
+            "SessionEnd" => crate::model::EventKind::SessionEnded,
             "PreToolUse" => crate::model::EventKind::ToolCallStarted,
+            "PostToolUse" => crate::model::EventKind::ToolCallCompleted,
             "PostToolUseFailure" => crate::model::EventKind::ToolCallFailed,
+            "SubagentStart" => crate::model::EventKind::SubagentStarted,
+            "SubagentStop" => crate::model::EventKind::SubagentStopped,
+            "SessionTitleChanged" => crate::model::EventKind::SessionTitleChanged,
+            "AssistantResponse" => crate::model::EventKind::AssistantResponse,
+            "UserPromptSubmit" => crate::model::EventKind::UserPromptSubmitted,
             _ => {
                 return Err(ConnectorError::UnsupportedLegacyHookEvent {
                     connector: self.key(),
@@ -112,6 +119,9 @@ pub fn resolve_connector(name: &str) -> Result<&'static dyn Connector, Connector
 fn event_title(event: &LegacyHookEvent) -> String {
     match event.hook_event_type.as_str() {
         "SessionStart" => "session started".to_string(),
+        "SessionEnd" => "session ended".to_string(),
+        "SessionTitleChanged" => "session title changed".to_string(),
+        "UserPromptSubmit" => "user prompt submitted".to_string(),
         "PreToolUse" => {
             let tool_name = event
                 .payload
@@ -119,6 +129,14 @@ fn event_title(event: &LegacyHookEvent) -> String {
                 .and_then(serde_json::Value::as_str)
                 .unwrap_or("unknown");
             format!("tool call started: {tool_name}")
+        }
+        "PostToolUse" => {
+            let tool_name = event
+                .payload
+                .get("tool_name")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("unknown");
+            format!("tool call completed: {tool_name}")
         }
         "PostToolUseFailure" => {
             let tool_name = event
@@ -128,6 +146,9 @@ fn event_title(event: &LegacyHookEvent) -> String {
                 .unwrap_or("unknown");
             format!("tool call failed: {tool_name}")
         }
+        "SubagentStart" => "subagent started".to_string(),
+        "SubagentStop" => "subagent stopped".to_string(),
+        "AssistantResponse" => "assistant response".to_string(),
         _ => event.hook_event_type.clone(),
     }
 }

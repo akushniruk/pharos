@@ -37,8 +37,15 @@ pub fn normalize_claude_event(raw: &str) -> Result<EventEnvelope, ClaudeNormaliz
 
     let event_kind = match event.hook_event_type.as_str() {
         "SessionStart" => EventKind::SessionStarted,
+        "SessionEnd" => EventKind::SessionEnded,
         "PreToolUse" => EventKind::ToolCallStarted,
+        "PostToolUse" => EventKind::ToolCallCompleted,
         "PostToolUseFailure" => EventKind::ToolCallFailed,
+        "SubagentStart" => EventKind::SubagentStarted,
+        "SubagentStop" => EventKind::SubagentStopped,
+        "SessionTitleChanged" => EventKind::SessionTitleChanged,
+        "UserPromptSubmit" => EventKind::UserPromptSubmitted,
+        "AssistantResponse" => EventKind::AssistantResponse,
         other => return Err(ClaudeNormalizeError::UnsupportedType(other.to_string())),
     };
 

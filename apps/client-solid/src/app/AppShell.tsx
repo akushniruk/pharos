@@ -16,11 +16,12 @@ import {
   selectedAgent,
   selectProject,
 } from '../lib/store';
-import { connectWs } from '../lib/ws';
+import { connectWs, fetchMemoryBrainStatus } from '../lib/ws';
 import { initTheme } from '../lib/theme';
 import { DOCS_PORTAL_SECTIONS, docsPortalEntryTitle } from '../lib/docsPortal';
 import { documentationBundleVersionLabel } from '../lib/docsVersion';
 import { APP_BROWSER_TITLE } from '../lib/appBranding';
+import { friendlyProjectName } from '../lib/projectDisplayName';
 import { docContentForPath } from '../lib/docsPortalContent';
 import {
   docsPathForSlug,
@@ -148,6 +149,7 @@ export default function AppShell() {
       }
     }
     connectWs();
+    void fetchMemoryBrainStatus();
     initTheme();
     syncRouteFromLocation();
     const onHashChange = () => syncRouteFromLocation();
@@ -181,10 +183,11 @@ export default function AppShell() {
     }
     const session = selectedSessionSnapshot();
     const sessionLabel = session?.label?.trim();
+    const projectTitle = friendlyProjectName(project.name);
     if (sessionLabel) {
-      document.title = formatBrowserTitle([sessionLabel, project.name, app]);
+      document.title = formatBrowserTitle([sessionLabel, projectTitle, app]);
     } else {
-      document.title = formatBrowserTitle([project.name, app]);
+      document.title = formatBrowserTitle([projectTitle, app]);
     }
   });
 

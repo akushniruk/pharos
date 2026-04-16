@@ -5,11 +5,13 @@
 import type {
   AgentInfo,
   HookEvent,
+  MemoryRuntimeStatus,
   Project,
   SessionInfo,
   ViewedChangesSnapshot,
 } from '../types';
 import { describeEvent, describeEventDetail, formatRuntimeLabel } from '../describe';
+import { friendlyProjectName } from '../projectDisplayName';
 
 export const MAIN_AGENT_KEY = '__main__';
 
@@ -164,14 +166,14 @@ export function buildProjectFocusSnapshot(
   const agentNextActionDetail = agent?.nextActionDetail || agent?.assignmentDetail || null;
   const sessionSummary = sessionProgress;
   const agentSummary = agentProgress;
-  const focusSubject = agentLabel || sessionLabel || project.name;
+  const focusSubject = agentLabel || sessionLabel || friendlyProjectName(project.name);
   const focusAction = agentProgress || agentNextAction || sessionProgress || sessionNextAction || projectSummary;
   const scopeLabel = agent
     ? 'Agent focus'
     : session
       ? 'Session focus'
       : 'Project overview';
-  const breadcrumb = [project.name, sessionLabel, agentLabel].filter(Boolean).join(' · ');
+  const breadcrumb = [friendlyProjectName(project.name), sessionLabel, agentLabel].filter(Boolean).join(' · ');
   const headline = formatNowHeadline(focusSubject, focusAction);
   const subheadline = agentNextAction
     ? formatContextLabel('Next action', agentNextAction)
@@ -221,7 +223,7 @@ export function getScopeKey(projectName: string, sessionId: string | null): stri
 }
 
 function getScopeLabel(project: Project, session: SessionInfo | null): string {
-  return session?.label || session?.sessionId || project.name;
+  return session?.label || session?.sessionId || friendlyProjectName(project.name);
 }
 
 function getScopeDetail(project: Project, session: SessionInfo | null): string {
@@ -339,6 +341,85 @@ export function buildViewedChangesSnapshot(
   };
 }
 
+function payloadContains(value: unknown, needle: string): boolean {
+  if (value == null) return false;
+  if (typeof value === 'string') return value.toLowerCase().includes(needle);
+  if (typeof value === 'number' || typeof value === 'boolean') return false;
+  if (Array.isArray(value)) {
+    return value.some((item) => payloadContains(item, needle));
+  }
+  if (typeof value === 'object') {
+    return Object.values(value as Record<string, unknown>).some((entry) =>
+      payloadContains(entry, needle)
+    );
+  }
+  return false;
+}
+
+function eventUsesMcp(event: HookEvent): boolean {
+  const toolName = String(event.payload?.tool_name || '').toLowerCase();
+  return (
+    toolName === 'callmcptool'
+    || toolName === 'fetchmcpresource'
+    || toolName === 'listmcpresources'
+  );
+}
+
+export function buildMemoryRuntimeStatus(
+  project: Project | null,
+  session: SessionInfo | null,
+  evts: HookEvent[],
+): MemoryRuntimeStatus | null {
+  if (!project) return null;
+  const scopedEvents = getScopedEvents(project, session, evts);
+  if (scopedEvents.length === 0) return null;
+
+  const memoryObserved = scopedEvents.some((event) => {
+    const toolName = String(event.payload?.tool_name || '').toLowerCase();
+    const eventText = [
+      event.hook_event_type,
+      toolName,
+      JSON.stringify(event.payload ?? {}),
+    ]
+      .join(' ')
+      .toLowerCase();
+    return eventText.includes('memory');
+  });
+  const aiMemoryBrainObserved = scopedEvents.some((event) => {
+    if (!eventUsesMcp(event)) return false;
+    const server = String(event.payload?.tool_input?.server || '').toLowerCase();
+    return server === 'ai-memory-brain' || payloadContains(event.payload, 'ai-memory-brain');
+  });
+  const ollamaObserved = scopedEvents.some((event) => payloadContains(event.payload, 'ollama'));
+  const gemmaObserved = scopedEvents.some((event) => payloadContains(event.payload, 'gemma'));
+
+  let statusLabel = 'No memory signal observed';
+  let statusDetail = 'No ai-memory-brain or memory-related MCP events were detected in this scope yet.';
+  if (memoryObserved && !aiMemoryBrainObserved) {
+    statusLabel = 'Memory signal detected';
+    statusDetail =
+      'Memory-related activity is present, but ai-memory-brain MCP server usage is not clearly observed yet.';
+  } else if (aiMemoryBrainObserved && !gemmaObserved) {
+    statusLabel = 'Memory brain active (Gemma not observed)';
+    statusDetail =
+      'ai-memory-brain MCP activity is detected, but no Gemma usage signal appears in recent events.';
+  } else if (aiMemoryBrainObserved && gemmaObserved) {
+    statusLabel = 'Memory brain + Gemma observed';
+    statusDetail =
+      'ai-memory-brain MCP activity and Gemma-related signals are visible in this scope.';
+  }
+
+  return {
+    scopeLabel: session?.label || project.name,
+    memoryObserved,
+    aiMemoryBrainObserved,
+    ollamaObserved,
+    gemmaObserved,
+    statusLabel,
+    statusDetail,
+  };
+}
+
 export function latestMeaningfulEvent(evts: HookEvent[]): HookEvent | undefined {
   return [...evts]
     .sort((left, right) => (right.timestamp || 0) - (left.timestamp || 0))
@@ -367,11 +448,26 @@ export function resolveConservativeStatusDetail(
 
   const latestMeaningful = latestMeaningfulEvent(evts);
   const latestSummary = latestMeaningful ? describeEvent(latestMeaningful).trim() : undefined;
+  const latestFailure = latestEventOfType(evts, 'PostToolUseFailure');
+  const latestWait = latestExplicitWaitEvent(evts);
+  const stalledEvent = latestMeaningful && isInFlightEvent(latestMeaningful)
+    ? latestMeaningful
+    : undefined;
 
   if (tone === 'blocked') {
+    if (latestWait) {
+      return `Blocked by wait request after ${describeEvent(latestWait)}`;
+    }
     return latestSummary
       ? `Waiting on the last step to finish after ${latestSummary}`
       : 'Waiting on the last step to finish';
+  }
+
+  if (latestFailure) {
+    return `Latest failure: ${describeEvent(latestFailure)}`;
+  }
+  if (stalledEvent) {
+    return `Stalled after ${describeEvent(stalledEvent)} with no follow-up progress`;
   }
 
   return latestSummary
@@ -385,6 +481,21 @@ function latestExplicitWaitEvent(evts: HookEvent[]): HookEvent | undefined {
     .find((event) => event.hook_event_type === 'PreToolUse' && event.payload?.tool_name === 'wait_agent');
 }
 
+/** PreToolUse tools that usually finish quickly and should not drive "stalled after …" attention. */
+function isEditorishPreTool(toolName: string): boolean {
+  const n = toolName.trim().toLowerCase();
+  return (
+    n === 'applypatch'
+    || n === 'apply_patch'
+    || n === 'strreplace'
+    || n === 'search_replace'
+    || n === 'write'
+    || n === 'edit'
+    || n === 'multiedit'
+    || n === 'single_edit'
+  );
+}
+
 function isInFlightEvent(event: HookEvent): boolean {
   if (event.hook_event_type === 'SubagentStart') {
     return true;
@@ -392,7 +503,14 @@ function isInFlightEvent(event: HookEvent): boolean {
   if (event.hook_event_type !== 'PreToolUse') {
     return false;
   }
-  return event.payload?.tool_name !== 'wait_agent';
+  if (event.payload?.tool_name === 'wait_agent') {
+    return false;
+  }
+  const tool = typeof event.payload?.tool_name === 'string' ? event.payload.tool_name : '';
+  if (tool && isEditorishPreTool(tool)) {
+    return false;
+  }
+  return true;
 }
 
 function formatDuration(ms: number): string {

@@ -12,6 +12,8 @@ pub enum RuntimeSource {
     CodexCli,
     GeminiCli,
     CursorAgent,
+    /// Local Ollama server activity (e.g. `/api/ps` — models loaded / inference).
+    Ollama,
     PiCli,
     OpenCode,
     Aider,
