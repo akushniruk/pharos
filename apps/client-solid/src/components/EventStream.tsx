@@ -489,6 +489,7 @@ export default function EventStream(props: EventStreamProps) {
             {(alert) => (
               <div
                 class="event-stream-attention-banner"
+                role="alert"
                 classList={{
                   'is-blocked': alert.tone === 'blocked',
                   'is-attention': alert.tone === 'attention',
