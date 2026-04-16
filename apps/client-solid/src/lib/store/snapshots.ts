@@ -481,10 +481,10 @@ function latestExplicitWaitEvent(evts: HookEvent[]): HookEvent | undefined {
     .find((event) => event.hook_event_type === 'PreToolUse' && event.payload?.tool_name === 'wait_agent');
 }
 
-/** PreToolUse tools that usually finish quickly and should not drive "stalled after …" attention. */
-function isEditorishPreTool(toolName: string): boolean {
+/** PreToolUse steps that are usually fast or non-blocking; skip stall / “needs attention” on these. */
+function isBenignPreToolUse(toolName: string): boolean {
   const n = toolName.trim().toLowerCase();
-  return (
+  const editorish =
     n === 'applypatch'
     || n === 'apply_patch'
     || n === 'strreplace'
@@ -492,8 +492,27 @@ function isEditorishPreTool(toolName: string): boolean {
     || n === 'write'
     || n === 'edit'
     || n === 'multiedit'
-    || n === 'single_edit'
-  );
+    || n === 'single_edit';
+  const explorerOrRead =
+    n === 'grep'
+    || n === 'ripgrep'
+    || n === 'rg'
+    || n === 'codebase_search'
+    || n === 'semantic_search'
+    || n === 'folder_search'
+    || n === 'list_dir'
+    || n === 'glob_file_search'
+    || n === 'file_search'
+    || n === 'web_search'
+    || n === 'glob'
+    || n === 'read_file'
+    || n === 'readfile'
+    || n === 'open_file'
+    || n === 'read'
+    || n === 'todowrite'
+    || n === 'todo_write'
+    || n === 'plan';
+  return editorish || explorerOrRead;
 }
 
 function isInFlightEvent(event: HookEvent): boolean {
@@ -507,7 +526,7 @@ function isInFlightEvent(event: HookEvent): boolean {
     return false;
   }
   const tool = typeof event.payload?.tool_name === 'string' ? event.payload.tool_name : '';
-  if (tool && isEditorishPreTool(tool)) {
+  if (tool && isBenignPreToolUse(tool)) {
     return false;
   }
   return true;

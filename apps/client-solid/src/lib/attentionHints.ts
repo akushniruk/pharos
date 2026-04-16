@@ -72,14 +72,13 @@ export function buildAttentionSuggestions(
     );
   }
 
-  if (
-    d.includes('no progress')
-    || d.includes('stalled')
-    || d.includes('quiet')
-    || /\bafter\b/.test(d)
-  ) {
+  const heuristicStallAttention =
+    tone === 'attention'
+    && (d.includes('no progress for ') || d.includes('stalled after '));
+
+  if (!heuristicStallAttention && (d.includes('stalled') || d.includes('quiet'))) {
     lines.push(
-      'Focus that session in your AI tool: check it is still running, or send a short nudge to resume.',
+      'Check whether the session is still running in your AI client, or needs a prompt to continue.',
     );
   }
 
@@ -95,14 +94,9 @@ export function buildAttentionSuggestions(
     );
   }
 
-  const fallbacks = [
-    'Use “Show log” to select this session, then read upward from the bottom of the timeline.',
-    'The newest relevant log row for this issue is highlighted on the left; click “Solved” to clear the banner and highlight until the daemon reports new activity or a different status.',
-  ];
-
-  for (const line of fallbacks) {
-    if (!lines.includes(line)) lines.push(line);
+  if (lines.length === 0) {
+    lines.push('Use “Show log” or “Solved” if nothing here needs action.');
   }
 
-  return lines.slice(0, 5);
+  return lines.slice(0, 4);
 }

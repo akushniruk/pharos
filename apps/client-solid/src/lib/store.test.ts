@@ -434,6 +434,34 @@ describe('resolveActivityState', () => {
       }),
     );
   });
+
+  it('does not flag search/read pre-tools (e.g. rg) as stalled in-flight work', () => {
+    const now = 1_200_000;
+
+    expect(
+      resolveActivityState(
+        [
+          {
+            source_app: 'pharos',
+            session_id: 'session-1',
+            hook_event_type: 'PreToolUse',
+            payload: {
+              tool_name: 'rg',
+              tool_input: { pattern: 'foo' },
+            },
+            timestamp: 300_000,
+            agent_id: undefined,
+          },
+        ],
+        { isActive: false, now },
+      ),
+    ).toEqual(
+      expect.objectContaining({
+        label: 'Done',
+        tone: 'done',
+      }),
+    );
+  });
 });
 
 describe('resolveConservativeStatusDetail', () => {

@@ -31,6 +31,15 @@ describe('buildAttentionSuggestions', () => {
     );
     expect(lines.some((l) => l.toLowerCase().includes('mcp'))).toBe(true);
   });
+
+  it('does not add long coaching copy for heuristic stall attention details', () => {
+    const lines = buildAttentionSuggestions(
+      'No progress for 3h after Using rg',
+      'attention',
+    );
+    expect(lines.join(' ')).not.toMatch(/timeline|Solved.*highlight/i);
+    expect(lines.some((l) => l.includes('Show log') || l.includes('Solved'))).toBe(true);
+  });
 });
 
 describe('extractAttentionTargetFromDetail', () => {
