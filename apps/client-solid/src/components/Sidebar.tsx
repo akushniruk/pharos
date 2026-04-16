@@ -15,7 +15,6 @@ import { friendlyProjectName } from '../lib/projectDisplayName';
 import {
   displayedProjectSessions,
   friendlyProjectSummary,
-  friendlySessionLabel,
   friendlySummary,
   resolveProjectLogo,
   resolveProjectTone,
@@ -515,7 +514,7 @@ export default function Sidebar(props: SidebarProps) {
                                 if (isSessionSelected()) return;
                                 (e.currentTarget as HTMLDivElement).style.background = sessionRowBackground();
                               }}
-                              aria-label={`${sessionTitleForSidebar(s.label, sessionIndex())}, ${statusLabel()}. ${sessionSummary()}`}
+                              aria-label={`${sessionTitleForSidebar(s.label, sessionIndex(), s.sessionId, p.name)}, ${statusLabel()}. ${sessionSummary()}`}
                             >
                               <Icon
                                 path={statusIcon()}
@@ -525,7 +524,7 @@ export default function Sidebar(props: SidebarProps) {
                                 style="font-size:var(--text-sm);color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1;"
                                 title={sessionSummary()}
                               >
-                                {sessionTitleForSidebar(s.label, sessionIndex())}
+                                {sessionTitleForSidebar(s.label, sessionIndex(), s.sessionId, p.name)}
                               </span>
                               <div
                                 title={statusLabel()}

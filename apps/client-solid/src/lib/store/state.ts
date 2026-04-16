@@ -12,7 +12,9 @@ import type {
 } from '../types';
 import { agents, events, projectSnapshots } from '../ws';
 import { describeEvent, describeEventDetail, formatRuntimeLabel } from '../describe';
+import { truncate } from '../describe/text';
 import { friendlyProjectName } from '../projectDisplayName';
+import { sessionTitleForSidebar } from '../sessionSidebarTitle';
 import {
   mapAgentTypeLabel,
   resolveEventAgentName,
@@ -478,7 +480,10 @@ export const logsAttentionAlerts = createMemo((): LogsAttentionAlert[] => {
     const tone = session.statusTone;
     if (tone !== 'attention' && tone !== 'blocked') continue;
     const idx = project.sessions.findIndex((entry) => entry.sessionId === session.sessionId);
-    const sessionTitle = idx >= 0 ? `Session #${idx + 1}` : session.sessionId.slice(0, 8);
+    const sessionTitle =
+      idx >= 0
+        ? sessionTitleForSidebar(session.label, idx, session.sessionId, project.name)
+        : session.sessionId.slice(0, 8);
     const headline = tone === 'blocked' ? 'Blocked' : 'Needs attention';
     const detail =
       session.statusDetail?.trim()
@@ -764,6 +769,12 @@ function resolveSessionLabel(evts: HookEvent[], workspaceName: string): string {
     true,
   );
   if (!isGenericName(mainName)) return mainName;
+
+  const prompt = latestEventOfType(evts, 'UserPromptSubmit');
+  const promptText = prompt?.payload?.prompt || prompt?.payload?.message;
+  if (typeof promptText === 'string' && promptText.trim()) {
+    return truncate(promptText.trim(), 96);
+  }
 
   return friendlyProjectName(workspaceName);
 }

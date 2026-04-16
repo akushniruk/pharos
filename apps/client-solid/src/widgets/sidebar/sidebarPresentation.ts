@@ -9,6 +9,8 @@ import type { Project } from '../../lib/types';
 import { friendlyProjectName } from '../../lib/projectDisplayName';
 import { sidebarSessionActivityTone } from '../../lib/store';
 
+export { friendlySessionLabel, sessionTitleForSidebar } from '../../lib/sessionSidebarTitle';
+
 export type SidebarActivityTone = 'active' | 'blocked' | 'attention' | 'idle' | 'done';
 
 export function statusPalette(tone: SidebarActivityTone) {
@@ -47,25 +49,6 @@ export function resolveProjectTone(project: Project): SidebarActivityTone {
   if (tones.includes('active')) return 'active';
   if (tones.includes('idle')) return 'idle';
   return 'done';
-}
-
-export function friendlySessionLabel(label?: string | null): string {
-  if (!label) return 'Session';
-  const cleaned = label
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/\[image\]/gi, ' ')
-    .replace(/<image_files>/gi, ' ')
-    .replace(/the following images were provided by the user and saved to the workspace/gi, ' ')
-    .replace(/<user_query>/gi, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-  if (!cleaned) return 'Current request';
-  if (cleaned.toLowerCase() === 'pending') return 'Current request';
-  return cleaned;
-}
-
-export function sessionTitleForSidebar(_label: string | undefined | null, index: number): string {
-  return `Session #${index + 1}`;
 }
 
 export function displayedProjectSessions(
